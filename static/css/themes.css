@@ -1,0 +1,78 @@
+/* =========================================
+   LIBERTY — Themes (inspirado em Fermi)
+   Variáveis por tema para Dark/Light
+   Acento ouro preservado.
+   ========================================= */
+
+/* Acento global (usado em ambos os temas) */
+:root {
+    --accent-color: #FFD700;
+    --accent-hover: #FFEB3B;
+}
+
+/* Tema escuro (padrão Fermi-style) — alinhado ao LIBERTY atual */
+body.Dark-theme,
+body:not([class*="-theme"]) {
+    color-scheme: dark;
+    --primary-bg: #0D0B09;
+    --secondary-bg: #181512;
+    --primary-hover: #272320;
+    --primary-text: #F5F0E8;
+    --primary-text-soft: #A8A4A0;
+    --servers-bg: #181512;
+    --channels-bg: #1a1714;
+    --channel-selected: #3A3530;
+    --typebox-bg: #272320;
+    --button-bg: #3A3530;
+    --button-hover: #4A4540;
+    --link: #FFD700;
+    --loading-bg: #0D0B09;
+    --loading-text: #F5F0E8;
+    --channel-text: "Type a message…";
+    --hint-text: "Search";
+}
+
+/* Tema claro (estilo Fermi Light) com identidade LIBERTY */
+body.Light-theme {
+    color-scheme: light;
+    --primary-bg: #f5f2eb;
+    --secondary-bg: #e8e4dc;
+    --primary-hover: #ddd9d0;
+    --primary-text: #1a1814;
+    --primary-text-soft: #4a4640;
+    --servers-bg: #e0dbd2;
+    --channels-bg: #e8e4dc;
+    --channel-selected: #d4cfc4;
+    --typebox-bg: #fffef9;
+    --button-bg: #d4cfc4;
+    --button-hover: #c4bfb4;
+    --link: #b8860b;
+    --loading-bg: #f5f2eb;
+    --loading-text: #1a1814;
+    --channel-text: "Type a message…";
+    --hint-text: "Search";
+    /* Mapear variáveis LIBERTY para o tema claro */
+    --primary-black: #f5f2eb;
+    --secondary-black: #e8e4dc;
+    --dark-gray: #ddd9d0;
+    --medium-gray: #d4cfc4;
+    --light-gray: #6a6560;
+    --lighter-gray: #4a4640;
+    --text-primary: #1a1814;
+    --text-secondary: #4a4640;
+    --text-muted: #6a6560;
+    --glass-bg: rgba(184, 134, 11, 0.06);
+    --glass-border: rgba(184, 134, 11, 0.2);
+}
+
+/* Opcional: tema escuro com mais acento (Fermi Dark-Accent style) */
+body.Dark-Accent-theme {
+    color-scheme: dark;
+    --primary-bg: color-mix(in srgb, #1a1814 85%, var(--accent-color));
+    --secondary-bg: color-mix(in srgb, #0D0B09 90%, var(--accent-color));
+    --primary-hover: color-mix(in srgb, #272320 80%, var(--accent-color));
+    --channels-bg: color-mix(in srgb, #181512 88%, var(--accent-color));
+    --channel-selected: color-mix(in srgb, #3A3530 70%, var(--accent-color));
+    --typebox-bg: color-mix(in srgb, #272320 75%, var(--accent-color));
+    --link: var(--accent-color);
+}
