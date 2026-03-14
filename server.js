@@ -10,11 +10,8 @@ import db from './db/index.js';
 
 dotenv.config();
 
-// Fallback Neon — Square Cloud
-const FALLBACK_DB_URL =
-  'postgresql://squarecloud:NTg5U6HWe32pVqeGobBsVCrg@square-cloud-db-a7e6a4741aa94349b5055501885e31aa.squareweb.app:7163';
-if (!process.env.DATABASE_URL) process.env.DATABASE_URL = FALLBACK_DB_URL;
-if (!process.env.BANCO_DADOS) process.env.BANCO_DADOS = FALLBACK_DB_URL;
+// URL do banco: use .env (DATABASE_URL, BANCO_DADOS ou DB_URL). Nunca coloque senha no código.
+// Square Cloud injeta BANCO_DADOS no deploy; localmente defina DATABASE_URL no .env
 
 const ENCRYPTION_KEY_RAW = (process.env.ENCRYPTION_KEY || 'liberty-default-encryption-key-32chars').padEnd(
   32,

@@ -1,3 +1,7 @@
 node_modules/
 target/
+
+# Variáveis de ambiente — NUNCA commitar senhas
 .env
+.env.local
+.env.*.local
