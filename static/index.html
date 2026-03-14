@@ -17,7 +17,6 @@
     <link rel="stylesheet" href="/css/main.css">
     <link rel="stylesheet" href="/css/themes.css">
     <link rel="stylesheet" href="/css/components.css">
-    <link rel="stylesheet" href="/css/liberty.css">
 </head>
 <body>
 
@@ -81,13 +80,14 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="login-password">Password <span class="optional">(opcional)</span></label>
+                    <label for="login-password">Password</label>
                     <div class="input-wrapper">
                         <i class="fas fa-lock" aria-hidden="true"></i>
                         <input type="password"
                                id="login-password"
                                placeholder="••••••••"
-                               autocomplete="current-password">
+                               autocomplete="current-password"
+                               required>
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary btn-full">
@@ -115,13 +115,15 @@
                 </div>
                 <!-- Email removido na auth simplificada -->
                 <div class="form-group">
-                    <label for="register-password">Password <span class="optional">(opcional)</span></label>
+                    <label for="register-password">Password</label>
                     <div class="input-wrapper">
                         <i class="fas fa-lock" aria-hidden="true"></i>
                         <input type="password"
                                id="register-password"
-                               placeholder="mínimo 8 caracteres (pode definir depois)"
-                               autocomplete="new-password">
+                               placeholder="mínimo 8 caracteres"
+                               autocomplete="new-password"
+                               required
+                               minlength="8">
                     </div>
                     <div class="password-strength" role="progressbar" aria-label="Força da senha" aria-valuemin="0" aria-valuemax="100">
                         <div class="strength-bar"></div>
@@ -140,8 +142,8 @@
          ══════════════════════════════ -->
     <div id="app" class="app hidden" role="application" aria-label="LIBERTY App">
 
-        <!-- ─── Server Sidebar (72px) ─── -->
-        <nav class="server-sidebar" aria-label="Servidores">
+        <!-- ─── Spaces strip (não-Discord: ícones quadrados) ─── -->
+        <nav class="server-sidebar" aria-label="Spaces">
             <ul class="server-list" role="list">
                 <li class="server-item home active"
                     data-server="home"
@@ -158,70 +160,63 @@
                 <li class="server-divider" role="separator" aria-hidden="true"></li>
 
                 <li id="server-list-container" role="list" style="display:contents">
-                    <!-- Servidores injetados via JS -->
+                    <!-- Spaces injetados via JS -->
                 </li>
 
                 <li class="server-item add-server"
                     id="add-server-btn"
                     role="button"
                     tabindex="0"
-                    aria-label="Criar ou adicionar servidor">
+                    aria-label="Novo space">
                     <div class="server-icon" aria-hidden="true">
                         <i class="fas fa-plus"></i>
                     </div>
-                    <span class="server-name">Add Server</span>
+                    <span class="server-name">New space</span>
                 </li>
             </ul>
         </nav>
 
-        <!-- ─── Channel Sidebar (240px) ─── -->
-        <aside class="channel-sidebar" aria-label="Canais">
+        <!-- ─── Sidebar (rooms / people) ─── -->
+        <aside class="channel-sidebar" aria-label="Rooms e conversas">
+            <div class="app-logo" aria-hidden="true">
+                <div class="logo-icon logo-icon-sidebar">
+                    <i class="fas fa-dove"></i>
+                </div>
+                <span class="logo-text logo-text-sidebar">LIBERTY</span>
+            </div>
             <header class="server-header" role="banner">
                 <h2 id="server-name">Home</h2>
-                <button class="btn-icon" id="server-dropdown-btn" aria-label="Menu do servidor" aria-haspopup="true" aria-expanded="false">
+                <button class="btn-icon" id="server-dropdown-btn" aria-label="Menu do space" aria-haspopup="true" aria-expanded="false">
                     <i class="fas fa-chevron-down" aria-hidden="true"></i>
                 </button>
             </header>
 
-            <!-- Home/DMs View (shown when Home is selected) -->
+            <!-- Home: People + Private chats -->
             <div id="home-sidebar-content" class="home-sidebar-content">
                 <div class="dm-search-wrapper">
-                    <input type="text" id="dm-search-input" class="dm-search" placeholder="Find or start a conversation" aria-label="Buscar conversas">
+                    <input type="text" id="dm-search-input" class="dm-search" placeholder="Search people or chats" aria-label="Buscar">
                 </div>
-                <nav class="home-nav" aria-label="Navegação principal">
-                    <button class="home-nav-item active" data-view="friends" aria-label="Amigos">
+                <nav class="home-nav" aria-label="Navegação">
+                    <button class="home-nav-item active" data-view="friends" aria-label="People">
                         <i class="fas fa-user-friends" aria-hidden="true"></i>
-                        <span>Friends</span>
+                        <span>People</span>
                     </button>
-                    <button class="home-nav-item" data-view="message-requests" aria-label="Message Requests">
-                        <i class="fas fa-envelope" aria-hidden="true"></i>
-                        <span>Message Requests</span>
-                        <span class="home-nav-badge">13</span>
-                    </button>
-                    <button class="home-nav-item" data-view="nitro" aria-label="Nitro">
-                        <i class="fas fa-gem" aria-hidden="true"></i>
-                        <span>Nitro</span>
-                    </button>
-                    <button class="home-nav-item" data-view="shop" aria-label="Shop">
-                        <i class="fas fa-store" aria-hidden="true"></i>
-                        <span>Shop</span>
-                    </button>
-                    <button class="home-nav-item" data-view="missions" aria-label="Missions">
-                        <i class="fas fa-crosshairs" aria-hidden="true"></i>
-                        <span>Missions</span>
+                    <button class="home-nav-item" data-view="activity" aria-label="Activity">
+                        <i class="fas fa-bolt" aria-hidden="true"></i>
+                        <span>Activity</span>
                     </button>
                 </nav>
                 <div class="dm-list-header">
-                    <span>Direct Messages</span>
-                    <button class="btn-icon" id="dm-add-btn" aria-label="Criar DM ou grupo">
+                    <span>Private chats</span>
+                    <button class="btn-icon" aria-label="New chat">
                         <i class="fas fa-plus" aria-hidden="true"></i>
                     </button>
                 </div>
-                <div id="dm-list" class="dm-list" role="list" aria-label="Mensagens diretas"></div>
+                <div id="dm-list" class="dm-list" role="list" aria-label="Conversas privadas"></div>
             </div>
 
-            <!-- Server Channels View (shown when a server is selected) -->
-            <nav class="channel-list" id="channel-list" aria-label="Lista de canais">
+            <!-- Rooms (when a space is selected) -->
+            <nav class="channel-list" id="channel-list" aria-label="Rooms">
                 <!-- Canais injetados via JS -->
             </nav>
 
@@ -272,35 +267,26 @@
 
         <!-- ─── Main Content ─── -->
         <main class="main-content" role="main">
-            <!-- Channel Header -->
+            <!-- Room / chat header -->
             <header class="channel-header">
-                <button class="btn-icon channel-sidebar-toggle mobile-only" type="button" aria-label="Toggle channels" style="display:none"><i class="fas fa-bars" aria-hidden="true"></i></button>
+                <button class="btn-icon channel-sidebar-toggle mobile-only" type="button" aria-label="Toggle menu" style="display:none"><i class="fas fa-bars" aria-hidden="true"></i></button>
                 <div class="channel-info">
-                    <i class="fas fa-hashtag channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
-                    <h3 id="channel-name">general</h3>
+                    <i class="fas fa-comment channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
+                    <h3 id="channel-name">lobby</h3>
                     <div class="channel-header-divider" aria-hidden="true"></div>
-                    <span class="channel-topic" id="channel-topic" aria-label="Tópico do canal">Welcome to LIBERTY!</span>
+                    <span class="channel-topic" id="channel-topic" aria-label="Tópico">Welcome to LIBERTY</span>
                 </div>
-                <div class="channel-actions" role="group" aria-label="Ações do canal">
-                    <button class="btn-icon tooltip dm-only-action" id="voice-call-btn" data-tooltip="Voice call" aria-label="Chamada de voz">
-                        <i class="fas fa-phone" aria-hidden="true"></i>
-                    </button>
-                    <button class="btn-icon tooltip dm-only-action" id="video-call-btn" data-tooltip="Video call" aria-label="Chamada de vídeo" style="display:none">
-                        <i class="fas fa-video" aria-hidden="true"></i>
-                    </button>
-                    <button class="btn-icon tooltip dm-only-action" id="screen-share-header-btn" data-tooltip="Share screen" aria-label="Compartilhar tela" style="display:none">
-                        <i class="fas fa-desktop" aria-hidden="true"></i>
-                    </button>
-                    <button class="btn-icon tooltip channel-only-action" data-tooltip="Threads" aria-label="Threads">
+                <div class="channel-actions" role="group" aria-label="Ações">
+                    <button class="btn-icon tooltip" data-tooltip="Threads" aria-label="Threads">
                         <i class="fas fa-comment-dots" aria-hidden="true"></i>
                     </button>
-                    <button class="btn-icon tooltip" data-tooltip="Notifications" aria-label="Configurações de notificação">
+                    <button class="btn-icon tooltip" data-tooltip="Notifications" aria-label="Notificações">
                         <i class="fas fa-bell" aria-hidden="true"></i>
                     </button>
-                    <button class="btn-icon tooltip" id="pinned-btn" data-tooltip="Pinned Messages" aria-label="Mensagens fixadas">
+                    <button class="btn-icon tooltip" id="pinned-btn" data-tooltip="Pinned" aria-label="Fixadas">
                         <i class="fas fa-thumbtack" aria-hidden="true"></i>
                     </button>
-                    <button class="btn-icon tooltip" id="toggle-members-btn" data-tooltip="Member List" aria-label="Mostrar/ocultar membros">
+                    <button class="btn-icon tooltip" id="toggle-members-btn" data-tooltip="Members" aria-label="Membros">
                         <i class="fas fa-users" aria-hidden="true"></i>
                     </button>
                     <div class="channel-search-wrapper">
@@ -316,28 +302,36 @@
                 </div>
             </header>
 
-            <!-- Friends View (shown when Home is selected, tabs are in channel-header) -->
+            <!-- Activity view (Home) -->
+            <section id="activity-view" class="activity-view hidden" aria-label="Activity">
+                <div class="activity-placeholder">
+                    <i class="fas fa-bolt" aria-hidden="true"></i>
+                    <h2>Activity</h2>
+                    <p>Recent updates and mentions will appear here.</p>
+                </div>
+            </section>
+
+            <!-- People view (Home) -->
             <section id="friends-view" class="friends-view hidden">
                 <div id="friends-add-section" class="friends-add-section hidden">
-                    <h2>Add Friend</h2>
-                    <p>You can add friends with their LIBERTY username.</p>
+                    <h2>Add person</h2>
+                    <p>Connect with someone using their LIBERTY username.</p>
                     <div class="friends-add-input-wrapper">
-                        <input type="text" id="add-friend-input" placeholder="Enter a Username#0000" aria-label="Nome de usuário do amigo">
-                        <button class="btn btn-primary" id="send-friend-request-btn">Send Friend Request</button>
+                        <input type="text" id="add-friend-input" placeholder="Username" aria-label="Username">
+                        <button class="btn btn-primary" id="send-friend-request-btn">Send request</button>
                     </div>
                 </div>
                 <div class="friends-search-wrapper">
-                    <input type="text" id="friends-search-input" placeholder="Search" aria-label="Buscar amigos">
+                    <input type="text" id="friends-search-input" placeholder="Search" aria-label="Search">
                     <i class="fas fa-search" aria-hidden="true"></i>
                 </div>
-                <div id="friends-list" class="friends-list" role="list" aria-label="Lista de amigos">
+                <div id="friends-list" class="friends-list" role="list" aria-label="People">
                     <!-- Amigos injetados via JS -->
                 </div>
             </section>
 
             <!-- Voice Call View (shown when in a voice channel) -->
             <section id="voice-call-view" class="voice-call-view hidden" aria-label="Chamada de voz">
-                <div class="voice-call-participants-bar" id="voice-call-participants-bar" aria-label="Participantes na chamada"></div>
                 <div class="voice-call-header">
                     <span class="voice-call-live"><i class="fas fa-circle"></i> LIVE</span>
                     <h2 id="voice-call-channel-name" class="voice-call-title">Voice Channel</h2>
@@ -347,7 +341,6 @@
                 <div class="voice-call-controls">
                     <button type="button" class="voice-call-btn voice-call-btn-mute" id="voice-call-mute" title="Mutar"><i class="fas fa-microphone"></i><span>Mute</span></button>
                     <button type="button" class="voice-call-btn voice-call-btn-deafen" id="voice-call-deafen" title="Silenciar áudio"><i class="fas fa-headphones"></i><span>Deafen</span></button>
-                    <button type="button" class="voice-call-btn voice-call-btn-screenshare" id="voice-call-screenshare" title="Compartilhar tela"><i class="fas fa-desktop"></i><span>Compartilhar tela</span></button>
                     <button type="button" class="voice-call-btn voice-call-btn-disconnect" id="voice-call-disconnect" title="Sair"><i class="fas fa-phone-slash"></i><span>Disconnect</span></button>
                 </div>
             </section>
@@ -387,7 +380,7 @@
                         <i class="fas fa-plus-circle" aria-hidden="true"></i>
                     </button>
                     <textarea id="message-input"
-                              placeholder="Message #general"
+                              placeholder="Message lobby"
                               rows="1"
                               maxlength="2000"
                               aria-label="Escrever mensagem"
@@ -411,7 +404,7 @@
         </main>
 
         <!-- ─── Members Sidebar (240px) ─── -->
-        <aside class="members-sidebar" id="members-sidebar" aria-label="Membros do servidor">
+        <aside class="members-sidebar" id="members-sidebar" aria-label="Members">
             <div class="members-list" id="members-list" role="list">
                 <!-- Membros injetados via JS -->
             </div>
@@ -424,58 +417,29 @@
          ══════════════════════════════ -->
     <div id="modal-overlay" class="modal-overlay hidden" role="presentation">
 
-        <!-- Modal: Criar Grupo (Group DM) -->
-        <div id="create-group-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="create-group-title">
-            <div class="modal-header">
-                <h2 id="create-group-title">Create Group</h2>
-                <button class="btn-close modal-close-btn" data-close="create-group-modal" aria-label="Fechar">
-                    <i class="fas fa-times" aria-hidden="true"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <p class="modal-description">Choose friends to add to the group. You need at least 2 to create a group.</p>
-                <div class="form-group">
-                    <label for="group-name-input">Group name (optional)</label>
-                    <input type="text" id="group-name-input" placeholder="e.g. Squad" maxlength="100">
-                </div>
-                <div class="form-group">
-                    <label>Select friends</label>
-                    <div id="create-group-friends-list" class="create-group-friends-list" role="list"></div>
-                    <p id="create-group-no-friends" class="create-group-no-friends hidden">Add friends first to create a group.</p>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary modal-cancel-btn" data-close="create-group-modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="create-group-submit-btn">
-                        <i class="fas fa-users" aria-hidden="true"></i>
-                        <span>Create Group</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Modal: Criar Servidor -->
+        <!-- Modal: Criar Space -->
         <div id="create-server-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="create-server-title">
             <div class="modal-header">
-                <h2 id="create-server-title">Create a Server</h2>
+                <h2 id="create-server-title">Create a space</h2>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
                     <i class="fas fa-times" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
-                <p class="modal-description">Your server is where you and your friends hang out. Make yours and start talking.</p>
+                <p class="modal-description">Spaces are where you and your people connect. Create one and start chatting.</p>
                 <form id="create-server-form" novalidate>
-                    <div class="server-icon-upload" role="button" tabindex="0" aria-label="Fazer upload de ícone do servidor">
+                    <div class="server-icon-upload" role="button" tabindex="0" aria-label="Upload ícone do space">
                         <div class="icon-upload-circle">
                             <i class="fas fa-camera" aria-hidden="true"></i>
                             <span>Upload</span>
                         </div>
-                        <input type="file" id="server-icon-input" accept="image/*" hidden aria-label="Selecionar imagem de ícone">
+                        <input type="file" id="server-icon-input" accept="image/*" hidden aria-label="Selecionar imagem">
                     </div>
                     <div class="form-group">
-                        <label for="server-name-input">Server Name</label>
+                        <label for="server-name-input">Space name</label>
                         <input type="text"
                                id="server-name-input"
-                               placeholder="My Awesome Server"
+                               placeholder="My space"
                                maxlength="100"
                                required>
                     </div>
@@ -501,10 +465,10 @@
             </div>
         </div>
 
-        <!-- Modal: Criar Canal -->
+        <!-- Modal: Criar room -->
         <div id="create-channel-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="create-channel-title">
             <div class="modal-header">
-                <h2 id="create-channel-title">Create Channel</h2>
+                <h2 id="create-channel-title">Create room</h2>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
                     <i class="fas fa-times" aria-hidden="true"></i>
                 </button>
@@ -512,11 +476,11 @@
             <div class="modal-body">
                 <form id="create-channel-form" novalidate>
                     <div class="form-group">
-                        <label class="form-label-upper">Channel Type</label>
-                        <div class="channel-type-options" role="radiogroup" aria-label="Tipo de canal">
+                        <label class="form-label-upper">Room type</label>
+                        <div class="channel-type-options" role="radiogroup" aria-label="Tipo de room">
                             <label class="channel-type-option active">
                                 <input type="radio" name="channel-type" value="text" checked>
-                                <div class="channel-type-icon"><i class="fas fa-hashtag" aria-hidden="true"></i></div>
+                                <div class="channel-type-icon"><i class="fas fa-comment" aria-hidden="true"></i></div>
                                 <div class="channel-type-info">
                                     <span class="channel-type-name">Text</span>
                                     <span class="channel-type-desc">Send messages, images, GIFs, emoji, opinions, and puns</span>
@@ -535,12 +499,12 @@
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="channel-name-input">Channel Name</label>
+                        <label for="channel-name-input">Room name</label>
                         <div class="input-wrapper channel-name-wrapper">
-                            <i class="fas fa-hashtag" id="channel-name-prefix-icon" aria-hidden="true"></i>
+                            <i class="fas fa-comment" id="channel-name-prefix-icon" aria-hidden="true"></i>
                             <input type="text"
                                    id="channel-name-input"
-                                   placeholder="new-channel"
+                                   placeholder="new-room"
                                    maxlength="100"
                                    required>
                         </div>
@@ -554,7 +518,7 @@
                     </div>
                     <div class="modal-actions">
                         <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Create Channel</button>
+                        <button type="submit" class="btn btn-primary">Create room</button>
                     </div>
                 </form>
             </div>
@@ -763,9 +727,9 @@
          ══════════════════════════════ -->
     <div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-    <!-- Scripts: ordem obrigatória — websocket.js primeiro, depois api.js, depois app.js -->
-    <script src="/js/websocket.js"></script>
+    <!-- Scripts -->
     <script src="/js/api.js"></script>
+    <script src="/js/websocket.js"></script>
     <script src="/js/app.js"></script>
     <script>
         // Fallback: se o app não esconder o loading em 2s, forçar tela de login
@@ -783,7 +747,4 @@
     </script>
 </body>
 </html>
-
-
-
 
