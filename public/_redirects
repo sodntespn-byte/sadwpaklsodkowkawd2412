@@ -1,0 +1,3 @@
+# Redirecionamento SPA – qualquer caminho leva ao app
+# https://docs.netlify.com/routing/redirects/
+/*    /index.html   200

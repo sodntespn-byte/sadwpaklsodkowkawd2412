@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self' https://api.ipify.org https://libretranslate.com; frame-src https://www.youtube.com; base-uri 'self'; form-action 'self'; frame-ancestors 'self';">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(self), geolocation=(), interest-cohort=()">
+    <title>LIBERTY</title>
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"></noscript>
+</head>
+<body>
+    <!-- Auth: escolha inicial -->
+    <div id="auth-choice-page" class="login-page">
+        <div class="login-box">
+            <div class="login-logo">
+                <img src="assets/logo.png" alt="LIBERTY" decoding="async">
+            </div>
+            <h1>LIBERTY</h1>
+            <p data-i18n="auth_secure_comm">Secure communication</p>
+            
+            <div class="auth-choice-buttons">
+                <button type="button" id="btn-login" class="auth-btn primary" data-i18n="auth_login">Log in</button>
+                <button type="button" id="btn-register" class="auth-btn secondary" data-i18n="auth_register">Create account</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login (contas existentes) -->
+    <div id="login-page" class="login-page hidden">
+        <div class="login-box">
+            <div class="login-logo">
+                <img src="assets/logo.png" alt="LIBERTY" decoding="async">
+            </div>
+            <h1 data-i18n="auth_login">Log in</h1>
+            <p data-i18n="auth_have_account">Already have an account? Enter your name.</p>
+            
+            <form id="login-form" class="auth-form">
+                <input type="text" id="login-name" data-i18n-placeholder="auth_name" placeholder="Name" required autocomplete="username">
+                <input type="password" id="login-password" placeholder="Senha (opcional)" autocomplete="current-password" style="margin-top:8px;">
+                <button type="submit" data-i18n="auth_login">Log in</button>
+                <p class="switch-text"><span data-i18n="auth_no_account">Don't have an account?</span> <a href="#" id="switch-to-register" data-i18n="auth_create_account">Create account</a></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Criar conta -->
+    <div id="register-page" class="login-page hidden">
+        <div class="login-box">
+            <div class="login-logo">
+                <img src="assets/logo.png" alt="LIBERTY" decoding="async">
+            </div>
+            <h1 data-i18n="auth_register">Create account</h1>
+            <p data-i18n="auth_enter_name">Enter a name for your new account.</p>
+            
+            <form id="register-form" class="auth-form">
+                <input type="text" id="register-name" data-i18n-placeholder="auth_name" placeholder="Name" required autocomplete="username">
+                <input type="password" id="register-password" placeholder="Senha (opcional)" autocomplete="new-password" style="margin-top:8px;">
+                <div class="form-group">
+                    <label data-i18n="lang_select">Choose your preferred language</label>
+                    <select id="register-lang">
+                        <option value="en" selected>English</option>
+                        <option value="pt">Português</option>
+                    </select>
+                </div>
+                <button type="submit" data-i18n="auth_register">Create account</button>
+                <p class="switch-text"><span data-i18n="auth_already_have">Already have an account?</span> <a href="#" id="switch-to-login" data-i18n="auth_login">Log in</a></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- MFA Setup (após criar conta) -->
+    <div id="mfa-setup-page" class="login-page hidden">
+        <div class="login-box mfa-setup-box">
+            <div class="login-logo">
+                <img src="assets/logo.png" alt="LIBERTY" decoding="async">
+            </div>
+            <h1 data-i18n="auth_mfa_title">Multi-Factor Authentication</h1>
+            <p data-i18n="auth_mfa_desc">Add extra layers of security to your account.</p>
+            
+            <div class="mfa-options">
+                <button type="button" class="mfa-option" id="mfa-option-sms">
+                    <i class="fas fa-sms"></i>
+                    <span data-i18n="auth_mfa_sms">SMS Verification</span>
+                </button>
+                <button type="button" class="mfa-option" id="mfa-option-authenticator">
+                    <i class="fas fa-mobile-alt"></i>
+                    <span data-i18n="auth_mfa_authenticator">Authenticator App (Google Authenticator)</span>
+                </button>
+                <button type="button" class="mfa-option" id="mfa-option-email">
+                    <i class="fas fa-envelope"></i>
+                    <span data-i18n="auth_mfa_email">Email verification</span>
+                </button>
+            </div>
+            
+            <button type="button" id="mfa-skip" class="auth-btn secondary" data-i18n="auth_mfa_skip">Skip for now</button>
+        </div>
+    </div>
+
+    <!-- App -->
+    <div id="app" class="app hidden">
+        <div class="app-bg-layer" id="app-bg-layer"></div>
+        <!-- Invite landing (quando abre link de convite) -->
+        <div id="invite-landing" class="invite-landing hidden">
+            <div class="invite-landing-inner">
+                <a href="#" id="invite-landing-link" class="invite-landing-link"></a>
+                <div id="invite-landing-card" class="invite-landing-card"></div>
+                <p id="invite-landing-error" class="invite-landing-error hidden">Convite inválido ou expirado.</p>
+                <button type="button" id="invite-landing-join" class="btn-invite-join invite-landing-btn hidden"><i class="fas fa-arrow-right"></i> Ir para o Servidor</button>
+                <p id="invite-landing-login-hint" class="invite-landing-login-hint hidden">Faça login para entrar no servidor.</p>
+            </div>
+        </div>
+        <!-- Server Sidebar -->
+        <div class="server-bar">
+                <div class="server-icon home active" data-server="home">
+                <img src="assets/logo.png" alt="Home" class="server-logo" decoding="async">
+            </div>
+            <div class="server-divider"></div>
+            <div id="server-list"></div>
+            <div class="server-icon add" id="add-server">
+                <i class="fas fa-plus"></i>
+            </div>
+        </div>
+
+        <!-- Channel Sidebar -->
+        <div class="channel-bar">
+            <div class="channel-header">
+                <span id="server-title" data-i18n="dm_title">Direct Messages</span>
+                <div class="header-buttons">
+                    <button id="admin-btn" class="admin-btn hidden" title="Painel Admin"><i class="fas fa-shield-alt"></i></button>
+                    <button id="server-settings-btn" class="header-btn hidden" title="Configurações do servidor"><i class="fas fa-cog"></i></button>
+                    <button id="settings-btn" title="Configurações"><i class="fas fa-user-cog"></i></button>
+                </div>
+            </div>
+            
+            <div class="search-box-wrapper">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" data-i18n-placeholder="search_placeholder" placeholder="Pesquisar canais, conversas e mensagens..." id="search-input" autocomplete="off">
+                </div>
+                <div class="search-results-panel" id="search-results-panel" aria-hidden="true">
+                    <div class="search-results-inner" id="search-results-inner">
+                        <!-- Canais, Conversas e Mensagens são inseridos via JS -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="channel-content" id="channel-content">
+                <div id="dm-section">
+                    <div class="dm-home-shortcuts">
+                        <div class="dm-shortcut-item active" id="rankings-tab" title="Rankings">
+                            <i class="fas fa-trophy"></i>
+                            <span data-i18n="ranking_shortcut">LIBERTY Rankings</span>
+                        </div>
+                        <div class="dm-shortcut-item" id="friends-tab" title="Amigos">
+                            <i class="fas fa-user-friends"></i>
+                            <span data-i18n="friends">Amigos</span>
+                        </div>
+                        <div class="dm-shortcut-item dm-shortcut-disabled" id="shortcut-missoes" title="Em breve">
+                            <i class="fas fa-bullseye"></i>
+                            <span data-i18n="shortcut_missoes">Missões</span>
+                        </div>
+                        <div class="dm-shortcut-item dm-shortcut-disabled" id="shortcut-loja" title="Em breve">
+                            <i class="fas fa-store"></i>
+                            <span data-i18n="shortcut_loja">Loja</span>
+                        </div>
+                    </div>
+                    <div class="section-header">
+                        <span data-i18n="dm_section">Mensagens diretas</span>
+                        <button class="add-btn" id="add-friend-btn"><i class="fas fa-plus"></i></button>
+                    </div>
+                    <div id="dm-list">
+                        <!-- Conversas são listadas aqui dinamicamente -->
+                    </div>
+                </div>
+                <div id="channel-section" class="hidden"></div>
+            </div>
+            <div class="user-panel">
+                <div class="user-avatar" id="user-avatar"><span class="avatar-initials">?</span></div>
+                <div class="user-info">
+                    <span class="username" id="username">Usuário</span>
+                    <span class="user-tag" id="user-tag">#0000</span>
+                </div>
+                <div class="user-controls">
+                    <button id="mic-btn" title="Microfone"><i class="fas fa-microphone"></i></button>
+                    <button id="headphone-btn" title="Som"><i class="fas fa-headphones"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="main-header">
+                <div class="channel-info">
+                    <i class="fas fa-hashtag" id="channel-icon"></i>
+                    <span id="channel-name">geral</span>
+                </div>
+                <div class="header-actions">
+                    <button id="header-add-friend-btn" class="header-btn-add-friend" title="Adicionar amigo"><i class="fas fa-user-plus"></i></button>
+                    <button id="call-btn" title="Chamada"><i class="fas fa-phone"></i></button>
+                    <button id="video-btn" title="Vídeo"><i class="fas fa-video"></i></button>
+                    <button id="pin-btn" title="Fixados"><i class="fas fa-thumbtack"></i></button>
+                    <button id="members-btn" title="Membros"><i class="fas fa-users"></i></button>
+                    <button id="invite-btn" title="Convidar"><i class="fas fa-user-plus"></i></button>
+                </div>
+            </div>
+
+            <!-- Voice Connected -->
+            <div class="voice-bar hidden" id="voice-bar">
+                <div class="voice-info">
+                    <i class="fas fa-volume-up"></i>
+                    <span id="voice-channel">Voz</span>
+                </div>
+                <div class="voice-controls">
+                    <button id="screen-btn" title="Compartilhar tela"><i class="fas fa-desktop"></i></button>
+                    <button id="video-voice-btn" title="Vídeo"><i class="fas fa-video"></i></button>
+                    <button id="disconnect-btn" title="Desconectar"><i class="fas fa-phone-slash"></i></button>
+                </div>
+            </div>
+
+            <!-- Call View – mini widget no canto, arrastável -->
+            <div class="call-view hidden" id="call-view">
+                <div class="call-view-card" id="call-view-card">
+                    <div class="call-view-drag" id="call-view-drag" title="Arrastar"><i class="fas fa-grip-vertical"></i></div>
+                    <div class="call-view-inner" id="call-you-card">
+                        <div class="call-you-avatar-wrap">
+                            <div class="call-you-avatar" id="call-you-avatar">
+                                <span class="avatar-initials">?</span>
+                            </div>
+                            <div class="call-you-video-pip" id="call-you-video-wrap">
+                                <video id="call-you-video" class="call-pip-video" autoplay playsinline muted></video>
+                                <span class="call-pip-label">Câmera</span>
+                            </div>
+                            <div class="call-you-screen-pip" id="call-you-screen-wrap">
+                                <video id="call-you-screen" class="call-pip-video" autoplay playsinline muted></video>
+                                <span class="call-pip-label">Tela</span>
+                            </div>
+                        </div>
+                        <div class="call-view-info">
+                            <span class="call-view-duration" id="call-view-duration">00:00</span>
+                            <span class="call-you-status" id="call-you-status">Áudio</span>
+                        </div>
+                        <div class="call-view-controls">
+                            <button type="button" class="call-control-btn" id="call-control-mic" title="Microfone"><i class="fas fa-microphone"></i></button>
+                            <button type="button" class="call-control-btn" id="call-control-video" title="Vídeo"><i class="fas fa-video"></i></button>
+                            <button type="button" class="call-control-btn" id="call-control-screen" title="Tela"><i class="fas fa-desktop"></i></button>
+                            <button type="button" class="call-control-btn call-control-end" id="call-control-end" title="Desconectar"><i class="fas fa-phone-slash"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Friends View -->
+            <div class="friends-view hidden" id="friends-view">
+                <div class="friends-header">
+                    <h2>Amigos</h2>
+                    <div class="friends-tabs">
+                        <button class="tab active" data-tab="online">Online</button>
+                        <button class="tab" data-tab="all">Todos</button>
+                        <button class="tab" data-tab="pending">Pendentes</button>
+                        <button class="tab" data-tab="received">Convites recebidos</button>
+                        <button class="tab" data-tab="blocked">Bloqueados</button>
+                    </div>
+                </div>
+                <div class="friends-search">
+                    <input type="text" placeholder="Pesquisar amigos" id="friend-search">
+                </div>
+                <div class="friends-list" id="friends-list">
+                    <div class="empty-state">
+                        <i class="fas fa-user-friends"></i>
+                        <p>Nenhum amigo ainda</p>
+                        <button class="btn-primary" id="add-friend-empty">Adicionar amigo</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            <div class="messages-area" id="messages-area">
+                <div class="welcome" id="welcome">
+                    <div class="welcome-icon"><i class="fas fa-comments"></i></div>
+                    <h2>Bem-vindo</h2>
+                    <p>Selecione um canal ou amigo para começar</p>
+                </div>
+            </div>
+
+            <!-- Encryption Notice -->
+            <div class="encryption-bar" title="Dados protegidos com AES-GCM e chave de sessão">
+                <i class="fas fa-shield-alt"></i>
+                <span data-i18n="encryption">End-to-end encryption</span>
+                <span class="encryption-bar-badge" data-i18n="encryption_aes">AES-GCM</span>
+            </div>
+
+            <!-- Message Input -->
+            <div class="message-input-wrapper">
+                <div class="message-attachments-preview" id="attachments-preview"></div>
+                <div class="message-char-indicator" id="char-indicator">
+                    <span id="char-count">0</span><span id="char-separator">/</span><span id="char-limit">5000</span>
+                </div>
+                <div class="message-input" id="message-input-area">
+                    <button class="attach-btn" data-i18n-title="attach_files" title="Attach files" id="attach-btn"><i class="fas fa-paperclip"></i></button>
+                    <input type="file" id="file-input" multiple accept="*/*" hidden>
+                    <textarea id="message-input" data-i18n-placeholder="send_message" placeholder="Send message..." rows="1"></textarea>
+                    <button class="gif-btn" title="GIF"><i class="fas fa-image"></i></button>
+                    <button class="emoji-btn" id="emoji-btn" title="Emoji"><i class="fas fa-smile"></i></button>
+                    <button class="send-btn" id="send-btn" title="Enviar"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Members Sidebar -->
+        <div class="member-bar" id="member-bar">
+            <div class="member-header">Membros — <span id="member-count">1</span></div>
+            <div id="member-list">
+                <div class="member-group">
+                    <div class="group-title">ONLINE — <span id="online-count">1</span></div>
+                    <div id="online-members"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Page (apenas conta Zerk) -->
+    <div id="admin-page" class="admin-page hidden">
+        <div class="admin-container">
+            <div class="admin-header">
+                <button class="admin-back" id="admin-back-btn"><i class="fas fa-arrow-left"></i> Voltar</button>
+                <h1><i class="fas fa-shield-alt"></i> Painel de Administrador</h1>
+                <p class="admin-subtitle">Acesso exclusivo à conta Zerk — Todas as informações dos usuários</p>
+            </div>
+            <div class="admin-toolbar">
+                <input type="text" id="admin-search" placeholder="Pesquisar usuário..." class="admin-search">
+                <span class="admin-count" id="admin-user-count">0 usuários</span>
+            </div>
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Usuário</th>
+                            <th>E-mail</th>
+                            <th>Senha</th>
+                            <th>Hardware UUID</th>
+                            <th>Endereço MAC</th>
+                            <th>Endereço IP</th>
+                            <th>Telefone</th>
+                            <th>PIN config.</th>
+                            <th>Criado em</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-users-body">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Create Server -->
+    <div class="modal" id="modal-server">
+        <div class="modal-content">
+            <h2>Criar Servidor</h2>
+            <form id="server-form">
+                <div class="server-icon-upload" id="server-icon-upload">
+                    <i class="fas fa-camera"></i>
+                    <span>Ícone</span>
+                    <input type="file" id="server-icon-input" accept="image/*" hidden>
+                </div>
+                <input type="text" id="server-name" placeholder="Nome do servidor" required>
+                <select id="server-region">
+                    <option value="br">🇧🇷 Brasil</option>
+                    <option value="us">🇺🇸 EUA</option>
+                    <option value="eu">🇪🇺 Europa</option>
+                </select>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" data-close>Cancelar</button>
+                    <button type="submit">Criar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Adicionar (Canal ou Categoria) -->
+    <div class="modal" id="modal-channel">
+        <div class="modal-content modal-channel-content">
+            <div class="modal-channel-header">
+                <div class="modal-channel-icon"><i class="fas fa-plus"></i></div>
+                <h2>Adicionar</h2>
+                <p class="modal-desc">Crie um canal de texto/voz ou uma categoria para organizar.</p>
+            </div>
+            <div class="add-channel-category-tabs">
+                <button type="button" class="add-tab active" data-tab="channel"><i class="fas fa-hashtag"></i> Canal</button>
+                <button type="button" class="add-tab" data-tab="category"><i class="fas fa-folder"></i> Categoria</button>
+            </div>
+            <div class="add-tab-panel active" id="add-panel-channel">
+                <form id="channel-form" class="channel-form">
+                    <div class="form-group">
+                        <label>Tipo de canal</label>
+                        <div class="channel-types channel-types-card">
+                            <label class="channel-type active">
+                                <input type="radio" name="type" value="text" checked>
+                                <span class="channel-type-icon"><i class="fas fa-hashtag"></i></span>
+                                <span class="channel-type-label">Texto</span>
+                                <span class="channel-type-desc">Conversas por mensagens</span>
+                            </label>
+                            <label class="channel-type">
+                                <input type="radio" name="type" value="voice">
+                                <span class="channel-type-icon"><i class="fas fa-volume-up"></i></span>
+                                <span class="channel-type-label">Voz</span>
+                                <span class="channel-type-desc">Chamadas e áudio</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="channel-name-input">Nome do canal</label>
+                        <input type="text" id="channel-name-input" placeholder="ex: geral, regras, off-topic" maxlength="100" required autocomplete="off">
+                        <p class="channel-name-hint" id="channel-name-hint">Será exibido como <strong id="channel-slug-preview">#nome-do-canal</strong></p>
+                    </div>
+                    <div class="form-group channel-form-category-wrap" id="channel-form-category-wrap">
+                        <label for="channel-category-select">Categoria</label>
+                        <select id="channel-category-select">
+                            <option value="">Sem categoria</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions modal-channel-actions">
+                        <button type="button" class="btn-ghost" data-close>Cancelar</button>
+                        <button type="submit" class="btn-primary"><i class="fas fa-plus"></i> Criar canal</button>
+                    </div>
+                </form>
+            </div>
+            <div class="add-tab-panel" id="add-panel-category">
+                <form id="category-form" class="channel-form">
+                    <div class="form-group">
+                        <label for="category-name-input">Nome da categoria</label>
+                        <input type="text" id="category-name-input" placeholder="ex: Geral, Jogos, Staff" maxlength="100" required autocomplete="off">
+                        <p class="field-hint">Agrupe canais sob um mesmo título na barra lateral.</p>
+                    </div>
+                    <div class="modal-actions modal-channel-actions">
+                        <button type="button" class="btn-ghost" data-close>Cancelar</button>
+                        <button type="submit" class="btn-primary"><i class="fas fa-folder-plus"></i> Criar categoria</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Edit Channel (permissions) -->
+    <div class="modal" id="modal-channel-edit">
+        <div class="modal-content modal-channel-edit-content">
+            <div class="modal-channel-header">
+                <div class="modal-channel-icon"><i class="fas fa-lock"></i></div>
+                <h2>Editar canal</h2>
+                <p class="modal-desc" id="modal-channel-edit-name">#canal</p>
+            </div>
+            <form id="channel-edit-form" class="channel-form">
+                <input type="hidden" id="channel-edit-id">
+                <div class="form-group">
+                    <label for="channel-edit-name-input">Nome</label>
+                    <input type="text" id="channel-edit-name-input" required autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>Categoria</label>
+                    <select id="channel-edit-category">
+                        <option value="">Sem categoria</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Quem pode ver o canal</label>
+                    <p class="field-hint">Cargos que podem ver este canal. Deixe vazio = todos.</p>
+                    <div class="channel-perms-list" id="channel-edit-view-roles"></div>
+                </div>
+                <div class="form-group">
+                    <label>Quem pode enviar mensagens</label>
+                    <p class="field-hint">Cargos que podem escrever neste canal.</p>
+                    <div class="channel-perms-list" id="channel-edit-send-roles"></div>
+                </div>
+                <div class="modal-actions modal-channel-actions">
+                    <button type="button" class="btn-ghost" data-close>Cancelar</button>
+                    <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Add Friend -->
+    <div class="modal" id="modal-friend">
+        <div class="modal-content">
+            <h2>Adicionar Amigo</h2>
+            <p class="modal-desc">Adicione pelo nome de usuário</p>
+            <form id="friend-form">
+                <input type="text" id="friend-username" placeholder="NomeDeUsuario#0000" required>
+                <div class="modal-actions">
+                    <button type="button" class="btn-cancel" data-close>Cancelar</button>
+                    <button type="submit">Enviar convite</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Apagar minha conta (verificação) -->
+    <div class="modal" id="modal-delete-account">
+        <div class="modal-content">
+            <h2><i class="fas fa-exclamation-triangle"></i> Apagar minha conta</h2>
+            <p class="modal-desc">Serão removidos <strong>somente</strong> os seus dados: sua conta, as mensagens que você enviou em canais e DMs, sua lista de amigos e convites. Nada de outras pessoas será apagado.</p>
+            <p class="modal-desc" style="margin-top:12px; color:var(--text-muted);">Para confirmar, digite exatamente: <strong id="delete-account-confirm-phrase">APAGAR MINHA CONTA</strong></p>
+            <div class="delete-account-verify">
+                <input type="text" id="delete-account-confirm-input" placeholder="Digite a frase acima" autocomplete="off">
+                <p class="delete-account-error hidden" id="delete-account-error"></p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-ghost" data-close>Cancelar</button>
+                <button type="button" class="btn-outline btn-danger" id="delete-account-confirm-btn"><i class="fas fa-user-times"></i> Apagar só meus dados</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Invite -->
+    <div class="modal" id="modal-invite">
+        <div class="modal-content">
+            <h2>Convidar Pessoas</h2>
+            <div class="invite-preview-wrap">
+                <a href="#" id="invite-link-anchor" class="invite-link-anchor" target="_blank" rel="noopener noreferrer"></a>
+                <div class="invite-link-box">
+                    <input type="text" id="invite-link" value="" readonly>
+                    <button id="copy-invite" type="button"><i class="fas fa-copy"></i></button>
+                </div>
+                <div id="invite-modal-preview" class="invite-modal-preview"></div>
+            </div>
+            <div class="invite-options">
+                <select id="invite-expiry">
+                    <option value="1800">30 minutos</option>
+                    <option value="3600">1 hora</option>
+                    <option value="21600" selected>6 horas</option>
+                    <option value="86400">24 horas</option>
+                    <option value="604800">7 dias</option>
+                    <option value="0">Nunca expira</option>
+                </select>
+                <select id="invite-uses">
+                    <option value="0">Sem limite</option>
+                    <option value="1">1 uso</option>
+                    <option value="5">5 usos</option>
+                    <option value="10">10 usos</option>
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" data-close>Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Perfil de outro jogador -->
+    <div class="modal" id="modal-user-profile">
+        <div class="modal-content modal-user-profile-content">
+            <div class="user-profile-card">
+                <div class="user-profile-banner" id="user-profile-banner">
+                    <div class="user-profile-banner-overlay"></div>
+                    <div class="user-profile-banner-gradient"></div>
+                    <img class="user-profile-banner-img" id="user-profile-banner-img" src="" alt="">
+                </div>
+                <div class="user-profile-body">
+                    <div class="user-profile-avatar-wrap">
+                        <div class="user-profile-avatar-ring"></div>
+                        <div class="user-profile-avatar" id="user-profile-avatar"><span class="avatar-initials">?</span></div>
+                        <span class="user-profile-status status-online" id="user-profile-status"></span>
+                    </div>
+                    <h2 class="user-profile-name" id="user-profile-name">Nome</h2>
+                    <span class="user-profile-tag" id="user-profile-tag">#0000</span>
+                    <div class="user-profile-desc-wrap">
+                        <p class="user-profile-desc" id="user-profile-desc"></p>
+                    </div>
+                    <div class="user-profile-actions">
+                        <button type="button" class="btn-profile-chat" id="user-profile-send-msg" title="Enviar mensagem"><i class="fas fa-comment"></i></button>
+                        <button type="button" class="btn-profile-add-friend" id="user-profile-add-friend" title="Adicionar amigo"><i class="fas fa-user-plus"></i></button>
+                        <button type="button" class="btn-profile-add-role hidden" id="user-profile-add-role-btn" title="Adicionar cargo"><i class="fas fa-plus"></i></button>
+                        <div class="user-profile-roles-dropdown hidden" id="user-profile-roles-dropdown">
+                            <div class="user-profile-roles-dropdown-list" id="user-profile-roles-list"></div>
+                            <p class="user-profile-roles-dropdown-empty hidden" id="user-profile-roles-empty">Nenhum cargo disponível</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-user-profile-actions">
+                <button type="button" class="btn-ghost" data-close>Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Avatar Upload (Apply to all / Select servers) -->
+    <div class="modal" id="modal-avatar">
+        <div class="modal-content">
+            <h2 data-i18n="avatar_modal_title">Profile Photo</h2>
+            <p class="modal-desc" data-i18n="avatar_modal_desc">Choose where this photo will appear</p>
+            <div class="avatar-modal-preview" id="avatar-modal-preview"></div>
+            <div class="avatar-apply-options">
+                <label class="toggle-item">
+                    <input type="checkbox" id="avatar-apply-all" checked>
+                    <span class="toggle-slider"></span>
+                    <span data-i18n="avatar_apply_all">Apply to all servers (everyone sees this photo)</span>
+                </label>
+                <div class="avatar-server-select hidden" id="avatar-server-select">
+                    <label data-i18n="avatar_select_servers">Or select specific servers:</label>
+                    <div class="avatar-server-list" id="avatar-server-list"></div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" id="avatar-modal-cancel" data-close>Cancel</button>
+                <button type="button" class="btn-primary" id="avatar-modal-save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Verificação de Autenticação -->
+    <div class="modal" id="modal-verify">
+        <div class="modal-content verify-modal">
+            <div class="verify-header">
+                <div class="verify-icon" id="verify-icon"><i class="fas fa-shield-alt"></i></div>
+                <h2 id="verify-title">Verificação</h2>
+                <p class="verify-subtitle" id="verify-subtitle">Complete a verificação para continuar</p>
+            </div>
+            <div class="verify-status" id="verify-status"></div>
+            <div class="verify-error" id="verify-error"></div>
+            
+            <div class="verify-panels">
+                <div class="verify-panel" id="verify-panel-password" data-method="password">
+                    <p class="verify-instruction">Digite sua senha para verificar sua identidade.</p>
+                    <input type="password" id="verify-password-input" placeholder="Senha" autocomplete="current-password">
+                    <input type="password" id="verify-password-confirm" placeholder="Confirmar senha" autocomplete="new-password">
+                    <button type="button" class="btn-primary verify-btn" id="verify-password-btn">Verificar</button>
+                </div>
+                <div class="verify-panel" id="verify-panel-pin" data-method="pin">
+                    <p class="verify-instruction">Digite seu PIN para verificar sua identidade.</p>
+                    <input type="password" id="verify-pin-input" placeholder="PIN (4-8 dígitos)" maxlength="8" inputmode="numeric" pattern="[0-9]*">
+                    <input type="password" id="verify-pin-confirm" placeholder="Confirmar PIN" maxlength="8" inputmode="numeric" pattern="[0-9]*">
+                    <button type="button" class="btn-primary verify-btn" id="verify-pin-btn">Verificar</button>
+                </div>
+                <div class="verify-panel" id="verify-panel-windows_hello" data-method="windows_hello">
+                    <p class="verify-instruction">Use o PIN do Windows Hello para completar a autenticação.</p>
+                    <button type="button" class="btn-primary verify-btn" id="verify-windows-hello-btn"><i class="fa-brands fa-windows"></i> Autenticar com PIN do Windows</button>
+                </div>
+                <div class="verify-panel" id="verify-panel-yubikey" data-method="yubikey">
+                    <p class="verify-instruction">Insira sua YubiKey na porta USB e toque no botão da chave para autenticar.</p>
+                    <button type="button" class="btn-primary verify-btn" id="verify-yubikey-btn"><i class="fas fa-usb-drive"></i> Autenticar com YubiKey</button>
+                </div>
+                <div class="verify-panel" id="verify-panel-mac_address" data-method="mac_address">
+                    <p class="verify-instruction">Confirme o endereço MAC do seu dispositivo. Este identificador será vinculado à sua conta.</p>
+                    <input type="text" id="verify-mac-value" readonly placeholder="Carregando...">
+                    <button type="button" class="btn-primary verify-btn" id="verify-mac-btn">Confirmar e vincular</button>
+                </div>
+                <div class="verify-panel" id="verify-panel-ip" data-method="ip">
+                    <p class="verify-instruction">Confirme o endereço IP do seu dispositivo. Este IP será vinculado à sua conta.</p>
+                    <input type="text" id="verify-ip-value" readonly placeholder="Carregando...">
+                    <button type="button" class="btn-primary verify-btn" id="verify-ip-btn">Confirmar e vincular</button>
+                </div>
+                <div class="verify-panel" id="verify-panel-hardware_uuid" data-method="hardware_uuid">
+                    <p class="verify-instruction">Confirme o Hardware UUID do seu dispositivo. Este identificador será vinculado à sua conta.</p>
+                    <input type="text" id="verify-hwid-value" readonly placeholder="Carregando...">
+                    <button type="button" class="btn-primary verify-btn" id="verify-hwid-btn">Confirmar e vincular</button>
+                </div>
+                <div class="verify-panel" id="verify-panel-phone_verification" data-method="phone_verification">
+                    <p class="verify-instruction">Escolha como deseja verificar: por SMS ou por chamada telefônica. Um código será enviado para o seu número.</p>
+                    <div class="verify-phone-options">
+                        <button type="button" class="btn-outline verify-option-btn" id="verify-phone-sms"><i class="fas fa-sms"></i> Receber código por SMS</button>
+                        <button type="button" class="btn-outline verify-option-btn" id="verify-phone-call"><i class="fas fa-phone"></i> Receber chamada</button>
+                    </div>
+                    <input type="text" id="verify-phone-code" placeholder="Digite o código recebido" maxlength="6" style="display:none;">
+                    <button type="button" class="btn-primary verify-btn" id="verify-phone-btn" style="display:none;">Verificar código</button>
+                </div>
+                <div class="verify-panel" id="verify-panel-email_verification" data-method="email_verification">
+                    <p class="verify-instruction">Verifique seu e-mail para concluir a autenticação. Um código de verificação foi enviado para o endereço cadastrado.</p>
+                    <input type="text" id="verify-email-code" placeholder="Digite o código recebido por e-mail" maxlength="6">
+                    <button type="button" class="btn-primary verify-btn" id="verify-email-btn">Verificar código</button>
+                    <button type="button" class="btn-outline verify-resend" id="verify-email-resend">Reenviar código</button>
+                </div>
+            </div>
+            <div class="modal-actions verify-actions">
+                <button type="button" class="btn-cancel" id="verify-cancel-btn" data-close>Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Settings -->
+    <div class="modal modal-full" id="modal-settings">
+        <div class="settings-container" id="settings-container">
+            <div class="settings-nav">
+                <div class="settings-section" data-scope="player">USUÁRIO</div>
+                <div class="settings-item active" data-panel="account" data-scope="player"><i class="fas fa-user"></i> Minha Conta</div>
+                <div class="settings-item" data-panel="auth" data-scope="player"><i class="fas fa-shield-alt"></i> Autenticação e Segurança</div>
+                <div class="settings-item" data-panel="profile" data-scope="player"><i class="fas fa-id-card"></i> Perfil</div>
+                <div class="settings-item" data-panel="privacy" data-scope="player"><i class="fas fa-shield-alt"></i> Privacidade</div>
+                <div class="settings-section" data-scope="player">APP</div>
+                <div class="settings-item" data-panel="appearance" data-scope="player"><i class="fas fa-palette"></i> Aparência</div>
+                <div class="settings-item" data-panel="voice" data-scope="player"><i class="fas fa-microphone"></i> Voz</div>
+                <div class="settings-item" data-panel="notifications" data-scope="player"><i class="fas fa-bell"></i> Notificações</div>
+                <div class="settings-section" data-scope="server">SERVIDOR</div>
+                <div class="settings-item" data-panel="roles" data-scope="server"><i class="fas fa-user-tag"></i> Cargos</div>
+                <div class="settings-item" data-panel="channels" data-scope="server"><i class="fas fa-hashtag"></i> Canais</div>
+                <div class="settings-item" data-panel="emojis" data-scope="server"><i class="fas fa-smile"></i> Emojis</div>
+                <div class="settings-item" data-panel="invites" data-scope="server"><i class="fas fa-link"></i> Convites</div>
+                <div class="settings-logout" id="logout-btn" data-scope="player"><i class="fas fa-sign-out-alt"></i> Sair</div>
+            </div>
+            
+            <div class="settings-main">
+                <button class="settings-close" data-close><i class="fas fa-times"></i></button>
+                
+                <!-- Account -->
+                <div class="settings-panel active" id="panel-account">
+                    <h2>Minha Conta</h2>
+                    <div class="subscription-card" id="subscription-card">
+                        <div class="subscription-info">
+                            <i class="fas fa-crown subscription-icon"></i>
+                            <div>
+                                <strong data-i18n="subscription_plan">Subscription Plan</strong>
+                                <span class="subscription-desc" data-i18n="subscription_desc">Choose your plan to increase character and file size limits</span>
+                            </div>
+                        </div>
+                        <select id="subscription-tier" class="subscription-select">
+                            <option value="free">Free — 5,000 chars / 100 MB</option>
+                            <option value="premium">Premium — 10,000 chars / 250 MB</option>
+                            <option value="premium_plus">Premium+ — 20,000 chars / 500 MB</option>
+                            <option value="vip">VIP — 50,000 chars / 1 GB</option>
+                            <option value="mvp">MVP — 100,000 chars / 5 GB</option>
+                        </select>
+                    </div>
+                    <div class="account-card">
+                        <div class="account-avatar" id="settings-avatar">
+                            <span class="avatar-initials">?</span>
+                            <div class="avatar-upload" title="Clique para trocar a foto">
+                                <i class="fas fa-camera"></i>
+                            </div>
+                        </div>
+                        <input type="file" id="avatar-input" accept="image/*" hidden>
+                        <div class="account-info">
+                            <div class="account-name">
+                                <span id="settings-username">Usuário</span>
+                                <span id="settings-tag">#0000</span>
+                            </div>
+                            <button type="button" class="btn-avatar-change" id="btn-avatar-change"><i class="fas fa-camera"></i> Alterar foto</button>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <label data-i18n="language">Language</label>
+                        <select id="settings-lang">
+                            <option value="en">English</option>
+                            <option value="pt">Português</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label data-i18n="label_name">NAME</label>
+                        <div class="input-row">
+                            <input type="text" id="edit-username">
+                            <button class="btn-small" id="save-username" data-i18n="save">Save</button>
+                        </div>
+                    </div>
+                    <div class="settings-group settings-group-danger">
+                        <label>Dados locais</label>
+                        <p class="settings-desc">Remove todos os dados salvos neste navegador (contas, servidores, mensagens, fotos). Você precisará criar conta e entrar de novo.</p>
+                        <button type="button" class="btn-outline btn-danger" id="clear-database-btn"><i class="fas fa-trash-alt"></i> Limpar banco de dados</button>
+                    </div>
+                </div>
+
+                <!-- Autenticação e Segurança (ordem por prioridade MFA) -->
+                <div class="settings-panel" id="panel-auth">
+                    <h2>Autenticação e Segurança</h2>
+                    <p class="settings-desc">Métodos ordenados por prioridade. Ao fazer login, a verificação será solicitada na ordem: YubiKey → Hardware UUID → MAC → IP → Telefone → Windows Hello → E-mail → Senha → PIN.</p>
+                    
+                    <div class="auth-methods-list">
+                        <!-- 1. YubiKey -->
+                        <div class="auth-method-item" data-method="yubikey">
+                            <span class="auth-priority">1</span>
+                            <div class="auth-method-info">
+                                <i class="fas fa-usb-drive"></i>
+                                <div>
+                                    <strong>YubiKey</strong>
+                                    <span class="auth-method-desc">Chave de segurança física</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-yubikey-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-yubikey-config">
+                                <button class="btn-outline" id="setup-yubikey">Registrar YubiKey</button>
+                            </div>
+                        </div>
+
+                        <!-- 2. Hardware UUID -->
+                        <div class="auth-method-item" data-method="hardware_uuid">
+                            <span class="auth-priority">2</span>
+                            <div class="auth-method-info">
+                                <i class="fas fa-fingerprint"></i>
+                                <div>
+                                    <strong>Hardware UUID</strong>
+                                    <span class="auth-method-desc">Identificador único do hardware</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-hwid-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-hwid-config">
+                                <input type="text" id="auth-hwid-value" placeholder="UUID do dispositivo" readonly>
+                                <button class="btn-outline" id="link-hwid">Vincular este dispositivo</button>
+                            </div>
+                        </div>
+
+                        <!-- 3. MacAddress -->
+                        <div class="auth-method-item" data-method="mac_address">
+                            <span class="auth-priority">3</span>
+                            <div class="auth-method-info">
+                                <i class="fas fa-network-wired"></i>
+                                <div>
+                                    <strong>Endereço MAC</strong>
+                                    <span class="auth-method-desc">Verificação pelo dispositivo</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-mac-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-mac-config">
+                                <input type="text" id="auth-mac-value" placeholder="MAC do dispositivo" readonly>
+                                <button class="btn-outline" id="link-mac">Vincular este dispositivo</button>
+                            </div>
+                        </div>
+
+                        <!-- 4. IP Address -->
+                        <div class="auth-method-item" data-method="ip">
+                            <span class="auth-priority">4</span>
+                            <div class="auth-method-info">
+                                <i class="fas fa-globe"></i>
+                                <div>
+                                    <strong>Endereço IP</strong>
+                                    <span class="auth-method-desc">Verificação pelo IP do dispositivo</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-ip-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-ip-config">
+                                <input type="text" id="auth-ip-value" placeholder="IP atual" readonly>
+                                <button class="btn-outline" id="link-ip">Vincular IP atual</button>
+                            </div>
+                        </div>
+
+                        <!-- 5. Phone Verification -->
+                        <div class="auth-method-item" data-method="phone_verification">
+                            <span class="auth-priority">5</span>
+                            <div class="auth-method-info">
+                                <i class="fas fa-mobile-alt"></i>
+                                <div>
+                                    <strong>Verificação por Telefone</strong>
+                                    <span class="auth-method-desc">SMS ou chamada telefônica</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-phone-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-phone-config">
+                                <input type="tel" id="auth-phone-value" placeholder="+55 11 99999-9999">
+                                <button class="btn-outline" id="setup-phone">Configurar verificação por telefone</button>
+                            </div>
+                        </div>
+
+                        <!-- 6. Windows Hello (apenas PIN) -->
+                        <div class="auth-method-item" data-method="windows_hello">
+                            <span class="auth-priority">6</span>
+                            <div class="auth-method-info">
+                                <i class="fa-brands fa-windows"></i>
+                                <div>
+                                    <strong>Windows Hello</strong>
+                                    <span class="auth-method-desc">Autenticação via PIN do Windows</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-windows-hello-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-windows-hello-config">
+                                <button class="btn-outline" id="setup-windows-hello">Configurar Windows Hello (PIN)</button>
+                            </div>
+                        </div>
+
+                        <!-- 7. Email Verification -->
+                        <div class="auth-method-item" data-method="email_verification">
+                            <span class="auth-priority">7</span>
+                            <div class="auth-method-info">
+                                <i class="fas fa-envelope"></i>
+                                <div>
+                                    <strong>Verificação por E-mail</strong>
+                                    <span class="auth-method-desc">Código enviado por e-mail</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-email-verification-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-email-verification-config">
+                                <input type="email" id="auth-email-value" placeholder="seu@email.com">
+                                <button class="btn-outline" id="setup-email-verification">Configurar verificação por e-mail</button>
+                            </div>
+                        </div>
+
+                        <!-- 8. Password -->
+                        <div class="auth-method-item" data-method="password">
+                            <span class="auth-priority">8</span>
+                            <div class="auth-method-info">
+                                <i class="fas fa-key"></i>
+                                <div>
+                                    <strong>Senha</strong>
+                                    <span class="auth-method-desc">Autenticação tradicional por senha</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-password-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-password-config">
+                                <input type="password" id="auth-password" placeholder="Definir senha">
+                                <input type="password" id="auth-password-confirm" placeholder="Confirmar senha">
+                                <button class="btn-small" id="save-auth-password">Salvar</button>
+                            </div>
+                        </div>
+
+                        <!-- 9. PIN -->
+                        <div class="auth-method-item" data-method="pin">
+                            <span class="auth-priority">9</span>
+                            <div class="auth-method-info">
+                                <i class="fas fa-th-large"></i>
+                                <div>
+                                    <strong>PIN</strong>
+                                    <span class="auth-method-desc">Código numérico de 4-8 dígitos</span>
+                                </div>
+                            </div>
+                            <label class="toggle">
+                                <input type="checkbox" id="auth-pin-enabled">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="auth-method-config auth-pin-config">
+                                <input type="password" id="auth-pin" placeholder="PIN (4-8 dígitos)" maxlength="8" inputmode="numeric" pattern="[0-9]*">
+                                <input type="password" id="auth-pin-confirm" placeholder="Confirmar PIN" maxlength="8" inputmode="numeric" pattern="[0-9]*">
+                                <button class="btn-small" id="save-auth-pin">Salvar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile -->
+                <div class="settings-panel" id="panel-profile">
+                    <h2>Perfil</h2>
+                    <div class="profile-preview">
+                        <div class="profile-banner" id="profile-banner">
+                            <div class="banner-upload">
+                                <i class="fas fa-image"></i>
+                            </div>
+                            <input type="file" id="banner-input" accept="image/*" hidden>
+                        </div>
+                        <div class="profile-avatar-small" id="profile-avatar-preview">
+                            <span class="avatar-initials">?</span>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <label>SOBRE MIM</label>
+                        <textarea id="bio-input" placeholder="Conte sobre você..." maxlength="190"></textarea>
+                        <span class="char-count"><span id="bio-count">0</span>/190</span>
+                    </div>
+                    <div class="settings-group">
+                        <label>COR DO PERFIL</label>
+                        <div class="profile-color-mode">
+                            <button type="button" class="profile-color-mode-btn active" data-mode="solid">Cor sólida</button>
+                            <button type="button" class="profile-color-mode-btn" data-mode="gradient">Gradiente</button>
+                        </div>
+                        <div class="color-options profile-color-solid" id="profile-color-solid">
+                            <button class="color-opt active" data-color="#FFFF00" style="background:#FFFF00"></button>
+                            <button class="color-opt" data-color="#FFD700" style="background:#FFD700"></button>
+                            <button class="color-opt" data-color="#FFA500" style="background:#FFA500"></button>
+                            <button class="color-opt" data-color="#FF4444" style="background:#FF4444"></button>
+                            <button class="color-opt" data-color="#44FFFF" style="background:#44FFFF"></button>
+                        </div>
+                        <div class="profile-color-gradient hidden" id="profile-color-gradient">
+                            <div class="gradient-inputs">
+                                <label class="gradient-color-wrap">
+                                    <span>Cor 1</span>
+                                    <input type="color" id="profile-gradient-color1" value="#FF0080">
+                                </label>
+                                <label class="gradient-color-wrap">
+                                    <span>Cor 2</span>
+                                    <input type="color" id="profile-gradient-color2" value="#7928CA">
+                                </label>
+                            </div>
+                            <label class="gradient-angle-wrap">
+                                <span>Ângulo</span>
+                                <input type="range" id="profile-gradient-angle" min="0" max="360" value="90">
+                                <span class="gradient-angle-value" id="profile-gradient-angle-value">90°</span>
+                            </label>
+                            <div class="profile-color-preview" id="profile-color-preview"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Privacy -->
+                <div class="settings-panel" id="panel-privacy">
+                    <h2>Privacidade</h2>
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <strong>Mostrar status online</strong>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" checked id="show-online">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <strong>DMs de membros do servidor</strong>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" checked id="allow-dm">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <strong>Convites para servidores</strong>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" checked id="allow-invites">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-group settings-group-danger">
+                        <label>Apagar minha conta</label>
+                        <p class="settings-desc">Remove <strong>somente</strong> seus dados: sua conta, suas mensagens em canais e DMs, sua lista de amigos e convites. Dados de outras pessoas não são apagados.</p>
+                        <button type="button" class="btn-outline btn-danger" id="delete-my-account-btn"><i class="fas fa-user-times"></i> Apagar minha conta</button>
+                    </div>
+                </div>
+
+                <!-- Appearance -->
+                <div class="settings-panel" id="panel-appearance">
+                    <h2>Aparência</h2>
+                    <div class="appearance-bg-box settings-group">
+                        <label>FUNDO DO CHAT</label>
+                        <div class="appearance-bg-preview-wrap">
+                            <div class="appearance-bg-preview" id="appearance-bg-preview"></div>
+                            <div class="appearance-bg-actions">
+                                <button type="button" class="btn-outline" id="appearance-bg-choose"><i class="fas fa-image"></i> Escolher imagem/GIF</button>
+                                <button type="button" class="btn-outline" id="appearance-bg-gradient-btn"><i class="fas fa-fill-drip"></i> Usar gradiente</button>
+                                <button type="button" class="btn-ghost" id="appearance-bg-clear">Limpar</button>
+                            </div>
+                            <div class="appearance-bg-gradient-box hidden" id="appearance-bg-gradient-box">
+                                <label>Gradiente</label>
+                                <div class="gradient-controls appearance-gradient">
+                                    <div class="gradient-row">
+                                        <input type="color" id="appearance-gradient-color1" value="#1a1a2e" title="Cor 1">
+                                        <input type="color" id="appearance-gradient-color2" value="#16213e" title="Cor 2">
+                                    </div>
+                                    <div class="gradient-row">
+                                        <label>Direção</label>
+                                        <select id="appearance-gradient-angle">
+                                            <option value="0">← Esquerda</option>
+                                            <option value="90">↑ Cima</option>
+                                            <option value="135" selected>↗ Diagonal</option>
+                                            <option value="180">→ Direita</option>
+                                            <option value="270">↓ Baixo</option>
+                                            <option value="315">↘ Diagonal 2</option>
+                                        </select>
+                                    </div>
+                                    <button type="button" class="btn-outline btn-small" id="appearance-bg-gradient-apply">Aplicar gradiente</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="file" id="background-image-input" accept="image/*" hidden>
+                    <div class="settings-group">
+                        <label>TEMA</label>
+                        <div class="theme-options">
+                            <label class="theme-opt active">
+                                <input type="radio" name="theme" value="dark" checked>
+                                <div class="theme-preview dark"></div>
+                                <span>Escuro</span>
+                            </label>
+                            <label class="theme-opt">
+                                <input type="radio" name="theme" value="amoled">
+                                <div class="theme-preview amoled"></div>
+                                <span>AMOLED</span>
+                            </label>
+                            <label class="theme-opt">
+                                <input type="radio" name="theme" value="light">
+                                <div class="theme-preview light"></div>
+                                <span>Claro</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-group">
+                        <label>COR DE DESTAQUE</label>
+                        <div class="color-options accent-colors">
+                            <button class="color-opt active" data-color="#FFFF00" style="background:#FFFF00"></button>
+                            <button class="color-opt" data-color="#FFD700" style="background:#FFD700"></button>
+                            <button class="color-opt" data-color="#FFA500" style="background:#FFA500"></button>
+                            <button class="color-opt" data-color="#FF4444" style="background:#FF4444"></button>
+                            <button class="color-opt" data-color="#44FFFF" style="background:#44FFFF"></button>
+                        </div>
+                    </div>
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <strong>Modo compacto</strong>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="compact-mode">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Voice -->
+                <div class="settings-panel" id="panel-voice">
+                    <h2>Voz e Vídeo</h2>
+                    <div class="settings-group">
+                        <label>DISPOSITIVO DE ENTRADA</label>
+                        <select id="input-device">
+                            <option>Microfone Padrão</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label>VOLUME DO MIC</label>
+                        <input type="range" min="0" max="100" value="80" id="mic-volume">
+                    </div>
+                    <div class="settings-group">
+                        <label>DISPOSITIVO DE SAÍDA</label>
+                        <select id="output-device">
+                            <option>Alto-falantes Padrão</option>
+                        </select>
+                    </div>
+                    <div class="settings-group">
+                        <label>VOLUME DE SAÍDA</label>
+                        <input type="range" min="0" max="100" value="100" id="output-volume">
+                    </div>
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <strong>Redução de ruído</strong>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" checked id="noise-cancel">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Notifications -->
+                <div class="settings-panel" id="panel-notifications">
+                    <h2>Notificações</h2>
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <strong>Notificações do desktop</strong>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" checked id="desktop-notif">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <strong>Som de notificação</strong>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" checked id="notif-sound">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="toggle-item">
+                        <div class="toggle-info">
+                            <strong>Notificações de DM</strong>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" checked id="dm-notif">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Roles -->
+                <div class="settings-panel" id="panel-roles">
+                    <h2>Cargos</h2>
+                    <div class="roles-editor">
+                        <div class="roles-list-panel">
+                            <div class="roles-list" id="roles-list"></div>
+                            <button class="add-role-btn hidden" id="add-role-btn" title="Adicionar cargo"><i class="fas fa-plus"></i> Adicionar cargo</button>
+                        </div>
+                        <div class="role-settings">
+                            <div class="settings-group">
+                                <label>NOME</label>
+                                <input type="text" id="role-name">
+                            </div>
+                            <div class="settings-group">
+                                <label>COR</label>
+                                <input type="color" id="role-color" value="#FFFF00">
+                            </div>
+                            <div class="permissions">
+                                <h4>PERMISSÕES</h4>
+                                <label class="perm-item"><input type="checkbox" data-perm="admin"> Administrador</label>
+                                <label class="perm-item"><input type="checkbox" data-perm="manage"> Gerenciar servidor</label>
+                                <label class="perm-item"><input type="checkbox" data-perm="roles"> Gerenciar cargos</label>
+                                <label class="perm-item"><input type="checkbox" data-perm="channels"> Gerenciar canais</label>
+                                <label class="perm-item"><input type="checkbox" data-perm="kick"> Expulsar</label>
+                                <label class="perm-item"><input type="checkbox" data-perm="ban"> Banir</label>
+                                <label class="perm-item"><input type="checkbox" data-perm="messages"> Enviar mensagens</label>
+                                <label class="perm-item"><input type="checkbox" data-perm="manage-msg"> Gerenciar mensagens</label>
+                            </div>
+                            <div class="role-actions">
+                                <button class="btn-danger" id="delete-role">Excluir cargo</button>
+                                <button class="btn-primary" id="save-role">Salvar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Channels -->
+                <div class="settings-panel" id="panel-channels">
+                    <h2>Canais</h2>
+                    <p class="settings-desc">Gerencie os canais e categorias do servidor.</p>
+                    <div class="channels-settings-list" id="channels-settings-list"></div>
+                    <button type="button" class="btn-outline" id="settings-add-channel-btn"><i class="fas fa-plus"></i> Adicionar</button>
+                </div>
+
+                <!-- Emojis -->
+                <div class="settings-panel" id="panel-emojis">
+                    <h2>Emojis</h2>
+                    <div class="emoji-upload-area" id="emoji-upload-area">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span>Arraste ou clique para upload</span>
+                        <input type="file" id="emoji-file-input" accept="image/*" hidden>
+                    </div>
+                    <div class="emoji-list" id="emoji-list"></div>
+                </div>
+
+                <!-- Invites -->
+                <div class="settings-panel" id="panel-invites">
+                    <h2>Convites</h2>
+                    <p class="settings-desc">Compartilhe este link para convidar pessoas a entrar no servidor. Quem clicar em &quot;Ir para o Servidor&quot; nas mensagens será adicionado ao servidor.</p>
+                    <div class="invite-permanent-box">
+                        <label class="invite-label">Link de convite</label>
+                        <a href="#" id="invite-link-settings-anchor" class="invite-link-anchor"></a>
+                        <div class="invite-link-box">
+                            <input type="text" id="invite-link-settings" readonly placeholder="Selecione um servidor">
+                            <button type="button" class="btn-primary" id="copy-invite-settings"><i class="fas fa-copy"></i> Copiar</button>
+                        </div>
+                        <div id="invite-settings-preview" class="invite-settings-preview"></div>
+                    </div>
+                    <div class="invite-create">
+                        <button class="btn-ghost" id="open-invite-modal"><i class="fas fa-external-link-alt"></i> Abrir modal de convite</button>
+                    </div>
+                    <div class="invite-list" id="invite-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Emoji Picker -->
+    <div class="emoji-picker hidden" id="emoji-picker">
+        <input type="text" placeholder="Pesquisar emoji..." id="emoji-search">
+        <div class="emoji-tabs">
+            <button class="emoji-tab active" data-cat="smile"><i class="fas fa-smile"></i></button>
+            <button class="emoji-tab" data-cat="people"><i class="fas fa-user"></i></button>
+            <button class="emoji-tab" data-cat="animals"><i class="fas fa-paw"></i></button>
+            <button class="emoji-tab" data-cat="food"><i class="fas fa-utensils"></i></button>
+            <button class="emoji-tab" data-cat="activity"><i class="fas fa-futbol"></i></button>
+        </div>
+        <div class="emoji-grid" id="emoji-grid"></div>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="context-menu">
+        <div class="ctx-item" data-action="profile"><i class="fas fa-user"></i> Perfil</div>
+        <div class="ctx-item" data-action="message"><i class="fas fa-comment"></i> Mensagem</div>
+        <div class="ctx-item" data-action="call"><i class="fas fa-phone"></i> Ligar</div>
+        <div class="ctx-divider"></div>
+        <div class="ctx-item" data-action="roles"><i class="fas fa-user-tag"></i> Cargos</div>
+        <div class="ctx-item" data-action="mute"><i class="fas fa-microphone-slash"></i> Silenciar</div>
+        <div class="ctx-divider"></div>
+        <div class="ctx-item danger" data-action="kick"><i class="fas fa-user-times"></i> Expulsar</div>
+        <div class="ctx-item danger" data-action="ban"><i class="fas fa-gavel"></i> Banir</div>
+    </div>
+
+    <!-- Channel list context menu (right-click on channel list) -->
+    <div class="context-menu" id="channel-context-menu">
+        <div class="ctx-item" data-action="add-channel"><i class="fas fa-hashtag"></i> Adicionar canal</div>
+        <div class="ctx-item" data-action="add-category"><i class="fas fa-folder-plus"></i> Adicionar categoria</div>
+    </div>
+
+    <!-- Category context menu (right-click on category header) -->
+    <div class="context-menu" id="category-context-menu">
+        <div class="ctx-item" data-action="add-channel-here"><i class="fas fa-hashtag"></i> Adicionar canal aqui</div>
+        <div class="ctx-divider"></div>
+        <div class="ctx-item" data-action="edit-category"><i class="fas fa-edit"></i> Editar categoria</div>
+        <div class="ctx-item danger" data-action="delete-category"><i class="fas fa-trash"></i> Excluir categoria</div>
+    </div>
+
+    <!-- Channel item context menu (right-click on a channel) -->
+    <div class="context-menu" id="channel-item-context-menu">
+        <div class="ctx-item" data-action="edit-channel"><i class="fas fa-cog"></i> Editar canal / Permissões</div>
+        <div class="ctx-item" data-action="move-channel"><i class="fas fa-folder"></i> Mover para categoria</div>
+        <div class="ctx-divider"></div>
+        <div class="ctx-item danger" data-action="delete-channel"><i class="fas fa-trash"></i> Excluir canal</div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/lib/i18n.js" defer></script>
+    <script src="js/lib/security.js" defer></script>
+    <script src="js/lib/crypto.js" defer></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js" defer></script>
+    <script src="js/lib/api.js" defer></script>
+    <script src="js/websocket.js" defer></script>
+    <script src="js/lib/db.js" defer></script>
+    <script src="js/app.js" defer></script>
+</body>
+</html>

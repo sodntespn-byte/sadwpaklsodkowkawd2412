@@ -1,0 +1,38 @@
+# CI: validar projeto em todo push e pull request
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate web app
+        run: |
+          test -d liberty/web || exit 1
+          test -f liberty/web/index.html || exit 1
+          test -f liberty/web/js/app.js || exit 1
+          echo "Web app structure OK"
+
+      - name: Validate API (optional)
+        run: |
+          test -f api/health.js || true
+          test -f api/lib/db.js || true
+          echo "API structure OK"

@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "crates/liberty-server",
+    "crates/liberty-core",
+    "crates/liberty-crypto",
+    "crates/liberty-proto",
+]
+resolver = "2"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+debug = true

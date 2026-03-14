@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LIBERTY - Freedom to Connect</title>
+    <link rel="stylesheet" href="/css/main.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-content">
+            <div class="logo-container">
+                <div class="logo-icon">
+                    <i class="fas fa-dove"></i>
+                </div>
+                <h1 class="logo-text">LIBERTY</h1>
+            </div>
+            <div class="loading-bar">
+                <div class="loading-progress"></div>
+            </div>
+            <p class="loading-message">Connecting to freedom...</p>
+        </div>
+    </div>
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="auth-screen hidden">
+        <div class="auth-container">
+            <div class="auth-brand">
+                <div class="brand-logo">
+                    <i class="fas fa-dove"></i>
+                </div>
+                <h1>LIBERTY</h1>
+                <p class="tagline">Freedom to Connect</p>
+            </div>
+            
+            <div class="auth-tabs">
+                <button class="auth-tab active" data-tab="login">Login</button>
+                <button class="auth-tab" data-tab="register">Register</button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="login-form" class="auth-form active">
+                <div class="form-group">
+                    <label for="login-email">Email</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" id="login-email" placeholder="Enter your email" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="login-password" placeholder="Enter your password" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">
+                    <span>Login</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+                <p class="form-footer">
+                    <a href="#" class="link">Forgot password?</a>
+                </p>
+            </form>
+
+            <!-- Register Form -->
+            <form id="register-form" class="auth-form">
+                <div class="form-group">
+                    <label for="register-username">Username</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="register-username" placeholder="Choose a username" required minlength="3" maxlength="32">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="register-email">Email</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-envelope"></i>
+                        <input type="email" id="register-email" placeholder="Enter your email" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Password</label>
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="register-password" placeholder="Create a password" required minlength="8">
+                    </div>
+                    <div class="password-strength">
+                        <div class="strength-bar"></div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full">
+                    <span>Create Account</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="app" class="app hidden">
+        <!-- Server Sidebar -->
+        <nav class="server-sidebar">
+            <div class="server-list">
+                <div class="server-item home active" data-server="home">
+                    <div class="server-icon">
+                        <i class="fas fa-dove"></i>
+                    </div>
+                    <span class="server-name">Home</span>
+                    <div class="server-indicator"></div>
+                </div>
+                <div class="server-divider"></div>
+                <div id="server-list-container">
+                    <!-- Servers will be added here -->
+                </div>
+                <div class="server-item add-server" id="add-server-btn">
+                    <div class="server-icon">
+                        <i class="fas fa-plus"></i>
+                    </div>
+                    <span class="server-name">Add Server</span>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Channel Sidebar -->
+        <aside class="channel-sidebar">
+            <div class="server-header">
+                <h2 id="server-name">Home</h2>
+                <button class="btn-icon" id="server-settings-btn">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
+            
+            <div class="channel-list" id="channel-list">
+                <!-- Channels will be added here -->
+            </div>
+
+            <div class="user-panel">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="user-details">
+                        <span class="user-name" id="user-name">User</span>
+                        <span class="user-status" id="user-status">Online</span>
+                    </div>
+                </div>
+                <div class="user-controls">
+                    <button class="btn-icon" title="Mute">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button class="btn-icon" title="Deafen">
+                        <i class="fas fa-headphones"></i>
+                    </button>
+                    <button class="btn-icon" title="Settings">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Channel Header -->
+            <header class="channel-header">
+                <div class="channel-info">
+                    <i class="fas fa-hashtag"></i>
+                    <h3 id="channel-name">general</h3>
+                    <span class="channel-topic" id="channel-topic">Welcome to LIBERTY!</span>
+                </div>
+                <div class="channel-actions">
+                    <button class="btn-icon" title="Search">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="btn-icon" title="Pinned Messages">
+                        <i class="fas fa-thumbtack"></i>
+                    </button>
+                    <button class="btn-icon" title="Member List" id="toggle-members-btn">
+                        <i class="fas fa-users"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Messages Area -->
+            <div class="messages-container" id="messages-container">
+                <div class="messages-list" id="messages-list">
+                    <!-- Messages will be added here -->
+                </div>
+            </div>
+
+            <!-- Message Input -->
+            <div class="message-input-container">
+                <div class="message-input-wrapper">
+                    <button class="btn-icon">
+                        <i class="fas fa-plus-circle"></i>
+                    </button>
+                    <textarea id="message-input" placeholder="Message #general" rows="1"></textarea>
+                    <div class="input-actions">
+                        <button class="btn-icon">
+                            <i class="fas fa-gift"></i>
+                        </button>
+                        <button class="btn-icon">
+                            <i class="fas fa-image"></i>
+                        </button>
+                        <button class="btn-icon">
+                            <i class="fas fa-smile"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Members Sidebar -->
+        <aside class="members-sidebar" id="members-sidebar">
+            <div class="members-list" id="members-list">
+                <!-- Members will be added here -->
+            </div>
+        </aside>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <!-- Create Server Modal -->
+        <div id="create-server-modal" class="modal hidden">
+            <div class="modal-header">
+                <h2>Create a Server</h2>
+                <button class="btn-close" id="close-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-description">Your server is where you and your friends hang out. Make yours and start talking.</p>
+                <form id="create-server-form">
+                    <div class="form-group">
+                        <label for="server-name-input">Server Name</label>
+                        <input type="text" id="server-name-input" placeholder="My Awesome Server" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="server-region">Region</label>
+                        <select id="server-region">
+                            <option value="us-east">US East</option>
+                            <option value="us-west">US West</option>
+                            <option value="eu-west">EU West</option>
+                            <option value="eu-central">EU Central</option>
+                            <option value="asia">Asia</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary" id="cancel-create">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Create</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/websocket.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

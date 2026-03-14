@@ -1,0 +1,33 @@
+[package]
+name = "liberty-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+axum = { version = "0.7", features = ["ws", "macros"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors", "trace"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+futures = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tokio-tungstenite = "0.21"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+headers = "0.4"
+uuid = { version = "1.6", features = ["serde", "v4", "v7"] }
+chrono = { version = "0.4", features = ["serde"] }
+sqlx = { version = "0.7", features = ["runtime-tokio", "sqlite", "chrono", "uuid"] }
+argon2 = "0.5"
+rand = "0.8"
+jsonwebtoken = "9.2"
+thiserror = "1.0"
+anyhow = "1.0"
+dashmap = "5.5"
+tokio-stream = "0.1"
+liberty-core = { path = "../liberty-core" }
+liberty-crypto = { path = "../liberty-crypto" }
+liberty-proto = { path = "../liberty-proto" }
+

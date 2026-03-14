@@ -1,0 +1,16 @@
+[package]
+name = "liberty-proto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+liberty-core = { path = "../liberty-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.6", features = ["serde", "v4", "v7"] }
+chrono = { version = "0.4", features = ["serde"] }
+prost = "0.12"
+bytes = "1.5"
+
+[build-dependencies]
+prost-build = "0.12"

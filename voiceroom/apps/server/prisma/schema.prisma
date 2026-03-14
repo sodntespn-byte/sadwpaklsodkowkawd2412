@@ -1,0 +1,135 @@
+// ============================================================
+// Prisma Schema — VoiceRoom
+// ============================================================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- User ----
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  ownedRooms     Room[]          @relation("OwnedRooms")
+  memberships    RoomMember[]
+  refreshTokens  RefreshToken[]
+  auditLogs      AuditLog[]
+  createdInvites Invite[]
+
+  @@index([email])
+}
+
+// ---- Room ----
+model Room {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isPrivate   Boolean  @default(false)
+  // passwordHash is null if room has no password
+  passwordHash String?
+  maxCapacity Int      @default(10)
+  ownerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  owner    User         @relation("OwnedRooms", fields: [ownerId], references: [id], onDelete: Cascade)
+  members  RoomMember[]
+  invites  Invite[]
+
+  @@index([ownerId])
+  @@index([isPrivate])
+}
+
+// ---- RoomMember ----
+// Tracks persistent membership: who has ever joined a room.
+// Active participants are tracked IN MEMORY by the signaling server.
+model RoomMember {
+  id       String   @id @default(uuid())
+  userId   String
+  roomId   String
+  role     String   @default("member") // owner | admin | member
+  joinedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roomId])
+  @@index([roomId])
+  @@index([userId])
+}
+
+// ---- RefreshToken ----
+model RefreshToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  userId    String
+  expiresAt DateTime
+  revokedAt DateTime? // null = still valid; set when rotated or revoked
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+// ---- AuditLog ----
+// Append-only audit trail (no updatedAt — immutable records)
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?  // null for anonymous/system actions
+  action    String   // e.g. "user.register", "room.create", "room.kick"
+  meta      Json?    // arbitrary JSON payload for context
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ---- Invite ----
+// Share-by-link invites to private rooms
+model Invite {
+  id          String    @id @default(uuid())
+  code        String    @unique @default(cuid())
+  roomId      String
+  createdById String
+  expiresAt   DateTime?
+  maxUses     Int?      // null = unlimited
+  usedCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  room      Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([roomId])
+}
+
+// ---- RecordingConsent ----
+// Tracks explicit user consent per room session (GDPR-aware)
+// A recording should NEVER start unless ALL participants in the room
+// have a valid RecordingConsent record for that room.
+model RecordingConsent {
+  id         String   @id @default(uuid())
+  userId     String
+  roomId     String
+  consentedAt DateTime @default(now())
+  revokedAt  DateTime?
+
+  @@index([userId, roomId])
+  @@index([roomId])
+}
