@@ -40,7 +40,7 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Upload artifact (frontend estático)
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           # Pasta do frontend: liberty/web. Se usar public/, altere para path: public
           path: liberty/web
