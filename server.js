@@ -290,8 +290,8 @@ async function start() {
     try {
       const email = name.toLowerCase() + '@liberty.local';
       const r = await pool.query(
-        `INSERT INTO users (id, nome, username, email, password_hash)
-         VALUES (gen_random_uuid(), $1::varchar, $2::varchar, $3::varchar, NULL)
+        `INSERT INTO users (id, nome, username, email, password_hash, created_at, updated_at)
+         VALUES (gen_random_uuid(), $1::varchar, $2::varchar, $3::varchar, NULL, now(), now())
          RETURNING id, nome, username, email, created_at`,
         [name, name, email]
       );
