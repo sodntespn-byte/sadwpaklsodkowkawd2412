@@ -12,7 +12,7 @@ dotenv.config();
 
 // Fallback Neon — Square Cloud
 const FALLBACK_DB_URL =
-  'postgresql://neondb_owner:npg_FB94cAhJoUKp@ep-fragrant-wave-a4ep0mvt-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+  'postgresql://squarecloud:NTg5U6HWe32pVqeGobBsVCrg@square-cloud-db-a7e6a4741aa94349b5055501885e31aa.squareweb.app:7163';
 if (!process.env.DATABASE_URL) process.env.DATABASE_URL = FALLBACK_DB_URL;
 if (!process.env.BANCO_DADOS) process.env.BANCO_DADOS = FALLBACK_DB_URL;
 
