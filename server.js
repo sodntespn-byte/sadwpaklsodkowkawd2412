@@ -8,9 +8,9 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import db from './db/index.js';
 
-// Banco: preferir DATABASE_URL do .env; fallback Square Cloud (evite commitar senhas — use .env em produção)
+// Banco: preferir DATABASE_URL do .env; fallback Neon (evite commitar senhas — use .env em produção)
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'postgresql://squarecloud:yowhoeIv5M8Z5AtsE1l4uAA0@square-cloud-db-a7e6a4741aa94349b5055501885e31aa.squareweb.app:7163?sslmode=require';
+  process.env.DATABASE_URL = 'postgresql://neondb_owner:npg_hA4T1qFgXSjp@ep-shy-bird-andk4mtt-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 }
 
 const ENCRYPTION_KEY_RAW = (process.env.ENCRYPTION_KEY || 'liberty-default-encryption-key-32chars').padEnd(
