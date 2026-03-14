@@ -1,12 +1,41 @@
 /**
- * Liberty — Conexão PostgreSQL (Neon / Square Cloud) — ESM
- * URL lida apenas dentro de funções. Square Cloud: BANCO_DADOS. Local: DATABASE_URL ou .env.
+ * Conexão PostgreSQL com mTLS (Neon / Square Cloud) — ESM
+ * URL: process.env.DATABASE_URL. Certificado de cliente: certificate.pem na raiz do projeto.
+ * Carregue dotenv no ponto de entrada (server.js com dotenv.config()).
  */
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { Pool } from 'pg';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.join(__dirname, '..');
+const CERT_PATH = path.join(PROJECT_ROOT, 'certificate.pem');
+
 function getUrl() {
-  return process.env.BANCO_DADOS || process.env.DATABASE_URL || process.env.DB_URL || '';
+  return process.env.DATABASE_URL || '';
+}
+
+/** Lê certificate.pem e extrai PRIVATE KEY e CERTIFICATE para mTLS */
+function loadMtlsOptions() {
+  try {
+    const raw = fs.readFileSync(CERT_PATH, 'utf8');
+    const keyMatch = raw.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]+?-----END (?:RSA )?PRIVATE KEY-----/);
+    const certMatch = raw.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
+    if (!keyMatch || !certMatch) {
+      console.warn('[DB] certificate.pem não contém PRIVATE KEY e CERTIFICATE válidos');
+      return null;
+    }
+    return {
+      rejectUnauthorized: false,
+      key: keyMatch[0],
+      cert: certMatch[0],
+    };
+  } catch (err) {
+    console.warn('[DB] Erro ao carregar certificate.pem:', err.message);
+    return null;
+  }
 }
 
 let pool = null;
@@ -15,18 +44,22 @@ let _connected = false;
 async function connect() {
   const rawUrl = getUrl();
   if (!rawUrl || !rawUrl.startsWith('postgres')) {
-    console.warn('[LIBERTY] BANCO_DADOS/DATABASE_URL não definida ou não é PostgreSQL — banco desativado');
+    console.warn('[DB] DATABASE_URL não definida ou não é PostgreSQL — banco desativado');
     return null;
   }
   if (!pool) {
-    const useSsl = /sslmode=require|channel_binding|neon\.tech/i.test(rawUrl);
+    const isLocalhost = /@localhost[\s:]|@127\.0\.0\.1[\s:]/.test(rawUrl);
+    const needsSsl = !isLocalhost || /sslmode=require|squareweb\.app|neon\.tech/i.test(rawUrl);
     const poolConfig = {
       connectionString: rawUrl,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 15000,
     };
-    if (useSsl) poolConfig.ssl = true;
+    if (needsSsl) {
+      const sslOptions = loadMtlsOptions();
+      poolConfig.ssl = sslOptions || { rejectUnauthorized: false };
+    }
     pool = new Pool(poolConfig);
   }
   try {
@@ -34,10 +67,10 @@ async function connect() {
     await client.query('SELECT 1');
     client.release();
     _connected = true;
-    console.log('[LIBERTY] PostgreSQL conectado');
+    console.log('[DB] PostgreSQL conectado (mTLS)');
     return pool;
   } catch (err) {
-    console.warn('[LIBERTY] PostgreSQL indisponível:', err.message);
+    console.warn('[DB] PostgreSQL indisponível:', err.message);
     return null;
   }
 }
@@ -51,7 +84,7 @@ function isConnected() {
 }
 
 async function query(text, params) {
-  if (!pool) throw new Error('Banco não configurado (BANCO_DADOS ou DATABASE_URL)');
+  if (!pool) throw new Error('Banco não configurado. Defina DATABASE_URL no .env.');
   return pool.query(text, params);
 }
 
@@ -62,3 +95,4 @@ export default {
   isConnected,
   getPool: () => pool,
 };
+

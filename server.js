@@ -10,7 +10,7 @@ import db from './db/index.js';
 
 // Banco: preferir DATABASE_URL do .env; fallback Square Cloud (evite commitar senhas — use .env em produção)
 if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'postgresql://squarecloud:yowhoeIv5M8Z5AtsE1l4uAA0@square-cloud-db-a7e6a4741aa94349b5055501885e31aa.squareweb.app:7163';
+  process.env.DATABASE_URL = 'postgresql://squarecloud:yowhoeIv5M8Z5AtsE1l4uAA0@square-cloud-db-a7e6a4741aa94349b5055501885e31aa.squareweb.app:7163?sslmode=require';
 }
 
 const ENCRYPTION_KEY_RAW = (process.env.ENCRYPTION_KEY || 'liberty-default-encryption-key-32chars').padEnd(
@@ -232,13 +232,13 @@ function authMiddleware(req, res, next) {
 
 async function start() {
   if (db.isConfigured()) {
-    console.log('[LIBERTY] Conectando ao Neon...');
-    try {
-      await db.connect();
+    console.log('[LIBERTY] Conectando ao banco...');
+    const connected = await db.connect();
+    if (connected) {
       await ensureTables();
       console.log('🚀 Banco de Dados conectado com sucesso!');
-    } catch (err) {
-      console.warn('[LIBERTY] Banco:', err.message);
+    } else {
+      console.warn('[LIBERTY] Banco indisponível. Verifique DATABASE_URL e SSL.');
     }
   }
 
