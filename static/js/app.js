@@ -391,8 +391,6 @@ class LibertyApp {
         });
         document.getElementById('login-form').addEventListener('submit', e => { e.preventDefault(); this.handleLogin(); });
         document.getElementById('register-form').addEventListener('submit', e => { e.preventDefault(); this.handleRegister(); });
-        const pw = document.getElementById('register-password');
-        if (pw) pw.addEventListener('input', () => this.updatePasswordStrength(pw.value));
 
         // Home button
         const homeBtn = document.querySelector('.server-item.home');
@@ -627,15 +625,13 @@ class LibertyApp {
 
     async handleLogin() {
         const usernameEl = document.getElementById('login-username');
-        const passwordEl = document.getElementById('login-password');
-        if (!usernameEl || !passwordEl) return;
+        if (!usernameEl) return;
         const username = usernameEl.value.trim();
-        const password = passwordEl.value;
         const btn = document.querySelector('#login-form .btn-primary');
-        if (!username || !password) return;
+        if (!username) return;
         try {
             this._setButtonLoading(btn, true);
-            await API.Auth.login(username, password);
+            await API.Auth.login(username);
             await this.connect();
         } catch (error) {
             this.showToast(error.message || 'Login failed', 'error');
@@ -646,19 +642,15 @@ class LibertyApp {
 
     async handleRegister() {
         const usernameEl = document.getElementById('register-username');
-        const passwordEl = document.getElementById('register-password');
-        if (!usernameEl || !passwordEl) return;
+        if (!usernameEl) return;
         const username = usernameEl.value.trim();
-        const password = passwordEl.value;
         const btn = document.querySelector('#register-form .btn-primary');
-        if (!username || !password) return;
+        if (!username || username.length < 2) return;
         try {
             this._setButtonLoading(btn, true);
-            await API.Auth.register(username, password);
+            await API.Auth.register(username);
             await this.connect();
         } catch (error) {
-            console.log('Registration failed:', error);
-            alert(error.message || 'Registration failed');
             this.showToast(error.message || 'Registration failed', 'error');
         } finally {
             this._setButtonLoading(btn, false);

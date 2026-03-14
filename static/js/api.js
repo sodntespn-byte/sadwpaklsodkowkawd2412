@@ -58,21 +58,21 @@ async function apiRequest(endpoint, options = {}) {
     return response.json();
 }
 
-// Auth API — cadastro com username (email/senha opcionais); login com username e senha opcional
+// Auth API
 const AuthAPI = {
-    async register(username, email, password) {
+    async register(username) {
         const data = await apiRequest('/auth/register', {
             method: 'POST',
-            body: { username: username || undefined, email: email || undefined, password: password || undefined }
+            body: { username }
         });
         TokenManager.setTokens(data.access_token, data.refresh_token);
         return data;
     },
     
-    async login(username, password) {
+    async login(username) {
         const data = await apiRequest('/auth/login', {
             method: 'POST',
-            body: { username: username || undefined, password: password || undefined }
+            body: { username }
         });
         TokenManager.setTokens(data.access_token, data.refresh_token);
         return data;
@@ -282,13 +282,6 @@ const DMAPI = {
         });
     },
 
-    async createGroup(name, recipientIds) {
-        return apiRequest('/groups', {
-            method: 'POST',
-            body: { name: name || null, member_ids: recipientIds }
-        });
-    },
-
     async getMessages(channelId, options = {}) {
         const params = new URLSearchParams();
         if (options.before) params.append('before', options.before);
@@ -298,35 +291,16 @@ const DMAPI = {
     }
 };
 
-// Friends / Relationships API (usa /api/v1/relationships)
+// Friends/Relationships API
 const FriendAPI = {
     async list() {
         return apiRequest('/relationships');
     },
-
-    async listPending() {
-        const list = await apiRequest('/relationships');
-        return Array.isArray(list) ? list.filter(r => r.type === 3 || r.type === 4) : [];
-    },
-
+    
     async add(username) {
-        const trimmed = String(username || '').trim();
-        if (!trimmed) throw new Error('username é obrigatório');
         return apiRequest('/relationships', {
             method: 'POST',
-            body: { username: trimmed }
-        });
-    },
-
-    async accept(friendshipId) {
-        return apiRequest(`/relationships/${friendshipId}/accept`, {
-            method: 'PATCH'
-        });
-    },
-
-    async remove(friendshipId) {
-        return apiRequest(`/relationships/${friendshipId}`, {
-            method: 'DELETE'
+            body: { username }
         });
     }
 };
@@ -439,6 +413,4 @@ window.API = {
     Pin: PinAPI,
     Ban: BanAPI
 };
-
-
 

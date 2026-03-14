@@ -79,24 +79,10 @@
                                required>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="login-password">Password</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-lock" aria-hidden="true"></i>
-                        <input type="password"
-                               id="login-password"
-                               placeholder="••••••••"
-                               autocomplete="current-password"
-                               required>
-                    </div>
-                </div>
                 <button type="submit" class="btn btn-primary btn-full">
                     <span>Sign In</span>
                     <i class="fas fa-arrow-right" aria-hidden="true"></i>
                 </button>
-                <p class="form-footer">
-                    Forgot your password? <a href="#" class="link">Reset it</a>
-                </p>
             </form>
 
             <form id="register-form" class="auth-form" role="tabpanel" aria-labelledby="tab-register" novalidate>
@@ -109,24 +95,8 @@
                                placeholder="escolha um nome"
                                autocomplete="username"
                                required
-                               minlength="3"
+                               minlength="2"
                                maxlength="32">
-                    </div>
-                </div>
-                <!-- Email removido na auth simplificada -->
-                <div class="form-group">
-                    <label for="register-password">Password</label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-lock" aria-hidden="true"></i>
-                        <input type="password"
-                               id="register-password"
-                               placeholder="mínimo 8 caracteres"
-                               autocomplete="new-password"
-                               required
-                               minlength="8">
-                    </div>
-                    <div class="password-strength" role="progressbar" aria-label="Força da senha" aria-valuemin="0" aria-valuemax="100">
-                        <div class="strength-bar"></div>
                     </div>
                 </div>
                 <button type="submit" class="btn btn-primary btn-full">
