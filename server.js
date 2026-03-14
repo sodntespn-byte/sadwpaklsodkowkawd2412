@@ -285,8 +285,8 @@ async function start() {
     }
     try {
       const r = await pool.query(
-        `INSERT INTO users (username, email, password_hash)
-         VALUES ($1, $2, NULL)
+        `INSERT INTO users (id, username, email, password_hash)
+         VALUES (gen_random_uuid(), $1, $2, NULL)
          RETURNING id, username, email, created_at`,
         [name, name.toLowerCase() + '@liberty.local']
       );
