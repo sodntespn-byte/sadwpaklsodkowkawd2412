@@ -97,7 +97,7 @@ wss.on('connection', (ws, req) => {
         }
         try {
           const r = await db.getPool().query(
-            'SELECT id, username, email FROM users WHERE id = $1',
+            'SELECT id, COALESCE(username, nome) AS username, email FROM users WHERE id = $1',
             [userId]
           );
           const row = r.rows[0];
@@ -157,14 +157,18 @@ async function ensureTables() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
     `);
-    // Migrações: tabela users pode já existir com outro esquema (ex.: coluna "name" em vez de "username")
+    // Migrações: tabela users pode já existir com outro esquema (nome, username, etc.)
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nome VARCHAR(32)`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(32)`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
     await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()`);
     try {
-      await client.query(`UPDATE users SET username = name WHERE (username IS NULL OR username = '') AND name IS NOT NULL`);
-    } catch (e) { /* coluna name pode não existir */ }
+      await client.query(`UPDATE users SET username = nome WHERE (username IS NULL OR username = '') AND nome IS NOT NULL`);
+    } catch (e) { /* ignore */ }
+    try {
+      await client.query(`UPDATE users SET nome = username WHERE (nome IS NULL OR nome = '') AND username IS NOT NULL`);
+    } catch (e) { /* ignore */ }
     try {
       await client.query(`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`);
     } catch (e) { if (e.code !== '42701') console.warn('[LIBERTY] Migração password_hash:', e.message); }
@@ -285,13 +289,13 @@ async function start() {
     }
     try {
       const r = await pool.query(
-        `INSERT INTO users (id, username, email, password_hash)
-         VALUES (gen_random_uuid(), $1, $2, NULL)
-         RETURNING id, username, email, created_at`,
+        `INSERT INTO users (id, nome, username, email, password_hash)
+         VALUES (gen_random_uuid(), $1, $1, $2, NULL)
+         RETURNING id, nome, username, email, created_at`,
         [name, name.toLowerCase() + '@liberty.local']
       );
       const row = r.rows[0];
-      const user = { id: String(row.id), username: row.username, email: row.email };
+      const user = { id: String(row.id), username: row.username ?? row.nome, email: row.email };
       const access_token = `liberty_${row.id}`;
       return res.status(201).json({
         success: true,
@@ -323,15 +327,14 @@ async function start() {
     }
     try {
       const r = await pool.query(
-        'SELECT id, username, email, password_hash FROM users WHERE username = $1',
+        'SELECT id, nome, username, email, password_hash FROM users WHERE (username = $1 OR nome = $1)',
         [name]
       );
       const row = r.rows[0];
       if (!row) {
         return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
       }
-      // Login sem senha: qualquer usuário com esse username entra
-      const user = { id: String(row.id), username: row.username, email: row.email };
+      const user = { id: String(row.id), username: row.username ?? row.nome, email: row.email };
       const access_token = `liberty_${row.id}`;
       return res.status(200).json({
         success: true,
@@ -360,14 +363,14 @@ async function start() {
     }
     try {
       const r = await pool.query(
-        'SELECT id, username, email FROM users WHERE id = $1',
+        'SELECT id, nome, username, email FROM users WHERE id = $1',
         [userId]
       );
       const row = r.rows[0];
       if (!row) {
         return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
       }
-      const user = { id: String(row.id), username: row.username, email: row.email };
+      const user = { id: String(row.id), username: row.username ?? row.nome, email: row.email };
       return res.status(200).json({ success: true, user });
     } catch (err) {
       console.error('[LIBERTY] /users/@me erro:', err);
@@ -518,14 +521,14 @@ async function start() {
       }));
       const ownerId = serverRow.owner_id ? String(serverRow.owner_id) : null;
       const membersR = await pool.query(
-        `SELECT DISTINCT u.id, u.username
+        `SELECT DISTINCT u.id, COALESCE(u.username, u.nome) AS username
          FROM users u
          WHERE u.id IN (
            SELECT user_id FROM chat_members WHERE chat_id IN (SELECT id FROM chats WHERE server_id = $1::uuid)
            UNION
            SELECT owner_id FROM servers WHERE id = $1::uuid AND owner_id IS NOT NULL
          )
-         ORDER BY u.username ASC`,
+         ORDER BY COALESCE(u.username, u.nome) ASC`,
         [serverId]
       );
       const members = membersR.rows.map((row) => ({
@@ -653,7 +656,7 @@ async function start() {
         [encryptedContent, channelId, userId]
       );
       const row = insert.rows[0];
-      const userR = await db.query('SELECT username FROM users WHERE id = $1', [row.author_id]);
+      const userR = await db.query('SELECT COALESCE(username, nome) AS username FROM users WHERE id = $1', [row.author_id]);
       const username = userR.rows[0]?.username || 'User';
       const message = {
         id: String(row.id),
@@ -735,14 +738,14 @@ async function start() {
       );
       const ownerId = serverR.rows[0]?.owner_id ? String(serverR.rows[0].owner_id) : null;
       const r = await pool.query(
-        `SELECT DISTINCT u.id, u.username
+        `SELECT DISTINCT u.id, COALESCE(u.username, u.nome) AS username
          FROM users u
          WHERE u.id IN (
            SELECT user_id FROM chat_members WHERE chat_id IN (SELECT id FROM chats WHERE server_id = $1::uuid)
            UNION
            SELECT owner_id FROM servers WHERE id = $1::uuid AND owner_id IS NOT NULL
          )
-         ORDER BY u.username ASC`,
+         ORDER BY COALESCE(u.username, u.nome) ASC`,
         [serverId]
       );
       const members = r.rows.map((row) => ({
@@ -770,7 +773,7 @@ async function start() {
     const pool = db.getPool();
     try {
       const r = await pool.query(
-        `SELECT f.id, u.id AS user_id, u.username
+        `SELECT f.id, u.id AS user_id, COALESCE(u.username, u.nome) AS username
          FROM friendships f
          JOIN users u ON u.id = f.user_id
          WHERE f.friend_id = $1::uuid AND f.status = 'pending'
@@ -843,7 +846,7 @@ async function start() {
     const pool = db.getPool();
     try {
       const userR = await pool.query(
-        'SELECT id, username FROM users WHERE username = $1',
+        'SELECT id, COALESCE(username, nome) AS username FROM users WHERE (username = $1 OR nome = $1)',
         [String(username).trim()]
       );
       const friendRow = userR.rows[0];
@@ -897,11 +900,11 @@ async function start() {
     const pool = db.getPool();
     try {
       const r = await pool.query(
-        `SELECT u.id, u.username
+        `SELECT u.id, COALESCE(u.username, u.nome) AS username
          FROM friendships f
          JOIN users u ON u.id = f.friend_id
          WHERE f.user_id = $1::uuid AND f.status = 'accepted'
-         ORDER BY u.username ASC`,
+         ORDER BY COALESCE(u.username, u.nome) ASC`,
         [userId]
       );
       const friends = r.rows.map((row) => ({
