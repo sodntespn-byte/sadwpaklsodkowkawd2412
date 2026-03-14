@@ -272,7 +272,6 @@ class LibertyApp {
 
         this.dmChannels = [];
         this.relationships = [];
-        this.gateway = null;
 
         this.init();
     }
@@ -327,26 +326,13 @@ class LibertyApp {
         if (this.currentUser?.username) {
             try { localStorage.setItem('liberty_username', this.currentUser.username); } catch (_) {}
         }
-        if (window.Gateway) {
-            this.gateway = window.Gateway;
-            try {
-                const data = await this.gateway.connect();
-                this.servers = data.servers || [];
-            } catch (_) {
-                this.servers = [];
-            }
-            try {
-                const serverList = await API.Server.list();
-                if (Array.isArray(serverList)) this.servers = serverList;
-            } catch (_) {}
-            this.setupGatewayHandlers();
-        } else {
-            this.gateway = null;
-            try {
-                const serverList = await API.Server.list();
-                if (Array.isArray(serverList)) this.servers = serverList;
-            } catch (_) {}
-        }
+        const data = await Gateway.connect();
+        this.servers = data.servers || [];
+        try {
+            const serverList = await API.Server.list();
+            if (Array.isArray(serverList)) this.servers = serverList;
+        } catch (_) {}
+        this.setupGatewayHandlers();
         this.showApp();
         this.renderServers();
         this.updateUserPanel();
@@ -524,7 +510,7 @@ class LibertyApp {
         document.addEventListener('contextmenu', e => {
             const serverItem = e.target.closest('.server-item:not(.home):not(.add-server)');
             const channelItem = e.target.closest('.channel-item');
-            const messageEl = e.target.closest('.message-group');
+            const messageEl = e.target.closest('.message');
             const memberItem = e.target.closest('.member-item');
             if (serverItem || channelItem || messageEl || memberItem) {
                 e.preventDefault();
@@ -580,9 +566,7 @@ class LibertyApp {
     }
 
     setupGatewayHandlers() {
-        if (!this.gateway) return;
-        const g = this.gateway;
-        g.on('message', msg => {
+        Gateway.on('message', msg => {
             if (msg.channel_id === this.currentChannel?.id) {
                 this.addMessage(msg);
             } else {
@@ -590,25 +574,25 @@ class LibertyApp {
                 this._updateChannelUnread(msg.channel_id, true);
             }
         });
-        g.on('message_update', data => this.updateMessage(data));
-        g.on('message_delete', data => this.deleteMessage(data));
-        g.on('typing', data => this.showTypingIndicator(data));
-        g.on('presence', data => this.updatePresence(data));
-        g.on('server_create', data => {
+        Gateway.on('message_update', data => this.updateMessage(data));
+        Gateway.on('message_delete', data => this.deleteMessage(data));
+        Gateway.on('typing', data => this.showTypingIndicator(data));
+        Gateway.on('presence', data => this.updatePresence(data));
+        Gateway.on('server_create', data => {
             if (data.server && !this.servers.some(s => s.id === data.server.id)) {
                 this.servers.push(data.server);
                 this.renderServers();
             }
         });
-        g.on('server_delete', data => {
+        Gateway.on('server_delete', data => {
             this.servers = this.servers.filter(s => s.id !== data.server_id);
             this.renderServers();
             if (this.currentServer?.id === data.server_id) this.selectHome();
         });
-        g.on('channel_create', data => {
+        Gateway.on('channel_create', data => {
             if (this.currentServer?.id === data.channel?.server_id) { this.channels.push(data.channel); this.renderChannels(); }
         });
-        g.on('channel_delete', data => {
+        Gateway.on('channel_delete', data => {
             this.channels = this.channels.filter(c => c.id !== data.channel_id);
             this.renderChannels();
             if (this.currentChannel?.id === data.channel_id) {
@@ -616,307 +600,20 @@ class LibertyApp {
                 if (next) this.selectChannel(next.id);
             }
         });
-        g.on('member_join', data => {
+        Gateway.on('member_join', data => {
             if (this.currentServer?.id === data.member?.server_id) { this.members.push(data.member); this.renderMembers(); }
         });
-        g.on('member_leave', data => { this.members = this.members.filter(m => m.user_id !== data.user_id); this.renderMembers(); });
-        g.on('member_update', data => {
+        Gateway.on('member_leave', data => { this.members = this.members.filter(m => m.user_id !== data.user_id); this.renderMembers(); });
+        Gateway.on('member_update', data => {
             const idx = this.members.findIndex(m => m.user_id === data.member?.user_id);
             if (idx !== -1) { this.members[idx] = { ...this.members[idx], ...data.member }; this.renderMembers(); }
         });
-        g.on('disconnected', () => this.showToast('Disconnected from server. Reconnecting...', 'error'));
-        g.on('ready', () => {
-            this.showToast('Connected to LIBERTY!', 'success');
-            if (this.isHomeView) {
-                const dmList = document.getElementById('dm-list');
-                const navArea = document.querySelector('.home-nav');
-                if (dmList) { dmList.innerHTML = ''; this._loadDMList(dmList, navArea); }
-            }
-        });
-        g.on('friend_added', (data) => {
-            this.showToast(`You have a new friend request from ${data.user?.username || 'User'}`, 'success');
-            this.loadFriends().catch(() => {});
-            if (document.getElementById('friends-view')?.classList.contains('hidden') === false) {
-                this.renderFriendsView('pending').catch(() => {});
-            }
-        });
-        g.on('friendship_pending_sent', () => {
-            if (document.getElementById('friends-view')?.classList.contains('hidden') === false) {
-                this.renderFriendsView('pending').catch(() => {});
-            }
+        Gateway.on('disconnected', () => this.showToast('Disconnected from server. Reconnecting...', 'error'));
+        Gateway.on('ready', () => this.showToast('Connected to LIBERTY!', 'success'));
+        Gateway.on('friend_added', (data) => {
+            this.showToast(`You have a new friend: ${data.user?.username || 'User'}`, 'success');
             this.loadFriends().catch(() => {});
         });
-        g.on('friendship_accepted', () => {
-            this.loadFriends().catch(() => {});
-            if (document.getElementById('friends-view')?.classList.contains('hidden') === false) {
-                this.renderFriendsView('all').catch(() => {});
-            }
-        });
-        this._setupVoiceCallHandlers();
-        this._setupVoiceCallButton();
-    }
-
-    _voiceCallState = { pc: null, stream: null, targetUserId: null, pendingOffer: null, incomingFromUserId: null };
-
-    _setupVoiceCallHandlers() {
-        if (!this.gateway) return;
-        const g = this.gateway;
-        g.on('webrtc_offer', (d) => {
-            const from = d.from_user_id;
-            const payload = d.payload;
-            if (!payload || !from) return;
-            if (this._voiceCallState.pc) return;
-            this._voiceCallState.pendingOffer = { from, payload };
-            this._voiceCallState.incomingFromUserId = from;
-            this._showIncomingCallAlert(from);
-        });
-        g.on('webrtc_answer', (d) => {
-            if (this._voiceCallState.pc && d.payload) this._voiceCallState.pc.setRemoteDescription(new RTCSessionDescription(d.payload)).catch(() => {});
-        });
-        g.on('webrtc_ice', (d) => {
-            if (this._voiceCallState.pc && d.payload) this._voiceCallState.pc.addIceCandidate(new RTCIceCandidate(d.payload)).catch(() => {});
-        });
-        g.on('webrtc_reject', () => {
-            this._voiceCallState.pendingOffer = null;
-            this._voiceCallState.incomingFromUserId = null;
-            this._hideIncomingCallAlert();
-            if (this._voiceCallState.pc) {
-                this._voiceCallState.pc.close();
-                this._voiceCallState.pc = null;
-                if (this._voiceCallState.stream) {
-                    this._voiceCallState.stream.getTracks().forEach((t) => t.stop());
-                    this._voiceCallState.stream = null;
-                }
-                const voiceView = document.getElementById('voice-call-view');
-                if (voiceView) voiceView.classList.add('hidden');
-                const participants = document.getElementById('voice-call-participants');
-                if (participants) participants.innerHTML = '';
-            }
-            this.showToast('Chamada recusada.', 'info');
-        });
-        g.on('stream_started', () => {
-            const participants = document.getElementById('voice-call-participants');
-            if (!participants) return;
-            let el = document.getElementById('voice-call-remote-stream');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'voice-call-remote-stream';
-                el.className = 'voice-call-remote-stream-live';
-                el.innerHTML = '<span class="voice-call-live-badge"><i class="fas fa-circle"></i> LIVE</span><div class="voice-call-remote-video"></div>';
-                participants.insertBefore(el, participants.firstChild);
-            }
-            el.classList.remove('hidden');
-        });
-        g.on('stream_stopped', () => {
-            const el = document.getElementById('voice-call-remote-stream');
-            if (el) el.classList.add('hidden');
-        });
-    }
-
-    _showIncomingCallAlert(fromUserId) {
-        this._hideIncomingCallAlert();
-        const overlay = document.createElement('div');
-        overlay.className = 'incoming-call-overlay';
-        overlay.id = 'incoming-call-overlay';
-        const fromName = this.dmChannels.find(c => c.recipients?.[0]?.id === fromUserId)?.recipients?.[0]?.username || 'Alguém';
-        overlay.innerHTML = `
-            <div class="incoming-call-card">
-                <div class="incoming-call-icon"><i class="fas fa-phone"></i></div>
-                <h3 class="incoming-call-title">Chamada recebida</h3>
-                <p class="incoming-call-from">${this.escapeHtml(fromName)}</p>
-                <div class="incoming-call-actions">
-                    <button type="button" class="btn btn-primary" id="incoming-call-accept"><i class="fas fa-phone"></i> Aceitar</button>
-                    <button type="button" class="btn btn-secondary" id="incoming-call-reject"><i class="fas fa-phone-slash"></i> Recusar</button>
-                </div>
-            </div>
-        `;
-        overlay.querySelector('#incoming-call-accept').addEventListener('click', () => this._acceptIncomingCall());
-        overlay.querySelector('#incoming-call-reject').addEventListener('click', () => this._rejectIncomingCall());
-        document.body.appendChild(overlay);
-    }
-
-    _hideIncomingCallAlert() {
-        const el = document.getElementById('incoming-call-overlay');
-        if (el) el.remove();
-    }
-
-    async _acceptIncomingCall() {
-        const { pendingOffer } = this._voiceCallState;
-        this._hideIncomingCallAlert();
-        if (!pendingOffer) return;
-        const from = pendingOffer.from;
-        const payload = pendingOffer.payload;
-        this._voiceCallState.pendingOffer = null;
-        this._voiceCallState.targetUserId = from;
-        try {
-            this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        } catch (e) {
-            this.showToast('Permissão de microfone negada.', 'error');
-            if (this.gateway) this.gateway.send('webrtc_reject', { target_user_id: from });
-            return;
-        }
-        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-        this._voiceCallState.pc = pc;
-        pc.addTrack(this._voiceCallState.stream.getTracks()[0], this._voiceCallState.stream);
-        pc.ontrack = (e) => {
-            const el = document.getElementById('voice-call-participants');
-            if (el) {
-                const audio = document.createElement('audio');
-                audio.autoplay = true;
-                audio.srcObject = e.streams[0];
-                el.appendChild(audio);
-            }
-        };
-        pc.onicecandidate = (e) => {
-            if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: from, payload: e.candidate });
-        };
-        pc.setRemoteDescription(new RTCSessionDescription(payload))
-            .then(() => pc.createAnswer())
-            .then((answer) => pc.setLocalDescription(answer))
-            .then(() => { if (this.gateway) this.gateway.send('webrtc_answer', { target_user_id: from, payload: pc.localDescription }); })
-            .catch((err) => console.error('Voice answer error', err));
-        const voiceView = document.getElementById('voice-call-view');
-        if (voiceView) voiceView.classList.remove('hidden');
-        const participants = document.getElementById('voice-call-participants');
-        if (participants) participants.innerHTML = '<p class="voice-call-subtitle">Conectado.</p>';
-        this._updateVoiceCallParticipantsBar();
-    }
-
-    _rejectIncomingCall() {
-        const from = this._voiceCallState.incomingFromUserId;
-        this._voiceCallState.pendingOffer = null;
-        this._voiceCallState.incomingFromUserId = null;
-        this._hideIncomingCallAlert();
-        if (from && this.gateway) if (this.gateway) this.gateway.send('webrtc_reject', { target_user_id: from });
-    }
-
-    _setupVoiceCallButton() {
-        const btn = document.getElementById('voice-call-btn');
-        const voiceView = document.getElementById('voice-call-view');
-        const disconnectBtn = document.getElementById('voice-call-disconnect');
-        const muteBtn = document.getElementById('voice-call-mute');
-        if (!btn) return;
-        const closeVoiceCall = () => {
-            if (this._voiceCallState.stream) {
-                this._voiceCallState.stream.getTracks().forEach((t) => t.stop());
-                this._voiceCallState.stream = null;
-            }
-            if (this._voiceCallState.displayStream) {
-                this._voiceCallState.displayStream.getTracks().forEach((t) => t.stop());
-                this._voiceCallState.displayStream = null;
-            }
-            if (this._voiceCallState.pc) {
-                this._voiceCallState.pc.close();
-                this._voiceCallState.pc = null;
-            }
-            this._voiceCallState.targetUserId = null;
-            this._voiceCallState.pendingOffer = null;
-            if (voiceView) voiceView.classList.add('hidden');
-            const participants = document.getElementById('voice-call-participants');
-            if (participants) participants.innerHTML = '';
-            const screenshareBtn = document.getElementById('voice-call-screenshare');
-            if (screenshareBtn) {
-                screenshareBtn.classList.remove('active');
-                screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
-                screenshareBtn.querySelector('i').className = 'fas fa-desktop';
-            }
-        };
-        btn.addEventListener('click', async () => {
-            if (!this.currentUser?.id) {
-                this.showToast('Faça login para iniciar uma chamada de voz.', 'error');
-                return;
-            }
-            const ch = this.currentChannel;
-            const isDMOrGroup = ch && (ch.type === 'dm' || ch.type === 'group_dm') && !ch.server_id;
-            const others = (ch?.recipients || []).filter((r) => r.id !== this.currentUser.id);
-            const targetId = others[0]?.id || null;
-            if (!isDMOrGroup || !targetId) {
-                this.showToast('Abra uma DM ou grupo com alguém para ligar.', 'error');
-                return;
-            }
-            try {
-                this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            } catch (e) {
-                this.showToast('Permissão de microfone negada ou indisponível.', 'error');
-                return;
-            }
-            this._voiceCallState.targetUserId = targetId;
-            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            pc.addTrack(this._voiceCallState.stream.getTracks()[0], this._voiceCallState.stream);
-            pc.ontrack = (e) => {
-                const el = document.getElementById('voice-call-participants');
-                if (el) {
-                    const audio = document.createElement('audio');
-                    audio.autoplay = true;
-                    audio.srcObject = e.streams[0];
-                    el.appendChild(audio);
-                }
-            };
-            pc.onicecandidate = (e) => {
-                if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: e.candidate });
-            };
-            this._voiceCallState.pc = pc;
-            pc.createOffer()
-                .then((offer) => pc.setLocalDescription(offer))
-                .then(() => { if (this.gateway) this.gateway.send('webrtc_offer', { target_user_id: this._voiceCallState.targetUserId, payload: pc.localDescription }); })
-                .catch((err) => console.error('Voice offer error', err));
-            if (voiceView) voiceView.classList.remove('hidden');
-            const participants = document.getElementById('voice-call-participants');
-            if (participants) participants.innerHTML = '<p class="voice-call-subtitle">Chamando...</p>';
-            this._updateVoiceCallParticipantsBar();
-        });
-        if (disconnectBtn) disconnectBtn.addEventListener('click', closeVoiceCall);
-        if (muteBtn) muteBtn.addEventListener('click', () => {
-            if (this._voiceCallState.stream) this._voiceCallState.stream.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
-        });
-        const screenshareBtn = document.getElementById('voice-call-screenshare');
-        if (screenshareBtn) {
-            screenshareBtn.addEventListener('click', async () => {
-                const pc = this._voiceCallState.pc;
-                if (!pc) return;
-                if (this._voiceCallState.displayStream) {
-                    this._voiceCallState.displayStream.getTracks().forEach((t) => t.stop());
-                    this._voiceCallState.displayStream = null;
-                    const senders = pc.getSenders();
-                    const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
-                    if (videoSender) videoSender.replaceTrack(null);
-                    screenshareBtn.classList.remove('active');
-                    screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
-                    screenshareBtn.querySelector('i').className = 'fas fa-desktop';
-                    return;
-                }
-                try {
-                    const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-                    this._voiceCallState.displayStream = displayStream;
-                    const videoTrack = displayStream.getVideoTracks()[0];
-                    if (!videoTrack) return;
-                    const senders = pc.getSenders();
-                    const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
-                    if (videoSender) {
-                        await videoSender.replaceTrack(videoTrack);
-                    } else {
-                        pc.addTrack(videoTrack, displayStream);
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        if (this._voiceCallState.targetUserId && this.gateway) this.gateway.send('webrtc_offer', { target_user_id: this._voiceCallState.targetUserId, payload: pc.localDescription });
-                    }
-                    if (this._voiceCallState.targetUserId && this.gateway) this.gateway.send('stream_started', { target_user_id: this._voiceCallState.targetUserId });
-                    displayStream.getVideoTracks()[0].onended = () => {
-                        if (this._voiceCallState.displayStream === displayStream) {
-                            this._voiceCallState.displayStream = null;
-                            screenshareBtn.classList.remove('active');
-                            screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
-                            screenshareBtn.querySelector('i').className = 'fas fa-desktop';
-                        }
-                    };
-                    screenshareBtn.classList.add('active');
-                    screenshareBtn.querySelector('span').textContent = 'Parar compartilhamento';
-                    screenshareBtn.querySelector('i').className = 'fas fa-stop-circle';
-                } catch (err) {
-                    this.showToast(err.name === 'NotAllowedError' ? 'Compartilhamento de tela cancelado.' : 'Não foi possível compartilhar a tela.', 'error');
-                }
-            });
-        }
     }
 
     // ═══════════════════════════════════════════
@@ -931,14 +628,14 @@ class LibertyApp {
     async handleLogin() {
         const usernameEl = document.getElementById('login-username');
         const passwordEl = document.getElementById('login-password');
-        if (!usernameEl) return;
+        if (!usernameEl || !passwordEl) return;
         const username = usernameEl.value.trim();
-        const password = passwordEl ? passwordEl.value : '';
+        const password = passwordEl.value;
         const btn = document.querySelector('#login-form .btn-primary');
-        if (!username) return;
+        if (!username || !password) return;
         try {
             this._setButtonLoading(btn, true);
-            await API.Auth.login(username, password || undefined);
+            await API.Auth.login(username, password);
             await this.connect();
         } catch (error) {
             this.showToast(error.message || 'Login failed', 'error');
@@ -950,16 +647,18 @@ class LibertyApp {
     async handleRegister() {
         const usernameEl = document.getElementById('register-username');
         const passwordEl = document.getElementById('register-password');
-        if (!usernameEl) return;
+        if (!usernameEl || !passwordEl) return;
         const username = usernameEl.value.trim();
-        const password = passwordEl ? passwordEl.value : '';
+        const password = passwordEl.value;
         const btn = document.querySelector('#register-form .btn-primary');
-        if (!username) return;
+        if (!username || !password) return;
         try {
             this._setButtonLoading(btn, true);
-            await API.Auth.register(username, null, password || undefined);
+            await API.Auth.register(username, password);
             await this.connect();
         } catch (error) {
+            console.log('Registration failed:', error);
+            alert(error.message || 'Registration failed');
             this.showToast(error.message || 'Registration failed', 'error');
         } finally {
             this._setButtonLoading(btn, false);
@@ -1055,10 +754,18 @@ class LibertyApp {
                         this.renderFriendsView(this.currentFriendsTab);
                         const channelNameEl = document.getElementById('channel-name');
                         const channelIconEl = document.querySelector('.channel-header .channel-info i');
-                        if (channelNameEl) channelNameEl.textContent = 'Friends';
+                        if (channelNameEl) channelNameEl.textContent = 'People';
                         if (channelIconEl) channelIconEl.className = 'fas fa-users channel-header-icon';
+                    } else if (view === 'activity') {
+                        document.getElementById('friends-view').classList.add('hidden');
+                        document.getElementById('activity-view').classList.remove('hidden');
+                        document.getElementById('messages-container').style.display = 'none';
+                        const channelNameEl = document.getElementById('channel-name');
+                        const channelIconEl = document.querySelector('.channel-header .channel-info i');
+                        if (channelNameEl) channelNameEl.textContent = 'Activity';
+                        if (channelIconEl) channelIconEl.className = 'fas fa-bolt channel-header-icon';
                     } else {
-                        this.showToast(`${btn.textContent.trim()} — Coming Soon!`, 'info');
+                        this.showToast(`${btn.textContent.trim()} — coming soon`, 'info');
                     }
                 };
             });
@@ -1076,11 +783,6 @@ class LibertyApp {
         if (dmList) {
             dmList.innerHTML = '';
             this._loadDMList(dmList, navArea);
-        }
-
-        if (!this._createGroupModalSetup) {
-            this._createGroupModalSetup = true;
-            this._setupCreateGroupModal();
         }
 
         const friendsSidebar = document.getElementById('friends-list-sidebar');
@@ -1132,38 +834,28 @@ class LibertyApp {
 
     async _loadDMList(dmList, navArea) {
         const avatarColors = ['#5865F2','#57F287','#FEE75C','#EB459E','#ED4245','#3BA55D','#FAA61A','#9B59B6','#E67E22','#1ABC9C'];
-        let list = [];
         try {
-            const raw = await API.DM.list();
-            list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.channels) ? raw.channels : []);
-            this.dmChannels = list;
-        } catch (err) {
+            this.dmChannels = await API.DM.list();
+        } catch {
             this.dmChannels = [];
-            dmList.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">' +
-                (err.message && err.message.includes('401') ? 'Faça login para ver suas conversas.' : 'Não foi possível carregar as conversas.') + '</div>';
-            return;
         }
 
         this.dmChannels.forEach((dm, idx) => {
-            const isGroup = dm.type === 'group_dm';
-            const displayName = isGroup ? (dm.name || (dm.recipients || []).map((r) => r.username).join(', ')) : (dm.recipients?.[0]?.username || 'Unknown');
-            const recipient = dm.recipients?.[0] || { username: displayName, status: 'offline', id: null };
+            const recipient = dm.recipients?.[0] || { username: 'Unknown', status: 'offline' };
             const item = document.createElement('div');
             item.className = 'dm-list-item';
-            item.dataset.name = displayName;
-            item.dataset.dmId = dm.id || '';
-            item.dataset.channelType = dm.type || 'dm';
-            if (recipient.id) item.dataset.recipientId = recipient.id;
-            const letter = displayName.charAt(0).toUpperCase();
+            item.dataset.name = recipient.username;
+            item.dataset.dmId = dm.id;
+            const letter = recipient.username.charAt(0).toUpperCase();
             const bgColor = avatarColors[idx % avatarColors.length];
             item.innerHTML = `
                 <div class="dm-list-item-avatar ${recipient.status || 'offline'}" style="background:${bgColor}"><span style="color:#fff">${letter}</span></div>
                 <div class="dm-list-item-info">
-                    <div class="dm-list-item-name">${this.escapeHtml(displayName)}</div>
+                    <div class="dm-list-item-name">${this.escapeHtml(recipient.username)}</div>
                     <div class="dm-list-item-msg"></div>
                 </div>
             `;
-            item.addEventListener('click', async () => {
+            item.addEventListener('click', () => {
                 dmList.querySelectorAll('.dm-list-item').forEach(d => d.classList.remove('active'));
                 if (navArea) navArea.querySelectorAll('.home-nav-item').forEach(b => b.classList.remove('active'));
                 item.classList.add('active');
@@ -1171,23 +863,7 @@ class LibertyApp {
                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
                 if (channelNameEl) channelNameEl.textContent = recipient.username;
                 if (channelIconEl) channelIconEl.className = 'fas fa-at channel-header-icon';
-
-                let channel = dm;
-                if (!channel.id && recipient.id && dm.type !== 'group_dm') {
-                    try {
-                        channel = await API.DM.create(recipient.id);
-                        const idx = this.dmChannels.findIndex(d => !d.id && d.recipients?.[0]?.id === recipient.id);
-                        if (idx >= 0) this.dmChannels[idx] = channel;
-                        item.dataset.dmId = channel.id;
-                    } catch (e) {
-                        this.showToast(e.message || 'Não foi possível abrir a conversa', 'error');
-                        return;
-                    }
-                }
-                this._renderDMChat(channel);
-                if (channel.id) {
-                    try { history.replaceState({}, '', `/channels/@me/${channel.id}`); } catch (_) {}
-                }
+                this._renderDMChat(dm);
             });
             dmList.appendChild(item);
         });
@@ -1195,142 +871,34 @@ class LibertyApp {
         if (this.dmChannels.length === 0) {
             dmList.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">No DMs yet</div>';
         }
-
-        const pathMatch = typeof location !== 'undefined' && location.pathname && location.pathname.match(/^\/channels\/@me\/([^/]+)$/);
-        if (pathMatch) {
-            const channelId = pathMatch[1];
-            const dm = this.dmChannels.find(d => d.id === channelId);
-            if (dm) {
-                dmList.querySelectorAll('.dm-list-item').forEach(d => d.classList.remove('active'));
-                const item = dmList.querySelector(`[data-dm-id="${channelId}"]`);
-                if (item) item.classList.add('active');
-                if (navArea) navArea.querySelectorAll('.home-nav-item').forEach(b => b.classList.remove('active'));
-                document.getElementById('friends-view').classList.add('hidden');
-                document.getElementById('messages-container').style.display = '';
-                document.querySelector('.message-input-container').style.display = '';
-                const recipient = dm.recipients?.[0] || {};
-                const channelNameEl = document.getElementById('channel-name');
-                const channelIconEl = document.querySelector('.channel-header .channel-info i');
-                if (channelNameEl) channelNameEl.textContent = recipient.username || 'DM';
-                if (channelIconEl) channelIconEl.className = 'fas fa-at channel-header-icon';
-                if (this.currentChannel?.id && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
-                this.currentChannel = dm;
-                if (dm?.id && this.gateway) this.gateway.subscribeChannel(dm.id);
-                this._renderDMChat(dm);
-            }
-        }
     }
 
     async _renderDMChat(dm) {
-        const isGroup = dm.type === 'group_dm';
-        const displayName = isGroup ? (dm.name || (dm.recipients || []).map((r) => r.username).join(', ')) : (dm.recipients?.[0]?.username || 'Unknown');
-        const recipient = dm.recipients?.[0] || { username: displayName };
+        const recipient = dm.recipients?.[0] || { username: 'Unknown' };
         document.getElementById('friends-view').classList.add('hidden');
         document.getElementById('messages-container').style.display = '';
         document.querySelector('.message-input-container').style.display = '';
 
-        if (this.currentChannel?.id && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
         this.currentChannel = dm;
-        if (dm?.id && this.gateway) this.gateway.subscribeChannel(dm.id);
 
         const container = document.getElementById('messages-list');
         container.innerHTML = `
             <div class="welcome-message">
-                <div class="welcome-icon"><span style="font-size:30px;font-weight:700;color:var(--primary-black)">${displayName.charAt(0).toUpperCase()}</span></div>
-                <h2 class="welcome-title">${this.escapeHtml(displayName)}</h2>
-                <p class="welcome-description">${isGroup ? 'Group conversation.' : `This is the beginning of your direct message history with <strong>${this.escapeHtml(recipient.username)}</strong>.`}</p>
+                <div class="welcome-icon"><span style="font-size:30px;font-weight:700;color:var(--primary-black)">${recipient.username.charAt(0).toUpperCase()}</span></div>
+                <h2 class="welcome-title">${this.escapeHtml(recipient.username)}</h2>
+                <p class="welcome-description">This is the beginning of your direct message history with <strong>${this.escapeHtml(recipient.username)}</strong>.</p>
             </div>
         `;
 
-        if (dm.id) {
-            try {
-                const messages = await API.DM.getMessages(dm.id, { limit: 50 });
-                if (messages && messages.length > 0) {
-                    messages.reverse().forEach(m => this.addMessage(m, false));
-                }
-            } catch { /* empty */ }
-        }
+        try {
+            const messages = await API.DM.getMessages(dm.id, { limit: 50 });
+            if (messages && messages.length > 0) {
+                messages.reverse().forEach(m => this.addMessage(m, false));
+            }
+        } catch { /* empty DM */ }
 
         this.scrollToBottom();
-        document.getElementById('message-input').placeholder = isGroup ? `Message ${this.escapeHtml(displayName)}` : `Message @${recipient.username}`;
-        this._updateVoiceCallButtonVisibility();
-        this._updateChannelHeaderForContext();
-    }
-
-    _setupCreateGroupModal() {
-        const btn = document.getElementById('dm-add-btn');
-        const overlay = document.getElementById('modal-overlay');
-        const modal = document.getElementById('create-group-modal');
-        const listEl = document.getElementById('create-group-friends-list');
-        const nameInput = document.getElementById('group-name-input');
-        const noFriendsEl = document.getElementById('create-group-no-friends');
-        const submitBtn = document.getElementById('create-group-submit-btn');
-        if (!btn || !modal) return;
-
-        const openModal = () => {
-            nameInput.value = '';
-            listEl.innerHTML = '';
-            noFriendsEl.classList.add('hidden');
-            API.Friend.list()
-                .then((list) => {
-                    const accepted = Array.isArray(list) ? list.filter((r) => r.type === 1) : [];
-                    if (accepted.length === 0) {
-                        noFriendsEl.textContent = 'Add and accept friends first to create a group.';
-                        noFriendsEl.classList.remove('hidden');
-                        return;
-                    }
-                    accepted.forEach((r) => {
-                        const u = r.user || {};
-                        const id = u.id || r.friend_id;
-                        const username = u.username || r.username || 'User';
-                        const row = document.createElement('label');
-                        row.className = 'create-group-friend-row';
-                        row.innerHTML = `<input type="checkbox" data-id="${this.escapeHtml(id)}" data-username="${this.escapeHtml(username).replace(/"/g, '&quot;')}"><span>${this.escapeHtml(username)}</span>`;
-                        row.addEventListener('click', (e) => { if (e.target.type !== 'checkbox') row.querySelector('input').click(); });
-                        listEl.appendChild(row);
-                    });
-                })
-                .catch(() => {
-                    noFriendsEl.textContent = 'Could not load friends.';
-                    noFriendsEl.classList.remove('hidden');
-                });
-            overlay.classList.remove('hidden');
-            modal.classList.remove('hidden');
-        };
-
-        const closeModal = () => {
-            overlay.classList.add('hidden');
-            modal.classList.add('hidden');
-        };
-
-        btn.addEventListener('click', openModal);
-        submitBtn.addEventListener('click', async () => {
-            const ids = Array.from(listEl.querySelectorAll('input:checked')).map((c) => c.dataset.id);
-            if (ids.length < 2) {
-                this.showToast('Select at least 2 friends to create a group.', 'error');
-                return;
-            }
-            const name = (nameInput.value || '').trim() || null;
-            try {
-                submitBtn.disabled = true;
-                const channel = await API.DM.createGroup(name, ids);
-                this.dmChannels.push(channel);
-                closeModal();
-                const dmList = document.getElementById('dm-list');
-                const navArea = document.querySelector('.home-nav');
-                if (dmList) {
-                    dmList.innerHTML = '';
-                    this._loadDMList(dmList, navArea);
-                }
-                this.showToast('Group created.', 'success');
-            } catch (err) {
-                this.showToast(err.message || 'Failed to create group.', 'error');
-            } finally {
-                submitBtn.disabled = false;
-            }
-        });
-        document.querySelectorAll('[data-close="create-group-modal"]').forEach((el) => el.addEventListener('click', closeModal));
-        overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+        document.getElementById('message-input').placeholder = `Message @${recipient.username}`;
     }
 
     async renderFriendsView(tab) {
@@ -1340,6 +908,8 @@ class LibertyApp {
         const friendsView = document.getElementById('friends-view');
         const messagesContainer = document.getElementById('messages-container');
 
+        const activityView = document.getElementById('activity-view');
+        if (activityView) activityView.classList.add('hidden');
         friendsView.classList.remove('hidden');
         messagesContainer.style.display = 'none';
 
@@ -1372,7 +942,7 @@ class LibertyApp {
             online.forEach(f => { bodyHtml += this._friendItemHtml(f); });
             if (online.length === 0) bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">No friends online</div>';
         } else if (tab === 'all') {
-            bodyHtml += `<div style="${headerStyle}">All Friends — ${friends.length}</div>`;
+            bodyHtml += `<div style="${headerStyle}">All — ${friends.length}</div>`;
             friends.forEach(f => { bodyHtml += this._friendItemHtml(f); });
             if (friends.length === 0) bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">No friends yet. Add some!</div>';
         } else if (tab === 'pending') {
@@ -1384,7 +954,7 @@ class LibertyApp {
                     <div class="friend-item-avatar offline"><span>${u.username.charAt(0)}</span></div>
                     <div class="friend-item-info">
                         <div class="friend-item-name">${this.escapeHtml(u.username)}</div>
-                        <div class="friend-item-status">${isIncoming ? 'Incoming Friend Request' : 'Outgoing Friend Request'}</div>
+                        <div class="friend-item-status">${isIncoming ? 'Incoming request' : 'Outgoing request'}</div>
                     </div>
                     <div class="friend-item-actions">
                         ${isIncoming ? '<button title="Accept"><i class="fas fa-check"></i></button><button title="Deny"><i class="fas fa-times"></i></button>' : '<button title="Cancel"><i class="fas fa-times"></i></button>'}
@@ -1441,27 +1011,7 @@ class LibertyApp {
                         this.showToast(action === 'Unblock' ? 'User unblocked' : 'Request removed', 'success');
                         this.renderFriendsView(tab);
                     } else if (action === 'Message') {
-                        const user = item?.dataset.user || rel?.user?.id;
-                        if (user) {
-                            try {
-                                this.showToast('Abrindo conversa...', 'info');
-                                const channel = await API.DM.create(user);
-                                document.getElementById('friends-view').classList.add('hidden');
-                                document.getElementById('messages-container').style.display = '';
-                                document.querySelector('.message-input-container').style.display = '';
-                                const channelNameEl = document.getElementById('channel-name');
-                                const channelIconEl = document.querySelector('.channel-header .channel-info i');
-                                if (channelNameEl) channelNameEl.textContent = channel.recipients?.[0]?.username || 'DM';
-                                if (channelIconEl) channelIconEl.className = 'fas fa-at channel-header-icon';
-                                if (this.currentChannel?.id && this.currentChannel.id !== channel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
-                                this.currentChannel = channel;
-                                if (channel?.id && this.gateway) this.gateway.subscribeChannel(channel.id);
-                                this._renderDMChat(channel);
-                                if (channel.id) try { history.replaceState({}, '', `/channels/@me/${channel.id}`); } catch (_) {}
-                            } catch (err) {
-                                this.showToast(err.message || 'Não foi possível abrir a conversa', 'error');
-                            }
-                        }
+                        this.showToast('Opening DM...', 'info');
                     }
                 } catch (err) {
                     this.showToast(err.message || 'Action failed', 'error');
@@ -1518,41 +1068,19 @@ class LibertyApp {
         if (!header) return;
         const info = header.querySelector('.channel-info');
         const actions = header.querySelector('.channel-actions');
-        const isDM = this.currentChannel && (this.currentChannel.type === 'dm' || this.currentChannel.type === 'group_dm') && !this.currentChannel.server_id;
 
-        // Botões só para DM: Voz, Vídeo, Compartilhar tela
-        const voiceBtn = document.getElementById('voice-call-btn');
-        const videoBtn = document.getElementById('video-call-btn');
-        const screenShareBtn = document.getElementById('screen-share-header-btn');
-        header.querySelectorAll('.dm-only-action').forEach(el => { el.style.display = isDM ? '' : 'none'; });
-        header.querySelectorAll('.channel-only-action').forEach(el => { el.style.display = isDM ? 'none' : ''; });
-        if (videoBtn && isDM) videoBtn.style.display = '';
-        if (screenShareBtn && isDM) screenShareBtn.style.display = '';
-
-        if (isDM) {
-            const recipient = (this.currentChannel?.recipients || [])[0] || {};
-            const name = recipient.username || this.currentChannel?.name || 'DM';
-            const status = recipient.status || 'offline';
-            const avatar = recipient.avatar || null;
-            const initial = name.charAt(0).toUpperCase();
-            info.innerHTML = `
-                <div class="dm-header-avatar ${status}" aria-hidden="true">${avatar ? `<img src="${this.escapeHtml(avatar)}" alt="">` : `<span>${this.escapeHtml(initial)}</span>`}</div>
-                <h3 id="channel-name">${this.escapeHtml(name)}</h3>
-                <div class="channel-header-divider" aria-hidden="true"></div>
-                <span class="channel-topic dm-status" id="channel-topic">${this._statusLabel(status)}</span>
-            `;
-        } else if (this.isHomeView) {
+        if (this.isHomeView) {
             const tab = this.currentFriendsTab || 'online';
             info.innerHTML = `
                 <i class="fas fa-user-friends channel-header-icon" aria-hidden="true"></i>
-                <h3>Friends</h3>
+                <h3>People</h3>
                 <div class="channel-header-divider" aria-hidden="true"></div>
                 <div class="friends-header-tabs">
                     <button class="friends-header-tab ${tab === 'online' ? 'active' : ''}" data-htab="online">Online</button>
                     <button class="friends-header-tab ${tab === 'all' ? 'active' : ''}" data-htab="all">All</button>
                     <button class="friends-header-tab ${tab === 'pending' ? 'active' : ''}" data-htab="pending">Pending</button>
                     <button class="friends-header-tab ${tab === 'blocked' ? 'active' : ''}" data-htab="blocked">Blocked</button>
-                    <button class="friends-header-tab add-friend ${tab === 'add' ? 'active' : ''}" data-htab="add">Add Friend</button>
+                    <button class="friends-header-tab add-friend ${tab === 'add' ? 'active' : ''}" data-htab="add">Add person</button>
                 </div>
             `;
             info.querySelectorAll('.friends-header-tab').forEach(btn => {
@@ -1563,8 +1091,8 @@ class LibertyApp {
             });
         } else {
             const ch = this.channels.find(c => c.id === (this.currentChannel?.id || this.currentChannel));
-            const icon = ch?.channel_type === 'voice' ? 'fa-volume-up' : 'fa-hashtag';
-            const name = ch?.name || 'general';
+            const icon = ch?.channel_type === 'voice' ? 'fa-volume-up' : 'fa-comment';
+            const name = ch?.name || 'lobby';
             const topic = ch?.topic || '';
             info.innerHTML = `
                 <i class="fas ${icon} channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
@@ -1573,53 +1101,6 @@ class LibertyApp {
                 <span class="channel-topic" id="channel-topic">${this.escapeHtml(topic)}</span>
             `;
         }
-        if (isDM) this._wireDMHeaderVoiceVideoButtons();
-    }
-
-    _updateVoiceCallButtonVisibility() {
-        const btn = document.getElementById('voice-call-btn');
-        if (!btn) return;
-        const isDMOrGroup = this.currentChannel && (this.currentChannel.type === 'dm' || this.currentChannel.type === 'group_dm') && !this.currentChannel.server_id;
-        btn.style.display = isDMOrGroup ? '' : 'none';
-    }
-
-    _wireDMHeaderVoiceVideoButtons() {
-        const videoBtn = document.getElementById('video-call-btn');
-        const screenShareBtn = document.getElementById('screen-share-header-btn');
-        if (videoBtn && !videoBtn._wired) {
-            videoBtn._wired = true;
-            videoBtn.addEventListener('click', () => {
-                const voiceBtn = document.getElementById('voice-call-btn');
-                if (voiceBtn) voiceBtn.click();
-            });
-        }
-        if (screenShareBtn && !screenShareBtn._wired) {
-            screenShareBtn._wired = true;
-            screenShareBtn.addEventListener('click', () => {
-                const voiceBtn = document.getElementById('voice-call-btn');
-                if (voiceBtn) voiceBtn.click();
-                setTimeout(() => document.getElementById('voice-call-screenshare')?.click(), 500);
-            });
-        }
-    }
-
-    _updateVoiceCallParticipantsBar() {
-        const bar = document.getElementById('voice-call-participants-bar');
-        if (!bar) return;
-        const me = this.currentUser?.username || 'Você';
-        const meInitial = me.charAt(0).toUpperCase();
-        const targetId = this._voiceCallState?.targetUserId;
-        let other = (this.currentChannel?.recipients || []).find((r) => r.id === targetId);
-        if (!other && targetId && Array.isArray(this.dmChannels)) {
-            const dm = this.dmChannels.find((c) => c.recipients?.some((r) => r.id === targetId));
-            other = dm?.recipients?.find((r) => r.id === targetId);
-        }
-        const otherName = other?.username || 'Outro';
-        const otherInitial = otherName.charAt(0).toUpperCase();
-        bar.innerHTML = `
-            <span class="participant-avatar you" title="${this.escapeHtml(me)}">${this.escapeHtml(meInitial)}</span>
-            <span class="participant-avatar" title="${this.escapeHtml(otherName)}">${this.escapeHtml(otherInitial)}</span>
-        `;
     }
 
     renderActiveNow() {
@@ -1720,7 +1201,7 @@ class LibertyApp {
             { icon: 'fa-user-plus', label: 'Invite People', action: () => this.showInviteModal() },
             { icon: 'fa-cog', label: 'Server Settings', action: () => this.showSettingsPanel('server') },
             { divider: true },
-            { icon: 'fa-plus', label: 'Create Channel', action: () => this.showCreateChannelModal() },
+            { icon: 'fa-plus', label: 'Create room', action: () => this.showCreateChannelModal() },
             { icon: 'fa-folder-plus', label: 'Create Category', action: () => this._createCategory() },
             { divider: true },
             { icon: 'fa-bell', label: 'Notification Settings', action: () => this.showToast('Notification settings updated', 'info') },
@@ -1728,7 +1209,7 @@ class LibertyApp {
             { icon: 'fa-id-badge', label: 'Edit Server Profile', action: () => this.showToast('Edit your server profile', 'info') },
             { icon: 'fa-eye-slash', label: 'Hide Muted Channels', action: () => this.showToast('Muted channels hidden', 'info') },
             { divider: true },
-            { icon: 'fa-sign-out-alt', label: 'Leave Server', danger: true, action: () => { if (this.gateway) this.gateway.leaveServer(this.currentServer?.id); this.showToast('Left the server', 'info'); this.selectHome(); } },
+            { icon: 'fa-sign-out-alt', label: 'Leave Server', danger: true, action: () => { Gateway.leaveServer(this.currentServer?.id); this.showToast('Left the server', 'info'); this.selectHome(); } },
         ];
         dd.innerHTML = items.map(item => {
             if (item.divider) return '<div class="dropdown-divider"></div>';
@@ -1753,7 +1234,7 @@ class LibertyApp {
     _createCategory() {
         const name = prompt('Category name:');
         if (name) {
-            if (this.gateway) this.gateway.createChannel(this.currentServer?.id, name, 'category');
+            Gateway.createChannel(this.currentServer?.id, name, 'category');
             this.showToast(`Category "${name}" created!`, 'success');
         }
     }
@@ -1770,7 +1251,7 @@ class LibertyApp {
         if (homeContent) homeContent.style.display = 'none';
         container.innerHTML = '';
         if (this.channels.length === 0) {
-            container.innerHTML = '<div class="empty-state" style="padding:24px 16px;text-align:center"><i class="fas fa-hashtag" style="font-size:28px;color:var(--text-muted);margin-bottom:12px;display:block;opacity:.7"></i><p class="empty-state-description" style="margin-bottom:12px">No channels yet</p><button class="btn btn-primary btn-sm" type="button">Create Channel</button></div>';
+            container.innerHTML = '<div class="empty-state" style="padding:24px 16px;text-align:center"><i class="fas fa-comment" style="font-size:28px;color:var(--text-muted);margin-bottom:12px;display:block;opacity:.7"></i><p class="empty-state-description" style="margin-bottom:12px">No rooms yet</p><button class="btn btn-primary btn-sm" type="button">Create room</button></div>';
             container.querySelector('button').addEventListener('click', () => this.showCreateChannelModal());
             return;
         }
@@ -1790,13 +1271,13 @@ class LibertyApp {
         categories.forEach(({ category, channels }) => {
             const catEl = document.createElement('div');
             catEl.className = 'channel-category';
-            const catName = category?.name || 'Channels';
+            const catName = category?.name || 'Rooms';
             const catId = category?.id || null;
             catEl.innerHTML = `
                 <div class="channel-category-header">
                     <i class="fas fa-chevron-down"></i>
                     <span>${this.escapeHtml(catName)}</span>
-                    <button class="btn-icon add-channel-btn" title="Add Channel" style="margin-left:auto;width:16px;height:16px;font-size:12px"><i class="fas fa-plus"></i></button>
+                    <button class="btn-icon add-channel-btn" title="Add room" style="margin-left:auto;width:16px;height:16px;font-size:12px"><i class="fas fa-plus"></i></button>
                 </div>
                 <div class="channel-items"></div>
             `;
@@ -1818,7 +1299,7 @@ class LibertyApp {
         item.className = 'channel-item';
         item.dataset.channel = channel.id;
         const isVoice = channel.channel_type === 'voice';
-        const icon = isVoice ? 'fa-volume-up' : 'fa-hashtag';
+        const icon = isVoice ? 'fa-volume-up' : 'fa-comment';
         if (isVoice) item.classList.add('voice');
         const unread = this.unreadChannels.has(channel.id);
         item.innerHTML = `
@@ -1834,14 +1315,11 @@ class LibertyApp {
     }
 
     async selectChannel(channelId) {
-        const prevId = this.currentChannel?.id;
-        if (prevId && prevId !== channelId && this.gateway) this.gateway.unsubscribeChannel(prevId);
         this.unreadChannels.delete(channelId);
         document.querySelectorAll('.channel-item').forEach(item => item.classList.toggle('active', item.dataset.channel === channelId));
         const channel = this.channels.find(c => c.id === channelId);
         if (!channel) return;
         this.currentChannel = channel;
-        if (channelId && this.gateway) this.gateway.subscribeChannel(channelId);
 
         const friendsView = document.getElementById('friends-view');
         const messagesContainer = document.getElementById('messages-container');
@@ -1850,7 +1328,7 @@ class LibertyApp {
         document.querySelector('.message-input-container').style.display = '';
 
         document.getElementById('message-input').placeholder = `Message #${channel.name}`;
-        const icon = channel.channel_type === 'voice' ? 'fa-volume-up' : 'fa-hashtag';
+        const icon = channel.channel_type === 'voice' ? 'fa-volume-up' : 'fa-comment';
         this._updateChannelHeaderForContext();
         this.typing.clear();
         this.renderTypingIndicator();
@@ -1999,9 +1477,7 @@ class LibertyApp {
 
         const ch = this.channels.find(c => c.channel_type === 'text');
         if (ch) {
-            if (this.currentChannel?.id && this.currentChannel.id !== ch.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
             this.currentChannel = ch;
-            if (ch.id && this.gateway) this.gateway.subscribeChannel(ch.id);
             const nameEl = document.getElementById('channel-name');
             const topicEl = document.getElementById('channel-topic');
             if (nameEl) nameEl.textContent = ch.name;
@@ -2120,7 +1596,7 @@ class LibertyApp {
 
     setStatus(status) {
         this.currentStatus = status;
-        if (this.gateway) this.gateway.updatePresence(status, this.customStatusText);
+        Gateway.updatePresence(status, this.customStatusText);
         this.updateUserPanel();
         const avatarEl = document.getElementById('user-avatar');
         if (avatarEl) {
@@ -2165,11 +1641,11 @@ class LibertyApp {
                 results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px"><i class="fas fa-search" style="font-size:32px;margin-bottom:12px;display:block;opacity:.5"></i>Type to search messages in this channel</div>';
                 return;
             }
-            const msgs = document.querySelectorAll('.message-group');
+            const msgs = document.querySelectorAll('.message');
             let html = '';
             msgs.forEach(m => {
                 const text = m.querySelector('.message-text')?.textContent || '';
-                const author = m.querySelector('.message-author')?.textContent || m.dataset.author || '';
+                const author = m.querySelector('.message-author')?.textContent || '';
                 const time = m.querySelector('.message-timestamp')?.textContent || '';
                 if (text.toLowerCase().includes(q) || author.toLowerCase().includes(q)) {
                     html += `<div class="search-result"><div class="search-result-author">${this.escapeHtml(author)}</div><div class="search-result-text">${this.escapeHtml(text.substring(0, 100))}</div><div class="search-result-date">${this.escapeHtml(time)}</div></div>`;
@@ -2275,33 +1751,28 @@ class LibertyApp {
             if (!messages || messages.length === 0) {
                 container.innerHTML = `
                     <div class="welcome-message">
-                        <div class="welcome-icon"><i class="fas fa-hashtag"></i></div>
+                        <div class="welcome-icon"><i class="fas fa-comment"></i></div>
                         <h2 class="welcome-title">Welcome to #${this.escapeHtml(this.currentChannel?.name || 'channel')}</h2>
                         <p class="welcome-description">This is the beginning of this channel. Be the first to say something!</p>
                     </div>
                 `;
                 return;
             }
-            // O backend já retorna as mensagens em ordem cronológica (mais antiga -> mais recente),
-            // inclusive quando vem do cache em memória. Basta renderizar na ordem recebida.
-            messages.forEach(msg => this.addMessage(msg, false));
+            messages.reverse().forEach(msg => this.addMessage(msg, false));
             this.scrollToBottom();
         } catch {
             container.innerHTML = '<div class="empty-state"><p class="empty-state-description">Failed to load messages.</p></div>';
         }
     }
 
-    _authorColor(author) {
-        let h = 0;
-        const s = (author || '').toString();
-        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-        return `hsl(${h % 360}, 55%, 65%)`;
-    }
-
     addMessage(message, scroll = true) {
         const container = document.getElementById('messages-list');
         const welcomeEl = container.querySelector('.welcome-message');
-        if (welcomeEl && !container.querySelector('.message-group')) welcomeEl.style.display = 'none';
+        if (welcomeEl && !container.querySelector('.message')) welcomeEl.style.display = 'none';
+
+        const messageEl = document.createElement('div');
+        messageEl.className = 'message';
+        messageEl.dataset.message = message.id;
 
         const time = new Date(message.created_at || Date.now());
         const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -2311,30 +1782,16 @@ class LibertyApp {
         const avatarLetter = authorName.charAt(0).toUpperCase();
         const isSelf = this.currentUser && (message.author?.id === this.currentUser.id || message.author_id === this.currentUser.id);
 
-        const authorId = message.author?.id || message.author_id || '';
-        const lastGroup = container.querySelector('.message-group:last-of-type');
-        const sameAuthorById = authorId && lastGroup?.dataset.authorId === String(authorId);
-        const sameAuthorByName = lastGroup && lastGroup.dataset.author === authorName;
-        const isContinuation = lastGroup && (sameAuthorById || sameAuthorByName);
-        const barColor = this._authorColor(authorName);
-
-        const messageEl = document.createElement('div');
-        messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
-        messageEl.dataset.message = message.id;
-        messageEl.dataset.author = authorName;
-        if (authorId) messageEl.dataset.authorId = String(authorId);
-
         messageEl.innerHTML = `
-            <div class="message-group-bar" style="background-color:${barColor}" aria-hidden="true"></div>
             <div class="message-avatar">
                 ${authorAvatar ? `<img src="${this.escapeHtml(authorAvatar)}" alt="${this.escapeHtml(authorName)}">` : `<span>${avatarLetter}</span>`}
             </div>
             <div class="message-content">
                 ${message.replyTo ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;display:flex;align-items:center;gap:4px"><i class="fas fa-reply" style="font-size:10px"></i> Replying to <strong style="color:var(--primary-yellow)">${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
-                ${!isContinuation ? `<div class="message-header">
+                <div class="message-header">
                     <span class="message-author ${isSelf ? 'self' : ''}">${this.escapeHtml(authorName)}</span>
                     <span class="message-timestamp" title="${time.toLocaleString()}">${dateStr} ${timeStr}</span>
-                </div>` : ''}
+                </div>
                 <div class="message-text">${this._parseMessageContent(message.content)}</div>
                 <div class="reactions-container"></div>
             </div>
@@ -2422,7 +1879,7 @@ class LibertyApp {
         textEl.innerHTML = this._parseMessageContent(newContent) + '<span class="message-edited">(edited)</span>';
         const stored = this.messages.get(messageId);
         if (stored) stored.content = newContent;
-        if (this.currentChannel && this.gateway) this.gateway.editMessage(this.currentChannel.id, messageId, newContent);
+        if (this.currentChannel) Gateway.editMessage(this.currentChannel.id, messageId, newContent);
     }
 
     cancelEditMessage(messageId, originalContent) {
@@ -2451,7 +1908,7 @@ class LibertyApp {
                 msgEl.style.transform = 'translateX(-10px)';
                 setTimeout(() => msgEl.remove(), 300);
             }
-            if (this.currentChannel && this.gateway) this.gateway.deleteMessage(this.currentChannel.id, messageId);
+            if (this.currentChannel) Gateway.deleteMessage(this.currentChannel.id, messageId);
             this.messages.delete(messageId);
             this.reactions.delete(messageId);
             this.hideModal();
@@ -2547,20 +2004,31 @@ class LibertyApp {
         }
     }
 
-    async handleSendMessage() {
+    handleSendMessage() {
+        console.log('Botão de envio clicado');
         const input = document.getElementById('message-input');
         if (!input) return;
         const content = input.value.trim();
-        if (!content) return;
+        if (!content || (!this.currentChannel && !this.isHomeView)) return;
 
-        if (!this.currentChannel || !this.currentChannel.id) {
-            this.showToast('Selecione um canal para enviar a mensagem.', 'error');
-            return;
-        }
-
-        const channelId = this.currentChannel.id;
         try {
-            await API.Message.create(channelId, content);
+            if (this.currentChannel) {
+                Gateway.sendMessage(this.currentChannel.id, content);
+            }
+
+            if (this.currentUser) {
+                const msg = {
+                    id: `temp-${Date.now()}`,
+                    channel_id: this.currentChannel?.id,
+                    content,
+                    created_at: new Date().toISOString(),
+                    author: { id: this.currentUser.id, username: this.currentUser.username, avatar: this.currentUser.avatar },
+                };
+                if (this.replyingTo) {
+                    msg.replyTo = { author: this.replyingTo.authorName };
+                }
+                this.addMessage(msg);
+            }
         } catch (err) {
             console.error('Erro ao enviar mensagem no front-end:', err);
             this.showToast(err.message || 'Failed to send message', 'error');
@@ -2833,7 +2301,7 @@ class LibertyApp {
             { _idx: 2, icon: 'fa-user-plus', label: 'Invite People', action: () => this.showInviteModal() },
             { _idx: 3, icon: 'fa-eye-slash', label: 'Hide Server', action: () => this.showToast('Server hidden', 'info') },
             { divider: true },
-            { _idx: 4, icon: 'fa-sign-out-alt', label: 'Leave Server', danger: true, action: () => { if (this.gateway) this.gateway.leaveServer(serverId); this.showToast(`Left ${server?.name || 'server'}`, 'info'); this.selectHome(); } },
+            { _idx: 4, icon: 'fa-sign-out-alt', label: 'Leave Server', danger: true, action: () => { Gateway.leaveServer(serverId); this.showToast(`Left ${server?.name || 'server'}`, 'info'); this.selectHome(); } },
         ];
         this.showContextMenu(items, e.clientX, e.clientY);
     }
@@ -2964,7 +2432,7 @@ class LibertyApp {
     }
 
     showCreateChannelModal(categoryId) {
-        this.createModal('create-channel-modal', 'Create Channel', `
+        this.createModal('create-channel-modal', 'Create room', `
             <div class="form-group">
                 <label>Channel Type</label>
                 <select id="new-channel-type">
@@ -2988,7 +2456,7 @@ class LibertyApp {
             const name = document.getElementById('new-channel-name').value.trim();
             const type = document.getElementById('new-channel-type').value;
             if (!name) return;
-            if (this.gateway) this.gateway.createChannel(this.currentServer?.id, name, type, categoryId || null);
+            Gateway.createChannel(this.currentServer?.id, name, type, categoryId || null);
             const newChannel = { id: `ch-${Date.now()}`, name, channel_type: type, parent_id: categoryId || null, server_id: this.currentServer?.id };
             this.channels.push(newChannel);
             this.renderChannels();
@@ -3051,7 +2519,7 @@ class LibertyApp {
     showInviteModal() {
         const code = Math.random().toString(36).substring(2, 10).toUpperCase();
         const link = `https://liberty.app/invite/${code}`;
-        this.createModal('invite-modal', 'Invite Friends', `
+        this.createModal('invite-modal', 'Invite people', `
             <p class="modal-description">Share this link with friends to grant them access to <strong>${this.escapeHtml(this.currentServer?.name || 'this server')}</strong>.</p>
             <div class="form-group">
                 <label>Invite Link</label>
@@ -3088,7 +2556,7 @@ class LibertyApp {
             { id: 'notifications', label: 'Notifications' },
             { divider: true },
             { group: 'Billing Settings' },
-            { id: 'nitro', label: 'Nitro' },
+            { id: 'nitro', label: 'Activity' },
             { id: 'server-boost', label: 'Server Boost' },
             { divider: true },
             { group: 'App Settings' },
@@ -3382,7 +2850,7 @@ class LibertyApp {
                 <div class="settings-row"><div><div class="settings-row-label">Render text-to-emoji</div><div class="settings-row-desc">Convert :) to 🙂</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
                 <div class="settings-row"><div><div class="settings-row-label">Sticker suggestions</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
                 </div>`,
-            nitro: () => `<h2>Nitro</h2><div class="settings-card" style="text-align:center;padding:32px">
+            nitro: () => `<h2>Activity</h2><div class="settings-card" style="text-align:center;padding:32px">
                 <i class="fas fa-rocket" style="font-size:48px;color:var(--primary-yellow);margin-bottom:16px;display:block"></i>
                 <h3 style="margin:0 0 8px;font-size:18px;text-transform:none;letter-spacing:0;color:var(--text-primary)">Unlock the best of LIBERTY</h3>
                 <p>Upload bigger files, use custom emoji everywhere, boost servers, and more.</p>
@@ -3438,7 +2906,7 @@ class LibertyApp {
     // ═══════════════════════════════════════════
 
     handleTyping() {
-        if (this.currentChannel && this.gateway) this.gateway.startTyping(this.currentChannel.id);
+        if (this.currentChannel) Gateway.startTyping(this.currentChannel.id);
     }
 
     showTypingIndicator(data) {
@@ -3551,14 +3019,4 @@ class LibertyApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new LibertyApp();
 });
-
-
-
-
-
-
-
-
-
-
 
