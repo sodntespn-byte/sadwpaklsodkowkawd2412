@@ -288,11 +288,12 @@ async function start() {
       return res.status(400).json({ success: false, message: 'username é obrigatório (mín. 2 caracteres)' });
     }
     try {
+      const email = name.toLowerCase() + '@liberty.local';
       const r = await pool.query(
         `INSERT INTO users (id, nome, username, email, password_hash)
-         VALUES (gen_random_uuid(), $1, $1, $2, NULL)
+         VALUES (gen_random_uuid(), $1::varchar, $2::varchar, $3::varchar, NULL)
          RETURNING id, nome, username, email, created_at`,
-        [name, name.toLowerCase() + '@liberty.local']
+        [name, name, email]
       );
       const row = r.rows[0];
       const user = { id: String(row.id), username: row.username ?? row.nome, email: row.email };
