@@ -157,12 +157,23 @@ async function ensureTables() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT now()
       );
     `);
+    // Migrações: tabela users pode já existir com outro esquema (ex.: coluna "name" em vez de "username")
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(32)`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()`);
+    try {
+      await client.query(`UPDATE users SET username = name WHERE (username IS NULL OR username = '') AND name IS NOT NULL`);
+    } catch (e) { /* coluna name pode não existir */ }
     try {
       await client.query(`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`);
     } catch (e) { if (e.code !== '42701') console.warn('[LIBERTY] Migração password_hash:', e.message); }
     try {
       await client.query(`ALTER TABLE users ALTER COLUMN email DROP NOT NULL`);
     } catch (e) { if (e.code !== '42701') console.warn('[LIBERTY] Migração email:', e.message); }
+    try {
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users (username)`);
+    } catch (e) { if (e.code !== '42P07') console.warn('[LIBERTY] Índice username:', e.message); }
     await client.query(`
       CREATE TABLE IF NOT EXISTS servers (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
