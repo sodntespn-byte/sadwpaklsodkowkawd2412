@@ -40,6 +40,22 @@ Copia o resultado e cola no valor de `JWT_SECRET` no painel.
 
 **Importante:** depois de adicionar ou alterar variáveis, é obrigatório **Redeploy** (ou Reiniciar) — as variáveis são lidas apenas ao iniciar o processo.
 
+---
+
+### Se as variáveis do painel não funcionarem: ficheiro `.env.squarecloud`
+
+A app também lê um ficheiro **`.env.squarecloud`** na **raiz do projeto**. Se na Square Cloud as variáveis do painel não forem injetadas, podes usar este ficheiro e fazê-lo commit para o deploy.
+
+1. Na raiz do projeto, copia o exemplo:
+   ```bash
+   cp .env.squarecloud.example .env.squarecloud
+   ```
+2. Edita `.env.squarecloud` e coloca a tua `DATABASE_URL` e `JWT_SECRET` (um por linha, formato `NOME=valor`).
+3. Faz commit e push (incluindo `.env.squarecloud`). **Só faz isto se o repositório for privado** — o ficheiro contém credenciais.
+4. Na Square Cloud, faz **Redeploy**. O servidor vai carregar `.env.squarecloud` automaticamente.
+
+O `.env.squarecloud` não está no `.gitignore`, por isso será enviado no deploy. Para maior segurança, prefere sempre usar as variáveis do painel quando conseguires.
+
 - Nome exato: `DATABASE_URL` (tudo junto, maiúsculas). Podes colar a URL do Neon com `channel_binding=require`; o servidor remove esse parâmetro automaticamente.
 - O backend usa **PostgreSQL** (Neon). Na primeira subida, o schema é aplicado automaticamente. Se as tabelas já existirem, os `CREATE` são ignorados.
 

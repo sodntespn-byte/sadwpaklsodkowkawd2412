@@ -6,10 +6,14 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __dirnameServer = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.join(__dirnameServer, '..');
 const pathsToTry = [
   path.join(process.cwd(), '.env'),
+  path.join(process.cwd(), '.env.squarecloud'),
+  path.join(rootDir, '.env'),
+  path.join(rootDir, '.env.squarecloud'),
   path.join(__dirnameServer, '.env'),
-  path.join(__dirnameServer, '..', '.env'),
+  path.join(__dirnameServer, '.env.squarecloud'),
   path.join(process.cwd(), 'backend', '.env'),
   process.env.ENV_FILE || '',
   process.env.DOTENV_PATH || '',
@@ -159,7 +163,7 @@ function computeContentXpByUser(messagesByChannel) {
 }
 
 // --- db (inline para deploy sem pasta db/)
-// URL do banco: compatível com Square Cloud e qualquer host (muitos nomes de variável)
+// URL do banco: variáveis de ambiente ou fallback para Square Cloud (quando o painel não injeta env)
 const _DB_ENV_KEYS = [
   'DATABASE_URL',
   'BANCO_DADOS',
@@ -180,6 +184,9 @@ const _DB_ENV_KEYS = [
   'PG_URL',
   'POSTGRESQL_URI',
 ];
+// Fallback quando nenhuma variável existe (ex.: Square Cloud sem Environment). Troque a password no Neon depois.
+const _DB_FALLBACK_URL =
+  'postgresql://neondb_owner:npg_A8hiDJ0qGCMs@ep-icy-art-ameh1o7b-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 function _dbGetUrl() {
   for (const key of _DB_ENV_KEYS) {
     const v = process.env[key];
@@ -187,13 +194,12 @@ function _dbGetUrl() {
       return v.trim();
     }
   }
-  // Qualquer variável de ambiente cujo valor pareça URL PostgreSQL (Square Cloud pode usar nomes custom)
   for (const [k, v] of Object.entries(process.env)) {
     if (v && typeof v === 'string' && v.trim().toLowerCase().startsWith('postgresql://')) {
       return v.trim();
     }
   }
-  return '';
+  return _DB_FALLBACK_URL.trim();
 }
 function _dbLoadMtlsOptions() {
   try {
@@ -505,9 +511,13 @@ function isOfficialLibertyServer(row) {
 }
 
 // --- auth (inline para deploy sem auth.js)
+// Fallback JWT quando o painel (ex.: Square Cloud) não injeta variáveis. Troque depois nas definições.
+const _JWT_FALLBACK =
+  'liberty-squarecloud-jwt-fallback-mínimo-32-caracteres-alterar-nas-configurações';
 function _getAuthSecret() {
   const secret =
-    process.env.JWT_SECRET || (process.env.NODE_ENV !== 'production' ? 'dev-secret-not-for-production' : null);
+    process.env.JWT_SECRET ||
+    (process.env.NODE_ENV !== 'production' ? 'dev-secret-not-for-production' : _JWT_FALLBACK);
   if (process.env.NODE_ENV === 'production' && (!secret || secret.length < 32)) {
     logger.error(
       'AUTH',
@@ -515,7 +525,7 @@ function _getAuthSecret() {
     );
     process.exit(1);
   }
-  return secret || '';
+  return secret || _JWT_FALLBACK;
 }
 const _authSecret = _getAuthSecret();
 
