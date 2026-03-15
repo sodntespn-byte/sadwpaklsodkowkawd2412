@@ -1,5 +1,7 @@
 // VERSION: CACHE_V1_STABLE
-import 'dotenv/config';
+// dotenv: não sobrescreve variáveis já definidas pelo host (ex.: Square Cloud)
+import dotenv from 'dotenv';
+dotenv.config({ override: false });
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -17,7 +19,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // --- db (inline para deploy sem pasta db/)
 // Suporta DATABASE_URL, BANCO_DADOS (Square Cloud) ou DB_URL
 function _dbGetUrl() {
-  return process.env.DATABASE_URL || process.env.BANCO_DADOS || process.env.DB_URL || '';
+  const url = process.env.DATABASE_URL || process.env.BANCO_DADOS || process.env.DB_URL || '';
+  return typeof url === 'string' ? url.trim() : '';
 }
 function _dbLoadMtlsOptions() {
   try {
@@ -39,29 +42,44 @@ async function _dbConnect() {
     console.warn('[LIBERTY] DATABASE_URL não definida — banco desativado');
     return null;
   }
-  // Neon pooler: remover channel_binding=require (pode causar handshake fail em alguns ambientes)
+  // Neon: remover channel_binding=require (causa falha em muitos ambientes Node)
   if (rawUrl.includes('channel_binding=require')) {
     rawUrl = rawUrl.replace(/&channel_binding=require/g, '').replace(/\?channel_binding=require&?/g, '?').replace(/\?&/, '?');
   }
   if (!_dbPool) {
     const isLocalhost = /@localhost[\s:]|@127\.0\.0\.1[\s:]/.test(rawUrl);
-    const poolConfig = { connectionString: rawUrl, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 20000 };
+    const isNeon = /\.neon\.tech\//.test(rawUrl);
+    const poolConfig = { connectionString: rawUrl, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 15000 };
     if (!isLocalhost) {
-      poolConfig.ssl = _dbLoadMtlsOptions() || { rejectUnauthorized: true };
+      const mtls = _dbLoadMtlsOptions();
+      poolConfig.ssl = mtls || (isNeon ? { rejectUnauthorized: false } : { rejectUnauthorized: true });
     }
     _dbPool = new Pool(poolConfig);
   }
-  try {
+  const tryConnect = async () => {
     const client = await _dbPool.connect();
     await client.query('SELECT 1');
     client.release();
+  };
+  try {
+    await tryConnect();
     _dbConnected = true;
     console.log('[LIBERTY] PostgreSQL conectado');
     return _dbPool;
   } catch (err) {
-    console.warn('[LIBERTY] PostgreSQL indisponível:', err.message);
+    console.warn('[LIBERTY] PostgreSQL primeira tentativa:', err.message);
     _dbConnected = false;
-    return null;
+    await new Promise((r) => setTimeout(r, 2500));
+    try {
+      await tryConnect();
+      _dbConnected = true;
+      console.log('[LIBERTY] PostgreSQL conectado (2ª tentativa)');
+      return _dbPool;
+    } catch (err2) {
+      console.warn('[LIBERTY] PostgreSQL indisponível:', err2.message);
+      _dbConnected = false;
+      return null;
+    }
   }
 }
 const db = {
@@ -413,7 +431,7 @@ async function getDefaultChatId() {
 async function start() {
   const dbUrl = _dbGetUrl();
   if (dbUrl && dbUrl.startsWith('postgres')) {
-    console.log('[LIBERTY] DATABASE_URL definida (env). Conectando…');
+    console.log('[LIBERTY] DATABASE_URL definida (' + dbUrl.length + ' chars). Conectando…');
     try {
       await db.connect();
       if (db.isConnected()) {
@@ -425,7 +443,7 @@ async function start() {
       console.warn('[LIBERTY] Banco na subida:', err.message);
     }
   } else {
-    console.warn('[LIBERTY] DATABASE_URL não definida. Defina no ambiente (ex.: Square Cloud: Configurações → Environment) para registro/login.');
+    console.warn('[LIBERTY] DATABASE_URL não definida (valor atual: ' + (dbUrl ? dbUrl.length + ' chars' : 'vazio') + '). Defina no painel: Square Cloud → Configurações → Environment.');
   }
 
   ws.attach(server);
@@ -1366,3 +1384,4 @@ start().catch((err) => {
   console.error('Falha ao iniciar:', err);
   process.exit(1);
 });
+
