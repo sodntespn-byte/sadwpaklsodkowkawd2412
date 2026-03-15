@@ -1189,7 +1189,7 @@ class LibertyApp {
             if (screenshareBtn) {
                 screenshareBtn.classList.remove('active');
                 screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
-                screenshareBtn.querySelector('i').className = 'fas fa-desktop';
+                screenshareBtn.querySelector('i').className = 'fas fa-display';
             }
             const videoBtn = document.getElementById('voice-call-video');
             if (videoBtn) {
@@ -1232,7 +1232,7 @@ class LibertyApp {
                     if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
                     screenshareBtn.classList.remove('active');
                     screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
-                    screenshareBtn.querySelector('i').className = 'fas fa-desktop';
+                    screenshareBtn.querySelector('i').className = 'fas fa-display';
                     return;
                 }
                 try {
@@ -1260,12 +1260,12 @@ class LibertyApp {
                             if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
                             screenshareBtn.classList.remove('active');
                             screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
-                            screenshareBtn.querySelector('i').className = 'fas fa-desktop';
+                            screenshareBtn.querySelector('i').className = 'fas fa-display';
                         }
                     };
                     screenshareBtn.classList.add('active');
                     screenshareBtn.querySelector('span').textContent = 'Parar compartilhamento';
-                    screenshareBtn.querySelector('i').className = 'fas fa-stop-circle';
+                    screenshareBtn.querySelector('i').className = 'fas fa-stop';
                 } catch (err) {
                     this.showToast(err.name === 'NotAllowedError' ? 'Compartilhamento de tela cancelado.' : 'Não foi possível compartilhar a tela.', 'error');
                 }
@@ -1595,7 +1595,7 @@ class LibertyApp {
                 const channelNameEl = document.getElementById('channel-name');
                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
                 if (channelNameEl) channelNameEl.textContent = recipient.username || displayName;
-                if (channelIconEl) channelIconEl.className = 'fas fa-at channel-header-icon';
+                if (channelIconEl) channelIconEl.className = 'fas fa-envelope channel-header-icon';
 
                 let channel = dm;
                 if (!channel.id && recipient.id && dm.type !== 'group_dm') {
@@ -1649,7 +1649,7 @@ class LibertyApp {
                 const channelNameEl = document.getElementById('channel-name');
                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
                 if (channelNameEl) channelNameEl.textContent = recipient.username || 'DM';
-                if (channelIconEl) channelIconEl.className = 'fas fa-at channel-header-icon';
+                if (channelIconEl) channelIconEl.className = 'fas fa-envelope channel-header-icon';
                 if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
                 this.currentChannel = dm;
                 this.currentChannel.room = 'dm:' + (dm.id || '');
@@ -1811,11 +1811,11 @@ class LibertyApp {
             const online = friends.filter(f => f.user?.status !== 'offline');
             bodyHtml += `<div style="${headerStyle}">Online — ${online.length}</div>`;
             online.forEach(f => { bodyHtml += this._friendItemHtml(f); });
-            if (online.length === 0) bodyHtml += '<div class="friends-empty-state"><span class="friends-empty-icon" aria-hidden="true"><i class="fas fa-user-friends"></i></span><p class="friends-empty-text">Nenhum amigo ainda</p><button type="button" class="btn btn-primary friends-add-btn" data-htab="add">Adicionar amigo</button></div>';
+            if (online.length === 0) bodyHtml += '<div class="friends-empty-state"><span class="friends-empty-icon" aria-hidden="true"><i class="fas fa-people-group"></i></span><p class="friends-empty-text">Nenhum amigo ainda</p><button type="button" class="btn btn-primary friends-add-btn" data-htab="add">Adicionar amigo</button></div>';
         } else if (tab === 'all') {
             bodyHtml += `<div style="${headerStyle}">Todos — ${friends.length}</div>`;
             friends.forEach(f => { bodyHtml += this._friendItemHtml(f); });
-            if (friends.length === 0) bodyHtml += '<div class="friends-empty-state"><span class="friends-empty-icon" aria-hidden="true"><i class="fas fa-user-friends"></i></span><p class="friends-empty-text">Nenhum amigo ainda</p><button type="button" class="btn btn-primary friends-add-btn" data-htab="add">Adicionar amigo</button></div>';
+            if (friends.length === 0) bodyHtml += '<div class="friends-empty-state"><span class="friends-empty-icon" aria-hidden="true"><i class="fas fa-people-group"></i></span><p class="friends-empty-text">Nenhum amigo ainda</p><button type="button" class="btn btn-primary friends-add-btn" data-htab="add">Adicionar amigo</button></div>';
         } else if (tab === 'pending') {
             bodyHtml += `<div style="${headerStyle}">Pendentes — ${pending.length}</div>`;
             pending.forEach(p => {
@@ -1828,7 +1828,7 @@ class LibertyApp {
                         <div class="friend-item-status">${isIncoming ? 'Convite recebido' : 'Pedido enviado'}</div>
                     </div>
                     <div class="friend-item-actions">
-                        ${isIncoming ? '<button title="Accept"><i class="fas fa-check"></i></button><button title="Deny"><i class="fas fa-times"></i></button>' : '<button title="Cancel"><i class="fas fa-times"></i></button>'}
+                        ${isIncoming ? '<button title="Accept"><i class="fas fa-check"></i></button><button title="Deny"><i class="fas fa-xmark"></i></button>' : '<button title="Cancel"><i class="fas fa-xmark"></i></button>'}
                     </div>
                 </div>`;
             });
@@ -1853,7 +1853,7 @@ class LibertyApp {
                         </div>
                         <div class="friend-item-actions">
                             <button title="Accept"><i class="fas fa-check"></i></button>
-                            <button title="Deny"><i class="fas fa-times"></i></button>
+                            <button title="Deny"><i class="fas fa-xmark"></i></button>
                         </div>
                     </div>`;
                 });
@@ -1927,7 +1927,7 @@ class LibertyApp {
                                 const channelNameEl = document.getElementById('channel-name');
                                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
                                 if (channelNameEl) channelNameEl.textContent = channel.recipients?.[0]?.username || 'DM';
-                                if (channelIconEl) channelIconEl.className = 'fas fa-at channel-header-icon';
+                                if (channelIconEl) channelIconEl.className = 'fas fa-envelope channel-header-icon';
                                 if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.currentChannel.id !== channel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
                                 this.currentChannel = channel;
                                 this.currentChannel.room = 'dm:' + (channel.id || '');
@@ -2031,7 +2031,7 @@ class LibertyApp {
             const html = `
                 <div class="ranking-view">
                     <div class="ranking-header">
-                        <i class="fas fa-trophy ranking-icon" aria-hidden="true"></i>
+                        <i class="fas fa-medal ranking-icon" aria-hidden="true"></i>
                         <h2>LIBERTY Ranking</h2>
                         <p>Community activity and levels</p>
                     </div>
@@ -2069,10 +2069,10 @@ class LibertyApp {
                 <div class="friend-item-status">${this._statusLabel(u.status || 'offline')}</div>
             </div>
             <div class="friend-item-actions">
-                <button title="Message"><i class="fas fa-comment"></i></button>
+                <button title="Message"><i class="fas fa-message"></i></button>
                 <button title="Voice Call"><i class="fas fa-phone"></i></button>
                 <button title="Video Call"><i class="fas fa-video"></i></button>
-                <button title="More"><i class="fas fa-ellipsis-v"></i></button>
+                <button title="More"><i class="fas fa-bars"></i></button>
             </div>
         </div>`;
     }
@@ -2111,7 +2111,7 @@ class LibertyApp {
             `;
         } else if (this.isHomeView && this.currentHomeSubView === 'rankings') {
             info.innerHTML = `
-                <i class="fas fa-trophy channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
+                <i class="fas fa-medal channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
                 <h3 id="channel-name">LIBERTY Rankings</h3>
                 <div class="channel-header-divider" aria-hidden="true"></div>
                 <span class="channel-topic" id="channel-topic">Quem mais fica e comenta</span>
@@ -2120,7 +2120,7 @@ class LibertyApp {
             this.currentHomeSubView = this.currentHomeSubView || 'friends';
             const tab = this.currentFriendsTab || 'online';
             info.innerHTML = `
-                <i class="fas fa-user-friends channel-header-icon" aria-hidden="true"></i>
+                <i class="fas fa-people-group channel-header-icon" aria-hidden="true"></i>
                 <h3>Amigos</h3>
                 <div class="channel-header-divider" aria-hidden="true"></div>
                 <div class="friends-header-tabs">
@@ -2140,7 +2140,7 @@ class LibertyApp {
             });
         } else {
             const ch = this.channels.find(c => c.id === (this.currentChannel?.id || this.currentChannel));
-            const icon = ch?.channel_type === 'voice' ? 'fa-volume-up' : 'fa-hashtag';
+            const icon = ch?.channel_type === 'voice' ? 'fa-tower-broadcast' : 'fa-message';
             const name = ch?.name || 'general';
             const topic = ch?.topic || '';
             info.innerHTML = `
@@ -2240,7 +2240,7 @@ class LibertyApp {
         if (serverNameEl) serverNameEl.textContent = server.name;
         const serverHeader = document.querySelector('.server-header');
         if (serverHeader) serverHeader.style.display = '';
-        { const _b = document.getElementById('server-dropdown-btn'); if (_b) { _b.querySelector('i').className = 'fas fa-chevron-down'; _b.style.display = ''; } }
+        { const _b = document.getElementById('server-dropdown-btn'); if (_b) { _b.querySelector('i').className = 'fas fa-angle-down'; _b.style.display = ''; } }
 
         const homeContent = document.getElementById('home-sidebar-content');
         if (homeContent) homeContent.style.display = 'none';
@@ -2320,19 +2320,19 @@ class LibertyApp {
         const dd = document.createElement('div');
         dd.className = 'server-dropdown';
         const items = [
-            { icon: 'fa-rocket', label: 'Server Boost', action: () => this.showToast('Server Boost — Coming Soon!', 'info') },
-            { icon: 'fa-user-plus', label: 'Invite People', action: () => this.showInviteModal() },
-            { icon: 'fa-cog', label: 'Server Settings', action: () => this.showSettingsPanel('server') },
+            { icon: 'fa-bolt', label: 'Server Boost', action: () => this.showToast('Server Boost — Coming Soon!', 'info') },
+            { icon: 'fa-handshake', label: 'Invite People', action: () => this.showInviteModal() },
+            { icon: 'fa-sliders', label: 'Server Settings', action: () => this.showSettingsPanel('server') },
             { divider: true },
             { icon: 'fa-plus', label: 'Create Channel', action: () => this.showCreateChannelModal() },
-            { icon: 'fa-folder-plus', label: 'Create Category', action: () => this._createCategory() },
+            { icon: 'fa-folder-tree', label: 'Create Category', action: () => this._createCategory() },
             { divider: true },
             { icon: 'fa-bell', label: 'Notification Settings', action: () => this.showToast('Notification settings updated', 'info') },
-            { icon: 'fa-shield-alt', label: 'Privacy Settings', action: () => this.showToast('Privacy settings opened', 'info') },
-            { icon: 'fa-id-badge', label: 'Edit Server Profile', action: () => this.showToast('Edit your server profile', 'info') },
+            { icon: 'fa-shield-halved', label: 'Privacy Settings', action: () => this.showToast('Privacy settings opened', 'info') },
+            { icon: 'fa-address-card', label: 'Edit Server Profile', action: () => this.showToast('Edit your server profile', 'info') },
             { icon: 'fa-eye-slash', label: 'Hide Muted Channels', action: () => this.showToast('Muted channels hidden', 'info') },
             { divider: true },
-            { icon: 'fa-sign-out-alt', label: 'Leave Server', danger: true, action: () => { if (this.gateway) this.gateway.leaveServer(this.currentServer?.id); this.showToast('Left the server', 'info'); this.selectHome(); } },
+            { icon: 'fa-right-from-bracket', label: 'Leave Server', danger: true, action: () => { if (this.gateway) this.gateway.leaveServer(this.currentServer?.id); this.showToast('Left the server', 'info'); this.selectHome(); } },
         ];
         dd.innerHTML = items.map(item => {
             if (item.divider) return '<div class="dropdown-divider"></div>';
@@ -2374,7 +2374,7 @@ class LibertyApp {
         if (homeContent) homeContent.style.display = 'none';
         container.innerHTML = '';
         if (this.channels.length === 0) {
-            container.innerHTML = '<div class="empty-state" style="padding:24px 16px;text-align:center"><i class="fas fa-hashtag" style="font-size:28px;color:var(--text-muted);margin-bottom:12px;display:block;opacity:.7"></i><p class="empty-state-description" style="margin-bottom:12px">No channels yet</p><button class="btn btn-primary btn-sm" type="button">Create Channel</button></div>';
+            container.innerHTML = '<div class="empty-state" style="padding:24px 16px;text-align:center"><i class="fas fa-message" style="font-size:28px;color:var(--text-muted);margin-bottom:12px;display:block;opacity:.7"></i><p class="empty-state-description" style="margin-bottom:12px">No channels yet</p><button class="btn btn-primary btn-sm" type="button">Create Channel</button></div>';
             container.querySelector('button').addEventListener('click', () => this.showCreateChannelModal());
             return;
         }
@@ -2398,7 +2398,7 @@ class LibertyApp {
             const catId = category?.id || null;
             catEl.innerHTML = `
                 <div class="channel-category-header">
-                    <i class="fas fa-chevron-down"></i>
+                    <i class="fas fa-angle-down"></i>
                     <span>${this.escapeHtml(catName)}</span>
                     <button class="btn-icon add-channel-btn" title="Add Channel" style="margin-left:auto;width:16px;height:16px;font-size:12px"><i class="fas fa-plus"></i></button>
                 </div>
@@ -2422,7 +2422,7 @@ class LibertyApp {
         item.className = 'channel-item';
         item.dataset.channel = channel.id;
         const isVoice = channel.channel_type === 'voice';
-        const icon = isVoice ? 'fa-volume-up' : 'fa-hashtag';
+        const icon = isVoice ? 'fa-tower-broadcast' : 'fa-message';
         if (isVoice) item.classList.add('voice');
         const unread = this.unreadChannels.has(channel.id);
         item.innerHTML = `
@@ -2457,7 +2457,7 @@ class LibertyApp {
         document.querySelector('.message-input-container').style.display = '';
 
         document.getElementById('message-input').placeholder = `Message #${channel.name}`;
-        const icon = channel.channel_type === 'voice' ? 'fa-volume-up' : 'fa-hashtag';
+        const icon = channel.channel_type === 'voice' ? 'fa-tower-broadcast' : 'fa-message';
         this._updateChannelHeaderForContext();
         this.typing.clear();
         this.renderTypingIndicator();
@@ -2524,7 +2524,7 @@ class LibertyApp {
         const info = header?.querySelector('.channel-info');
         if (!info) return;
         info.innerHTML = `
-            <i class="fas fa-volume-up channel-header-icon" aria-hidden="true"></i>
+            <i class="fas fa-tower-broadcast channel-header-icon" aria-hidden="true"></i>
             <h3 id="channel-name">${this.escapeHtml(channel?.name || 'Voice')}</h3>
             <div class="channel-header-divider" aria-hidden="true"></div>
             <span class="channel-topic" id="channel-topic">Canal de voz — conversa ao vivo</span>
@@ -2545,7 +2545,7 @@ class LibertyApp {
                 <div class="voice-call-participant-status ${statusClass}">${status}</div>
             </div>
             <div class="voice-call-participant" style="border-style:dashed;opacity:.7">
-                <div class="voice-call-participant-avatar" style="font-size:24px"><i class="fas fa-user-plus"></i></div>
+                <div class="voice-call-participant-avatar" style="font-size:24px"><i class="fas fa-handshake"></i></div>
                 <div class="voice-call-participant-name">Aguardando...</div>
                 <div class="voice-call-participant-status">Outros na chamada aparecerão aqui</div>
             </div>
@@ -2575,7 +2575,7 @@ class LibertyApp {
         if (deafenBtn) {
             const icon = deafenBtn.querySelector('i');
             const span = deafenBtn.querySelector('span');
-            if (icon) icon.className = this.isDeafened ? 'fas fa-headphones-alt' : 'fas fa-headphones';
+            if (icon) icon.className = this.isDeafened ? 'fas fa-headphones' : 'fas fa-headphones';
             if (span) span.textContent = this.isDeafened ? 'Undeafen' : 'Deafen';
             deafenBtn.classList.toggle('deafened', this.isDeafened);
         }
@@ -2673,7 +2673,7 @@ class LibertyApp {
         if (!btn) return;
         const icon = btn.querySelector('i');
         if (this.isDeafened) {
-            icon.className = 'fas fa-headphones-alt';
+            icon.className = 'fas fa-headphones';
             icon.style.textDecoration = 'line-through';
             btn.classList.add('muted');
             btn.dataset.tooltip = 'Undeafen';
@@ -2760,11 +2760,11 @@ class LibertyApp {
         panel.innerHTML = `
             <div class="search-panel-header">
                 <input type="text" placeholder="Search messages...">
-                <button class="btn-icon" title="Close"><i class="fas fa-times"></i></button>
+                <button class="btn-icon" title="Close"><i class="fas fa-xmark"></i></button>
             </div>
             <div class="search-panel-results">
                 <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px">
-                    <i class="fas fa-search" style="font-size:32px;margin-bottom:12px;display:block;opacity:.5"></i>
+                    <i class="fas fa-magnifying-glass" style="font-size:32px;margin-bottom:12px;display:block;opacity:.5"></i>
                     Type to search messages in this channel
                 </div>
             </div>
@@ -2774,7 +2774,7 @@ class LibertyApp {
             const q = e.target.value.toLowerCase();
             const results = panel.querySelector('.search-panel-results');
             if (!q) {
-                results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px"><i class="fas fa-search" style="font-size:32px;margin-bottom:12px;display:block;opacity:.5"></i>Type to search messages in this channel</div>';
+                results.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px"><i class="fas fa-magnifying-glass" style="font-size:32px;margin-bottom:12px;display:block;opacity:.5"></i>Type to search messages in this channel</div>';
                 return;
             }
             const msgs = document.querySelectorAll('.message-group');
@@ -2817,7 +2817,7 @@ class LibertyApp {
         panel.innerHTML = `
             <div class="pinned-panel-header">
                 <span>Pinned Messages</span>
-                <button class="btn-icon" style="width:24px;height:24px;font-size:12px"><i class="fas fa-times"></i></button>
+                <button class="btn-icon" style="width:24px;height:24px;font-size:12px"><i class="fas fa-xmark"></i></button>
             </div>
             <div class="pinned-panel-list"><div style="padding:20px;text-align:center;color:var(--text-muted)">Loading...</div></div>
         `;
@@ -2830,7 +2830,7 @@ class LibertyApp {
         try {
             const pins = await API.Pin.list(this.currentChannel?.id || this.currentChannel);
             if (!pins || pins.length === 0) {
-                list.innerHTML = '<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px"><i class="fas fa-thumbtack" style="font-size:24px;margin-bottom:8px;display:block;opacity:.5"></i>No pinned messages in this channel yet.</div>';
+                list.innerHTML = '<div style="padding:30px 20px;text-align:center;color:var(--text-muted);font-size:13px"><i class="fas fa-bookmark" style="font-size:24px;margin-bottom:8px;display:block;opacity:.5"></i>No pinned messages in this channel yet.</div>';
             } else {
                 list.innerHTML = '';
                 pins.forEach(pm => {
@@ -2887,7 +2887,7 @@ class LibertyApp {
             if (!messages || messages.length === 0) {
                 container.innerHTML = `
                     <div class="welcome-message">
-                        <div class="welcome-icon"><i class="fas fa-hashtag"></i></div>
+                        <div class="welcome-icon"><i class="fas fa-message"></i></div>
                         <h2 class="welcome-title">Bem-vindo a #${this.escapeHtml(this.currentChannel?.name || 'canal')}</h2>
                         <p class="welcome-description">Este é o início do canal.</p>
                     </div>
@@ -2943,7 +2943,7 @@ class LibertyApp {
                 ${authorAvatar ? `<img src="${this.escapeHtml(authorAvatar)}" alt="${this.escapeHtml(authorName)}">` : `<span>${avatarLetter}</span>`}
             </div>
             <div class="message-content">
-                ${message.replyTo ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;display:flex;align-items:center;gap:4px"><i class="fas fa-reply" style="font-size:10px"></i> Replying to <strong style="color:var(--primary-yellow)">${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
+                ${message.replyTo ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;display:flex;align-items:center;gap:4px"><i class="fas fa-arrow-turn-up" style="font-size:10px"></i> Replying to <strong style="color:var(--primary-yellow)">${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
                 ${!isContinuation ? `<div class="message-header">
                     <span class="message-author ${isSelf ? 'self' : ''}">${this.escapeHtml(authorName)}</span>
                     <span class="message-timestamp" title="${time.toLocaleString()}">${headerTimeStr}</span>
@@ -2952,10 +2952,10 @@ class LibertyApp {
                 <div class="reactions-container"></div>
             </div>
             <div class="message-actions">
-                <button class="btn-icon" data-action="react" title="Add Reaction" style="width:28px;height:28px"><i class="fas fa-smile"></i></button>
-                <button class="btn-icon" data-action="reply" title="Reply" style="width:28px;height:28px"><i class="fas fa-reply"></i></button>
-                ${isSelf ? '<button class="btn-icon" data-action="edit" title="Edit" style="width:28px;height:28px"><i class="fas fa-pencil-alt"></i></button>' : ''}
-                <button class="btn-icon" data-action="more" title="More" style="width:28px;height:28px"><i class="fas fa-ellipsis-h"></i></button>
+                <button class="btn-icon" data-action="react" title="Add Reaction" style="width:28px;height:28px"><i class="fas fa-face-smile"></i></button>
+                <button class="btn-icon" data-action="reply" title="Reply" style="width:28px;height:28px"><i class="fas fa-arrow-turn-up"></i></button>
+                ${isSelf ? '<button class="btn-icon" data-action="edit" title="Edit" style="width:28px;height:28px"><i class="fas fa-pen"></i></button>' : ''}
+                <button class="btn-icon" data-action="more" title="More" style="width:28px;height:28px"><i class="fas fa-bars"></i></button>
             </div>
         `;
 
@@ -3079,7 +3079,7 @@ class LibertyApp {
         replyBar = document.createElement('div');
         replyBar.className = 'reply-bar';
         const short = (content || '').substring(0, 80);
-        replyBar.innerHTML = `<i class="fas fa-reply" style="color:var(--primary-yellow);font-size:12px"></i><span>Replying to <strong>${this.escapeHtml(authorName)}</strong> — ${this.escapeHtml(short)}${content && content.length > 80 ? '...' : ''}</span><button title="Cancel"><i class="fas fa-times"></i></button>`;
+        replyBar.innerHTML = `<i class="fas fa-arrow-turn-up" style="color:var(--primary-yellow);font-size:12px"></i><span>Replying to <strong>${this.escapeHtml(authorName)}</strong> — ${this.escapeHtml(short)}${content && content.length > 80 ? '...' : ''}</span><button title="Cancel"><i class="fas fa-xmark"></i></button>`;
         replyBar.querySelector('button').addEventListener('click', () => this.cancelReply());
         const inputWrapper = document.querySelector('.message-input-wrapper');
         const parent = inputWrapper?.parentNode;
@@ -3344,7 +3344,7 @@ class LibertyApp {
             <span class="member-name">${this.escapeHtml(name)}</span>
             <div class="member-item-actions">
                 <button type="button" class="member-action-btn" data-action="call" title="Chamar" aria-label="Chamar"><i class="fas fa-phone"></i></button>
-                <button type="button" class="member-action-btn" data-action="add-friend" title="Adicionar amigo" aria-label="Adicionar amigo"><i class="fas fa-user-plus"></i></button>
+                <button type="button" class="member-action-btn" data-action="add-friend" title="Adicionar amigo" aria-label="Adicionar amigo"><i class="fas fa-handshake"></i></button>
             </div>
         `;
         item.querySelector('.member-avatar, .member-name').addEventListener('click', (e) => {
@@ -3443,7 +3443,7 @@ class LibertyApp {
         card.innerHTML = `
             <div class="player-banner-backdrop" aria-hidden="true"></div>
             <div class="player-banner-card">
-                <button type="button" class="player-banner-close-btn" aria-label="Fechar"><i class="fas fa-times"></i></button>
+                <button type="button" class="player-banner-close-btn" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
                 <div class="player-banner-banner" ${bannerStyle}></div>
                 <div class="player-banner-avatar-wrap">
                     <div class="profile-card-avatar player-banner-avatar">${avatarImg}<span>${avatarImg ? '' : avatarText}</span><span class="profile-card-online-dot ${status}"></span></div>
@@ -3457,9 +3457,9 @@ class LibertyApp {
                     </div>
                     <p class="player-banner-desc${descClass}">${descHtml}</p>
                     <div class="player-banner-actions">
-                        <button type="button" class="player-banner-btn player-banner-btn-msg" title="Mensagem" data-action="message"><i class="fas fa-comment"></i> Mensagem</button>
-                        <button type="button" class="player-banner-btn player-banner-btn-icon" title="Adicionar amigo" data-action="addfriend"><i class="fas fa-user-plus"></i></button>
-                        <button type="button" class="player-banner-btn player-banner-btn-icon" title="Mais" data-action="more"><i class="fas fa-ellipsis-h"></i></button>
+                        <button type="button" class="player-banner-btn player-banner-btn-msg" title="Mensagem" data-action="message"><i class="fas fa-message"></i> Mensagem</button>
+                        <button type="button" class="player-banner-btn player-banner-btn-icon" title="Adicionar amigo" data-action="addfriend"><i class="fas fa-handshake"></i></button>
+                        <button type="button" class="player-banner-btn player-banner-btn-icon" title="Mais" data-action="more"><i class="fas fa-bars"></i></button>
                     </div>
                     <div class="player-banner-more">
                         <div class="profile-card-section profile-card-links">
@@ -3657,10 +3657,10 @@ class LibertyApp {
             { _idx: 0, icon: 'fa-check-circle', label: 'Mark as Read', action: () => this.showToast('Marked as read', 'info') },
             { _idx: 1, icon: 'fa-bell-slash', label: 'Mute Server', action: () => this.showToast('Server muted', 'info') },
             { divider: true },
-            { _idx: 2, icon: 'fa-user-plus', label: 'Invite People', action: () => this.showInviteModal() },
+            { _idx: 2, icon: 'fa-handshake', label: 'Invite People', action: () => this.showInviteModal() },
             { _idx: 3, icon: 'fa-eye-slash', label: 'Hide Server', action: () => this.showToast('Server hidden', 'info') },
             { divider: true },
-            { _idx: 4, icon: 'fa-sign-out-alt', label: 'Leave Server', danger: true, action: () => { if (this.gateway) this.gateway.leaveServer(serverId); this.showToast(`Left ${server?.name || 'server'}`, 'info'); this.selectHome(); } },
+            { _idx: 4, icon: 'fa-right-from-bracket', label: 'Leave Server', danger: true, action: () => { if (this.gateway) this.gateway.leaveServer(serverId); this.showToast(`Left ${server?.name || 'server'}`, 'info'); this.selectHome(); } },
         ];
         this.showContextMenu(items, e.clientX, e.clientY);
     }
@@ -3669,13 +3669,13 @@ class LibertyApp {
         const channelId = channelItem.dataset.channel;
         const channel = this.channels.find(c => c.id === channelId);
         const items = [
-            { _idx: 0, icon: 'fa-edit', label: 'Edit Channel', action: () => this.showEditChannelModal(channelId) },
+            { _idx: 0, icon: 'fa-pen', label: 'Edit Channel', action: () => this.showEditChannelModal(channelId) },
             { _idx: 1, icon: 'fa-bell-slash', label: 'Mute Channel', action: () => this.showToast('Channel muted', 'info') },
             { divider: true },
-            { _idx: 2, icon: 'fa-user-plus', label: 'Invite to Channel', action: () => this.showInviteModal() },
-            { _idx: 3, icon: 'fa-clone', label: 'Clone Channel', action: () => this.showToast(`Cloned #${channel?.name || 'channel'}`, 'success') },
+            { _idx: 2, icon: 'fa-handshake', label: 'Invite to Channel', action: () => this.showInviteModal() },
+            { _idx: 3, icon: 'fa-copy', label: 'Clone Channel', action: () => this.showToast(`Cloned #${channel?.name || 'channel'}`, 'success') },
             { divider: true },
-            { _idx: 4, icon: 'fa-trash', label: 'Delete Channel', danger: true, action: () => {
+            { _idx: 4, icon: 'fa-trash-can', label: 'Delete Channel', danger: true, action: () => {
                 if (confirm(`Delete #${channel?.name}?`)) {
                     this.channels = this.channels.filter(c => c.id !== channelId);
                     this.renderChannels();
@@ -3691,16 +3691,16 @@ class LibertyApp {
         const msgData = this.messages.get(messageId);
         const isSelf = msgData?.isSelf;
         const items = [
-            { _idx: 0, icon: 'fa-smile', label: 'Add Reaction', action: () => {
+            { _idx: 0, icon: 'fa-face-smile', label: 'Add Reaction', action: () => {
                 this.showEmojiPicker(messageEl, emoji => this.addReaction(messageId, emoji));
             }},
-            { _idx: 1, icon: 'fa-reply', label: 'Reply', action: () => this.startReply(messageId, msgData?.authorName || 'User', msgData?.content || '') },
+            { _idx: 1, icon: 'fa-arrow-turn-up', label: 'Reply', action: () => this.startReply(messageId, msgData?.authorName || 'User', msgData?.content || '') },
             { divider: true },
         ];
         if (isSelf) {
-            items.push({ _idx: 2, icon: 'fa-pencil-alt', label: 'Edit Message', action: () => this.startEditMessage(messageId, msgData?.content) });
+            items.push({ _idx: 2, icon: 'fa-pen', label: 'Edit Message', action: () => this.startEditMessage(messageId, msgData?.content) });
         }
-        items.push({ _idx: 3, icon: 'fa-thumbtack', label: 'Pin Message', action: async () => {
+        items.push({ _idx: 3, icon: 'fa-bookmark', label: 'Pin Message', action: async () => {
             try {
                 await API.Pin.pin(this.currentChannel?.id || this.currentChannel, messageId);
                 this.showToast('Message pinned!', 'success');
@@ -3710,7 +3710,7 @@ class LibertyApp {
         }});
         if (isSelf) {
             items.push({ divider: true });
-            items.push({ _idx: 4, icon: 'fa-trash', label: 'Delete Message', danger: true, action: () => this.confirmDeleteMessage(messageId) });
+            items.push({ _idx: 4, icon: 'fa-trash-can', label: 'Delete Message', danger: true, action: () => this.confirmDeleteMessage(messageId) });
         }
         items.push({ divider: true });
         items.push({ _idx: 5, icon: 'fa-copy', label: 'Copy Text', action: () => {
@@ -3728,13 +3728,13 @@ class LibertyApp {
         const member = this.members.find(m => (m.user_id || m.id) === userId);
         const name = member?.nickname || member?.username || 'User';
         const items = [
-            { _idx: 0, icon: 'fa-id-card', label: 'Profile', action: () => this.showProfileCard(member || { username: name, status: 'online' }, e) },
-            { _idx: 1, icon: 'fa-comment', label: 'Message', action: () => this.showToast(`Opening DM with ${name}...`, 'info') },
+            { _idx: 0, icon: 'fa-address-card', label: 'Profile', action: () => this.showProfileCard(member || { username: name, status: 'online' }, e) },
+            { _idx: 1, icon: 'fa-message', label: 'Message', action: () => this.showToast(`Opening DM with ${name}...`, 'info') },
             { _idx: 2, icon: 'fa-phone', label: 'Call', action: () => this.showToast(`Calling ${name}...`, 'info') },
             { divider: true },
             { _idx: 3, icon: 'fa-sticky-note', label: 'Add Note', action: () => this.showToast('Note editor opened', 'info') },
             { _idx: 4, icon: 'fa-microphone-slash', label: 'Mute', action: () => this.showToast(`${name} muted`, 'info') },
-            { _idx: 5, icon: 'fa-headphones-alt', label: 'Deafen', action: () => this.showToast(`${name} deafened`, 'info') },
+            { _idx: 5, icon: 'fa-headphones', label: 'Deafen', action: () => this.showToast(`${name} deafened`, 'info') },
             { _idx: 6, icon: 'fa-pen', label: 'Change Nickname', action: () => { const nn = prompt('New nickname:', name); if (nn) this.showToast(`Nickname changed to ${nn}`, 'success'); } },
             { divider: true },
             { _idx: 7, icon: 'fa-user-slash', label: 'Kick', danger: true, action: () => this.showToast(`${name} kicked`, 'warning') },
@@ -3781,7 +3781,7 @@ class LibertyApp {
         modal.innerHTML = `
             <div class="modal-header">
                 <h2>${title}</h2>
-                <button class="btn-close" aria-label="Close"><i class="fas fa-times"></i></button>
+                <button class="btn-close" aria-label="Close"><i class="fas fa-xmark"></i></button>
             </div>
             <div class="modal-body">${bodyHtml}</div>
         `;
@@ -3975,8 +3975,8 @@ class LibertyApp {
         const categories = type === 'user' ? [
             { group: 'USUÁRIO' },
             { id: 'account', label: 'Minha Conta', icon: 'fa-user' },
-            { id: 'auth-security', label: 'Autenticação e Segurança', icon: 'fa-shield-alt' },
-            { id: 'profile', label: 'Perfil', icon: 'fa-id-card' },
+            { id: 'auth-security', label: 'Autenticação e Segurança', icon: 'fa-shield-halved' },
+            { id: 'profile', label: 'Perfil', icon: 'fa-address-card' },
             { id: 'privacy', label: 'Privacidade', icon: 'fa-lock' },
             { divider: true },
             { group: 'APP' },
@@ -3984,7 +3984,7 @@ class LibertyApp {
             { id: 'voice', label: 'Voz', icon: 'fa-microphone' },
             { id: 'notifications', label: 'Notificações', icon: 'fa-bell' },
             { divider: true },
-            { id: 'logout', label: 'Sair', danger: true, icon: 'fa-sign-out-alt' },
+            { id: 'logout', label: 'Sair', danger: true, icon: 'fa-right-from-bracket' },
         ] : [
             { group: this.currentServer?.name || 'Server Settings' },
             { id: 'overview', label: 'Overview' },
@@ -4028,7 +4028,7 @@ class LibertyApp {
             <div class="settings-sidebar"><div class="settings-sidebar-inner">${profileHtml}${sidebarHtml}</div></div>
             <div class="settings-content"><div class="settings-content-inner" id="settings-content"></div>
                 <div class="settings-close">
-                    <button title="Close (ESC)"><i class="fas fa-times"></i></button>
+                    <button title="Close (ESC)"><i class="fas fa-xmark"></i></button>
                     <div class="settings-close-hint">ESC</div>
                 </div>
             </div>
@@ -4126,7 +4126,7 @@ class LibertyApp {
                             <input type="url" id="settings-avatar-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-foto.jpg ou .png" value="${avatarUrl}" />
                             <button type="button" class="btn-save" id="settings-save-avatar-btn"><i class="fas fa-link"></i> Usar URL</button>
                         </div>
-                        <button type="button" class="settings-avatar-remove-btn" id="settings-avatar-remove-btn"><i class="fas fa-trash-alt"></i> Remover foto</button>
+                        <button type="button" class="settings-avatar-remove-btn" id="settings-avatar-remove-btn"><i class="fas fa-trash-can"></i> Remover foto</button>
                     </div>
                 </div>
                 <div class="settings-section-block">
@@ -4352,7 +4352,7 @@ class LibertyApp {
                 <div class="settings-row"><div><div class="settings-row-label">Sticker suggestions</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
                 </div>`,
             nitro: () => `<h2>Nitro</h2><div class="settings-card" style="text-align:center;padding:32px">
-                <i class="fas fa-rocket" style="font-size:48px;color:var(--primary-yellow);margin-bottom:16px;display:block"></i>
+                <i class="fas fa-bolt" style="font-size:48px;color:var(--primary-yellow);margin-bottom:16px;display:block"></i>
                 <h3 style="margin:0 0 8px;font-size:18px;text-transform:none;letter-spacing:0;color:var(--text-primary)">Unlock the best of LIBERTY</h3>
                 <p>Upload bigger files, use custom emoji everywhere, boost servers, and more.</p>
                 <button class="btn btn-primary" style="margin-top:12px" onclick="app.showToast('Nitro coming soon!','info')">Get Nitro</button>
@@ -4614,7 +4614,7 @@ class LibertyApp {
         toast.innerHTML = `
             <i class="fas ${icons[type] || icons.info} toast-icon"></i>
             <span class="toast-message">${this.escapeHtml(message)}</span>
-            <button class="toast-close" aria-label="Close"><i class="fas fa-times"></i></button>
+            <button class="toast-close" aria-label="Close"><i class="fas fa-xmark"></i></button>
         `;
         toast.querySelector('.toast-close').addEventListener('click', () => this._removeToast(toast));
         container.appendChild(toast);

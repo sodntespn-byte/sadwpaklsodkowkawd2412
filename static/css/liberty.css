@@ -763,8 +763,8 @@ body {
 
 .dm-folder .dm-avatar { border-radius: var(--radius); }
 .dm-folder.expanded .dm-avatar i { transform: rotate(0deg); }
-.dm-avatar i.fa-chevron-down { transition: transform var(--transition); }
-.dm-folder:not(.expanded) .dm-avatar i.fa-chevron-down { transform: rotate(-90deg); }
+.dm-avatar i.fa-angle-down { transition: transform var(--transition); }
+.dm-folder:not(.expanded) .dm-avatar i.fa-angle-down { transform: rotate(-90deg); }
 .dm-folder-children { margin-left: 12px; border-left: 1px solid var(--black-lighter); padding-left: 8px; }
 .dm-folder-children .dm-item { padding: 6px 10px; }
 .dm-text .dm-avatar { border-radius: 4px; }

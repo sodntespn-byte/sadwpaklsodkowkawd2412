@@ -161,7 +161,7 @@
             <header class="server-header" role="banner">
                 <h2 id="server-name">Home</h2>
                 <button class="btn-icon" id="server-dropdown-btn" aria-label="Menu do servidor" aria-haspopup="true" aria-expanded="false">
-                    <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                    <i class="fas fa-angle-down" aria-hidden="true"></i>
                 </button>
             </header>
 
@@ -173,11 +173,11 @@
                 </div>
                 <nav class="home-nav" aria-label="Navegação principal">
                     <button class="home-nav-item" data-view="rankings" aria-label="LIBERTY Rankings">
-                        <i class="fas fa-trophy" aria-hidden="true"></i>
+                        <i class="fas fa-medal" aria-hidden="true"></i>
                         <span>LIBERTY Rankings</span>
                     </button>
                     <button class="home-nav-item active" data-view="friends" aria-label="Amigos">
-                        <i class="fas fa-user-friends" aria-hidden="true"></i>
+                        <i class="fas fa-people-group" aria-hidden="true"></i>
                         <span>Friends</span>
                     </button>
                     <button class="home-nav-item" data-view="missions" aria-label="Missions">
@@ -220,7 +220,7 @@
                         <i class="fas fa-phone-slash" aria-hidden="true"></i>
                     </button>
                     <button class="btn-icon tooltip" data-tooltip="Screen Share" aria-label="Compartilhar tela">
-                        <i class="fas fa-desktop" aria-hidden="true"></i>
+                        <i class="fas fa-display" aria-hidden="true"></i>
                     </button>
                 </div>
             </div>
@@ -247,7 +247,7 @@
                         </button>
                     </div>
                     <button class="btn-icon tooltip" id="user-settings-btn" data-tooltip="Settings" aria-label="Configurações do usuário">
-                        <i class="fas fa-cog" aria-hidden="true"></i>
+                        <i class="fas fa-sliders" aria-hidden="true"></i>
                     </button>
                 </div>
             </div>
@@ -259,7 +259,7 @@
             <header class="channel-header">
                 <button class="btn-icon channel-sidebar-toggle mobile-only" type="button" aria-label="Toggle channels" style="display:none"><i class="fas fa-bars" aria-hidden="true"></i></button>
                 <div class="channel-info">
-                    <i class="fas fa-hashtag channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
+                    <i class="fas fa-message channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
                     <h3 id="channel-name">general</h3>
                     <div class="channel-header-divider" aria-hidden="true"></div>
                     <span class="channel-topic" id="channel-topic" aria-label="Tópico do canal">Welcome to LIBERTY!</span>
@@ -269,20 +269,20 @@
                         <i class="fas fa-phone" aria-hidden="true"></i>
                     </button>
                     <button class="btn-icon tooltip" data-tooltip="Threads" aria-label="Threads">
-                        <i class="fas fa-comment-dots" aria-hidden="true"></i>
+                        <i class="fas fa-message" aria-hidden="true"></i>
                     </button>
                     <button class="btn-icon tooltip" data-tooltip="Notifications" aria-label="Configurações de notificação">
                         <i class="fas fa-bell" aria-hidden="true"></i>
                     </button>
                     <button class="btn-icon tooltip" id="pinned-btn" data-tooltip="Pinned Messages" aria-label="Mensagens fixadas">
-                        <i class="fas fa-thumbtack" aria-hidden="true"></i>
+                        <i class="fas fa-bookmark" aria-hidden="true"></i>
                     </button>
                     <button class="btn-icon tooltip" id="toggle-members-btn" data-tooltip="Member List" aria-label="Mostrar/ocultar membros">
                         <i class="fas fa-users" aria-hidden="true"></i>
                     </button>
                     <div class="channel-search-wrapper">
                         <input type="text" id="channel-search-input" class="channel-search" placeholder="Search" aria-label="Buscar mensagens">
-                        <i class="fas fa-search" aria-hidden="true"></i>
+                        <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
                     </div>
                     <button class="btn-icon tooltip" data-tooltip="Inbox" aria-label="Caixa de entrada">
                         <i class="fas fa-inbox" aria-hidden="true"></i>
@@ -305,7 +305,7 @@
                 </div>
                 <div class="friends-search-wrapper">
                     <input type="text" id="friends-search-input" placeholder="Pesquisar amigos" aria-label="Buscar amigos">
-                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
                 </div>
                 <div id="friends-list" class="friends-list" role="list" aria-label="Lista de amigos">
                     <!-- Amigos injetados via JS -->
@@ -320,9 +320,9 @@
                         <div id="webrtc-remote-screen-wrap" class="webrtc-screen-wrap hidden">
                             <video id="webrtc-remote-screen" class="webrtc-video" autoplay playsinline></video>
                         </div>
-                        <span id="webrtc-screen-badge" class="webrtc-screen-badge hidden"><i class="fas fa-desktop"></i> Compartilhando tela</span>
+                        <span id="webrtc-screen-badge" class="webrtc-screen-badge hidden"><i class="fas fa-display"></i> Compartilhando tela</span>
                         <div class="webrtc-remote-placeholder" id="webrtc-remote-placeholder">
-                            <i class="fas fa-user-friends webrtc-placeholder-icon"></i>
+                            <i class="fas fa-people-group webrtc-placeholder-icon"></i>
                             <span class="webrtc-placeholder-text">Aguardando a outra pessoa...</span>
                         </div>
                     </div>
@@ -338,7 +338,7 @@
                 <div class="webrtc-call-controls">
                     <button type="button" class="webrtc-ctrl-btn" id="voice-call-mute" title="Mutar"><i class="fas fa-microphone"></i><span>Mute</span></button>
                     <button type="button" class="webrtc-ctrl-btn" id="voice-call-video" title="Desligar câmara"><i class="fas fa-video"></i><span>Vídeo</span></button>
-                    <button type="button" class="webrtc-ctrl-btn" id="voice-call-screenshare" title="Compartilhar tela"><i class="fas fa-desktop"></i><span>Compartilhar tela</span></button>
+                    <button type="button" class="webrtc-ctrl-btn" id="voice-call-screenshare" title="Compartilhar tela"><i class="fas fa-display"></i><span>Compartilhar tela</span></button>
                     <button type="button" class="webrtc-ctrl-btn webrtc-ctrl-disconnect" id="voice-call-disconnect" title="Desligar"><i class="fas fa-phone-slash"></i><span>Desligar</span></button>
                 </div>
             </section>
@@ -364,12 +364,12 @@
                 <!-- Reply Bar -->
                 <div id="reply-bar" class="reply-bar hidden" aria-label="Respondendo mensagem">
                     <div class="reply-bar-content">
-                        <i class="fas fa-reply" aria-hidden="true"></i>
+                        <i class="fas fa-arrow-turn-up" aria-hidden="true"></i>
                         <span>Replying to <strong id="reply-bar-username">User</strong></span>
                         <span class="reply-bar-preview" id="reply-bar-preview"></span>
                     </div>
                     <button class="btn-icon reply-bar-close" id="reply-bar-close" aria-label="Cancelar resposta">
-                        <i class="fas fa-times" aria-hidden="true"></i>
+                        <i class="fas fa-xmark" aria-hidden="true"></i>
                     </button>
                 </div>
 
@@ -389,7 +389,7 @@
                             <i class="fas fa-image" aria-hidden="true"></i>
                         </button>
                         <button class="btn-icon tooltip" id="emoji-btn" data-tooltip="Emoji" aria-label="Emojis">
-                            <i class="fas fa-smile" aria-hidden="true"></i>
+                            <i class="fas fa-face-smile" aria-hidden="true"></i>
                         </button>
                         <button type="button" class="btn-send-message" id="send-message-btn" aria-label="Enviar mensagem">
                             <i class="fas fa-paper-plane" aria-hidden="true"></i>
@@ -420,7 +420,7 @@
         <!-- Modal: Aviso de segurança da conta (após login/registo) -->
         <div id="security-warning-modal" class="modal security-warning-modal hidden" role="dialog" aria-modal="true" aria-labelledby="security-warning-title">
             <div class="security-warning-card">
-                <div class="security-warning-icon" aria-hidden="true"><i class="fas fa-shield-alt"></i></div>
+                <div class="security-warning-icon" aria-hidden="true"><i class="fas fa-shield-halved"></i></div>
                 <h2 id="security-warning-title" class="security-warning-title">Segurança da conta</h2>
                 <p class="security-warning-text">Recomendamos que ative uma senha e reveja as opções de privacidade para proteger a sua conta LIBERTY.</p>
                 <div class="security-warning-actions">
@@ -441,7 +441,7 @@
             <div class="modal-header">
                 <h2 id="create-server-title">Create a Server</h2>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
@@ -489,7 +489,7 @@
             <div class="modal-header">
                 <h2 id="create-group-title">Create Group</h2>
                 <button class="btn-close modal-close-btn" data-close="create-group-modal" aria-label="Fechar">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
@@ -518,7 +518,7 @@
             <div class="modal-header">
                 <h2 id="user-settings-title">Configurações do perfil</h2>
                 <button class="btn-close modal-close-btn" data-close="user-settings-modal" aria-label="Fechar">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
@@ -544,13 +544,13 @@
                 <h2 id="create-channel-title">Adicionar</h2>
                 <p class="add-modal-subtitle">Crie um canal de texto/voz ou uma categoria para organizar.</p>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
                 <div class="add-modal-tabs" role="tablist">
                     <button type="button" class="add-tab active" data-add-tab="channel" role="tab" aria-selected="true">
-                        <i class="fas fa-hashtag" aria-hidden="true"></i> Canal
+                        <i class="fas fa-message" aria-hidden="true"></i> Canal
                     </button>
                     <button type="button" class="add-tab" data-add-tab="category" role="tab" aria-selected="false">
                         <i class="fas fa-folder" aria-hidden="true"></i> Categoria
@@ -563,12 +563,12 @@
                             <div class="add-channel-type-options" role="radiogroup" aria-label="Tipo de canal">
                                 <label class="add-type-option active">
                                     <input type="radio" name="add-channel-type" value="text" checked>
-                                    <span class="add-type-icon"><i class="fas fa-hashtag"></i></span>
+                                    <span class="add-type-icon"><i class="fas fa-message"></i></span>
                                     <span class="add-type-text">TEXTO<br><small>Conversas por mensagens</small></span>
                                 </label>
                                 <label class="add-type-option">
                                     <input type="radio" name="add-channel-type" value="voice">
-                                    <span class="add-type-icon"><i class="fas fa-volume-up"></i></span>
+                                    <span class="add-type-icon"><i class="fas fa-tower-broadcast"></i></span>
                                     <span class="add-type-text">VOZ<br><small>Chamadas e áudio</small></span>
                                 </label>
                             </div>
@@ -576,7 +576,7 @@
                         <div class="form-group">
                             <label for="add-channel-name" class="form-label-upper">NOME DO CANAL</label>
                             <div class="input-wrapper add-channel-name-wrap">
-                                <i class="fas fa-hashtag" aria-hidden="true"></i>
+                                <i class="fas fa-message" aria-hidden="true"></i>
                                 <input type="text" id="add-channel-name" placeholder="ex: geral, regras, off-topic" maxlength="100" required>
                             </div>
                             <p class="add-channel-preview">Será exibido como <strong id="add-channel-preview-slug">#nome-do-canal</strong></p>
@@ -607,7 +607,7 @@
             <div class="modal-header">
                 <h2 id="edit-channel-title">Edit Channel</h2>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
@@ -663,7 +663,7 @@
             <div class="modal-header">
                 <h2 id="invite-title">Invite Friends</h2>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
@@ -715,7 +715,7 @@
             <div class="modal-header">
                 <h2 id="delete-message-title">Delete Message</h2>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
@@ -740,7 +740,7 @@
             <div class="modal-header">
                 <h2 id="kick-member-title">Kick Member</h2>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
@@ -764,7 +764,7 @@
             <div class="modal-header">
                 <h2 id="ban-member-title">Ban Member</h2>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
-                    <i class="fas fa-times" aria-hidden="true"></i>
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
