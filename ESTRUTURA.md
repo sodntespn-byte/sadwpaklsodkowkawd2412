@@ -6,14 +6,16 @@ Este ficheiro indica **onde está cada coisa** no repositório. Use como referê
 
 ## Visão geral
 
+**Código da aplicação Liberty:** apenas em **`backend/`** e **`frontend/`**. O resto são configuração, documentação e outros projetos.
+
 ```
 libertyrealreal/
-├── backend/          → API e servidor (Node.js)
-├── frontend/         → Interface (HTML, CSS, JS)
+├── backend/          → Toda a API e servidor (Node.js) — entrada: backend/server.js
+├── frontend/         → Toda a interface (HTML, CSS, JS, assets)
 ├── docs/             → Documentação (deploy, segurança, base de dados)
 ├── voiceroom/        → Projeto separado (salas de voz)
 ├── crates/           → Código Rust (opcional)
-└── [ficheiros raiz]  → Configuração do projeto
+└── [ficheiros raiz]  → Configuração (package.json, squarecloud.app, etc.)
 ```
 
 ---

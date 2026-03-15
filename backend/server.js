@@ -233,6 +233,10 @@ async function _dbConnect() {
       .replace(/\?channel_binding=require&?/g, '?')
       .replace(/\?&/, '?');
   }
+  // Reduzir aviso do pg sobre sslmode (verify-full semantics)
+  if (rawUrl.includes('sslmode=require') && !rawUrl.includes('uselibpqcompat')) {
+    rawUrl = rawUrl.includes('?') ? rawUrl + '&uselibpqcompat=true' : rawUrl + '?uselibpqcompat=true';
+  }
   if (!_dbPool) {
     const isLocalhost = /@localhost[\s:]|@127\.0\.0\.1[\s:]/.test(rawUrl);
     const isNeon = /\.neon\.tech\//.test(rawUrl);
@@ -703,6 +707,9 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
+// Square Cloud (e outros proxies) enviam X-Forwarded-For; o rate-limit precisa de trust proxy
+app.set('trust proxy', 1);
+
 const limiterGeneral = rateLimit({
   windowMs: 60 * 1000,
   max: config.RATE_LIMIT_MAX,
@@ -726,8 +733,14 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'sha256-iNdzJueCLgGX4W5su4mORbOameseXUZO+P+Hm0wFzX0='"],
-        connectSrc: ["'self'", 'wss:', 'ws:'],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          "'unsafe-hashes'",
+          "'sha256-iNdzJueCLgGX4W5su4mORbOameseXUZO+P+Hm0wFzX0='",
+          'https://unpkg.com',
+        ],
+        connectSrc: ["'self'", 'wss:', 'ws:', 'https://unpkg.com'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
@@ -1303,19 +1316,22 @@ async function start() {
     }
   });
 
-  // GET /api/v1/servers — lista de servidores do usuário (autenticado)
+  // GET /api/v1/servers — lista de servidores do usuário (autenticado); Liberty sempre incluído
   app.get('/api/v1/servers', auth.requireAuth, async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
     try {
       const userId = req.userId;
+      await ensureLibertyServer();
+      await ensureUserInLibertyServer(userId);
       const r = await db.query(
         `SELECT DISTINCT s.id, s.name, s.owner_id, s.created_at, s.icon_url
          FROM servers s
          LEFT JOIN chats c ON c.server_id = s.id
          LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $1::uuid
-         WHERE s.owner_id = $1::uuid OR cm.user_id = $1::uuid
+         LEFT JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $1::uuid
+         WHERE s.owner_id = $1::uuid OR cm.user_id = $1::uuid OR sm.user_id = $1::uuid
          ORDER BY s.created_at ASC`,
         [userId]
       );
