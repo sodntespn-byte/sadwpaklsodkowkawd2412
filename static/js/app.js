@@ -3436,7 +3436,6 @@ class LibertyApp {
         const descHtml = description ? this.escapeHtml(description) : 'Sem descrição';
         const descClass = description ? '' : ' empty';
 
-        const overlay = document.getElementById('modal-overlay');
         const card = document.createElement('div');
         card.className = 'profile-card profile-card-modal profile-card-full';
         card.dataset.profileUserId = userId;
