@@ -146,9 +146,25 @@ const UserAPI = {
             body: data
         });
     },
+
+    /** Definir ou alterar senha (ativar nas configurações). Se já tem senha, enviar current_password. */
+    async updatePassword(currentPassword, newPassword) {
+        return apiRequest('/users/me/password', {
+            method: 'PATCH',
+            body: { current_password: currentPassword || undefined, new_password: newPassword }
+        });
+    },
     
     async getUser(userId) {
         return apiRequest(`/users/${userId}`);
+    },
+
+    /** Envia foto de perfil (data URL base64). Retorna { avatar_url }. */
+    async uploadAvatar(imageDataUrl) {
+        return apiRequest('/users/me/avatar', {
+            method: 'POST',
+            body: { image: imageDataUrl }
+        });
     }
 };
 
@@ -412,6 +428,22 @@ const PinAPI = {
     }
 };
 
+// Call API (WebRTC — registo em BD)
+const CallAPI = {
+    async start(calleeId, chatId) {
+        return apiRequest('/calls', {
+            method: 'POST',
+            body: { callee_id: calleeId, chat_id: chatId || undefined }
+        });
+    },
+    async end(callId) {
+        return apiRequest(`/calls/${callId}`, {
+            method: 'PATCH',
+            body: { status: 'ended' }
+        });
+    }
+};
+
 // Ban API
 const BanAPI = {
     async list(serverId) {
@@ -491,5 +523,6 @@ window.API = {
     Activity: ActivityAPI,
     Reaction: ReactionAPI,
     Pin: PinAPI,
-    Ban: BanAPI
+    Ban: BanAPI,
+    Call: CallAPI
 };

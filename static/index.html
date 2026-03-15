@@ -67,7 +67,7 @@
                         data-tab="register">Registrar</button>
             </div>
 
-            <!-- Login: Nome de Usuário + Senha opcional (se definida nas configurações) -->
+            <!-- Login: apenas Nome de Usuário -->
             <form id="login-form" class="auth-form active" role="tabpanel" aria-labelledby="tab-login" novalidate>
                 <div class="form-group">
                     <label for="login-username">Nome de Usuário</label>
@@ -82,27 +82,16 @@
                                maxlength="32">
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="login-password">Senha <span class="optional">(opcional)</span></label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-lock" aria-hidden="true"></i>
-                        <input type="password"
-                               id="login-password"
-                               placeholder="••••••••"
-                               autocomplete="current-password"
-                               maxlength="128">
-                    </div>
-                </div>
                 <button type="submit" class="btn btn-primary btn-full">
                     <span>Entrar</span>
                     <i class="fas fa-arrow-right" aria-hidden="true"></i>
                 </button>
                 <p class="form-footer">
-                    <small>Sem senha? Entre só com o nome. Defina uma senha depois em Configurações.</small>
+                    <small>Pode ativar uma senha depois em Configurações → Autenticação e Segurança.</small>
                 </p>
             </form>
 
-            <!-- Registro: apenas Nome de Usuário (senha opcional, pode definir depois) -->
+            <!-- Registro: apenas Nome de Usuário -->
             <form id="register-form" class="auth-form" role="tabpanel" aria-labelledby="tab-register" novalidate>
                 <div class="form-group">
                     <label for="register-username">Nome de Usuário</label>
@@ -117,23 +106,12 @@
                                maxlength="32">
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="register-password">Senha <span class="optional">(opcional)</span></label>
-                    <div class="input-wrapper">
-                        <i class="fas fa-lock" aria-hidden="true"></i>
-                        <input type="password"
-                               id="register-password"
-                               placeholder="••••••••"
-                               autocomplete="new-password"
-                               maxlength="128">
-                    </div>
-                </div>
                 <button type="submit" class="btn btn-primary btn-full">
                     <span>Registrar e Entrar</span>
                     <i class="fas fa-arrow-right" aria-hidden="true"></i>
                 </button>
                 <p class="form-footer">
-                    <small>Você pode definir uma senha depois em Configurações.</small>
+                    <small>Pode ativar uma senha depois em Configurações → Autenticação e Segurança.</small>
                 </p>
             </form>
         </div>
@@ -333,18 +311,31 @@
                 </div>
             </section>
 
-            <!-- Voice Call View (shown when in a voice channel) -->
-            <section id="voice-call-view" class="voice-call-view hidden" aria-label="Chamada de voz">
-                <div class="voice-call-header">
-                    <span class="voice-call-live"><i class="fas fa-circle"></i> LIVE</span>
-                    <h2 id="voice-call-channel-name" class="voice-call-title">Voice Channel</h2>
-                    <p class="voice-call-subtitle">Conversa por voz — quem entrar aparecerá aqui</p>
+            <!-- WebRTC Call View (video + voice + screen share) -->
+            <section id="voice-call-view" class="webrtc-call-view hidden" aria-label="Chamada de vídeo e voz">
+                <div class="webrtc-call-stage">
+                    <div class="webrtc-remote-wrap">
+                        <video id="webrtc-remote-video" class="webrtc-video hidden" autoplay playsinline></video>
+                        <span id="webrtc-screen-badge" class="webrtc-screen-badge hidden"><i class="fas fa-desktop"></i> Compartilhando tela</span>
+                        <div class="webrtc-remote-placeholder" id="webrtc-remote-placeholder">
+                            <i class="fas fa-user-friends webrtc-placeholder-icon"></i>
+                            <span class="webrtc-placeholder-text">Aguardando a outra pessoa...</span>
+                        </div>
+                    </div>
+                    <div class="webrtc-local-pip-wrap">
+                        <video id="webrtc-local-video" class="webrtc-video" autoplay playsinline muted></video>
+                        <span class="webrtc-pip-label">Você</span>
+                    </div>
+                    <div class="webrtc-call-header-bar">
+                        <span class="webrtc-live-dot"><i class="fas fa-circle"></i> AO VIVO</span>
+                        <h2 id="voice-call-channel-name" class="webrtc-call-title">Chamada</h2>
+                    </div>
                 </div>
-                <div class="voice-call-participants" id="voice-call-participants"></div>
-                <div class="voice-call-controls">
-                    <button type="button" class="voice-call-btn voice-call-btn-mute" id="voice-call-mute" title="Mutar"><i class="fas fa-microphone"></i><span>Mute</span></button>
-                    <button type="button" class="voice-call-btn voice-call-btn-deafen" id="voice-call-deafen" title="Silenciar áudio"><i class="fas fa-headphones"></i><span>Deafen</span></button>
-                    <button type="button" class="voice-call-btn voice-call-btn-disconnect" id="voice-call-disconnect" title="Sair"><i class="fas fa-phone-slash"></i><span>Disconnect</span></button>
+                <div class="webrtc-call-controls">
+                    <button type="button" class="webrtc-ctrl-btn" id="voice-call-mute" title="Mutar"><i class="fas fa-microphone"></i><span>Mute</span></button>
+                    <button type="button" class="webrtc-ctrl-btn" id="voice-call-video" title="Desligar câmara"><i class="fas fa-video"></i><span>Vídeo</span></button>
+                    <button type="button" class="webrtc-ctrl-btn" id="voice-call-screenshare" title="Compartilhar tela"><i class="fas fa-desktop"></i><span>Compartilhar tela</span></button>
+                    <button type="button" class="webrtc-ctrl-btn webrtc-ctrl-disconnect" id="voice-call-disconnect" title="Desligar"><i class="fas fa-phone-slash"></i><span>Desligar</span></button>
                 </div>
             </section>
 

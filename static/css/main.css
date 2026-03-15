@@ -99,7 +99,10 @@ html, body {
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: var(--primary-black);
+    background: #000;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     color: var(--text-primary);
     font-size: 16px;
     line-height: 1.5;
@@ -170,7 +173,7 @@ a:hover {
 .loading-screen {
     position: fixed;
     inset: 0;
-    background: var(--primary-black);
+    background: #000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1230,13 +1233,7 @@ a:hover {
     visibility: visible;
 }
 .message-group-bar {
-    position: absolute;
-    left: 0;
-    top: 8px;
-    bottom: 8px;
-    width: 3px;
-    border-radius: 9999px;
-    opacity: 0.5;
+    display: none;
 }
 .message-group .message-avatar {
     margin-top: 0;
@@ -1263,9 +1260,6 @@ a:hover {
     object-fit: cover;
     border-radius: 50%;
     display: block;
-}
-.message-group--continuation .message-group-bar {
-    opacity: 0;
 }
 .message-group--continuation .message-avatar {
     visibility: hidden;
@@ -1526,6 +1520,21 @@ a:hover {
 .member-action-btn:hover {
     color: #fff;
     background: rgba(255, 255, 255, 0.08);
+}
+
+/* Bolinha vermelha de não lida na lista de DMs (aba esquerda) */
+.dm-unread-dot {
+    width: 10px;
+    height: 10px;
+    min-width: 10px;
+    border-radius: 50%;
+    background: #e74c3c;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+.dm-list-item-unread .dm-list-item-name {
+    color: var(--text-primary);
+    font-weight: 600;
 }
 
 .member-category {

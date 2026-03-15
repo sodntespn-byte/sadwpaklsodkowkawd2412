@@ -74,6 +74,42 @@
 .profile-card-btn:disabled{opacity:.6;cursor:default}
 .profile-card-close{width:100%;padding:10px 16px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text-primary);font-size:14px;cursor:pointer;font-family:inherit}
 .profile-card-close:hover{background:var(--medium-gray);border-color:var(--primary-yellow)}
+.profile-card-full{pointer-events:auto;align-items:center;justify-content:center;padding:24px}
+.profile-card-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:0}
+.profile-card-full .profile-card-modal-inner{position:relative;z-index:1;display:flex;max-width:90vw;width:720px;max-height:85vh;overflow:hidden;border-radius:16px;text-align:left;padding:0}
+.profile-card-two-panels{background:rgba(24,21,18,.98);border:1px solid rgba(255,215,0,.2);box-shadow:0 0 60px rgba(255,215,0,.12)}
+.profile-card-close-btn{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;transition:all .15s}
+.profile-card-close-btn:hover{background:rgba(255,255,255,.12);color:var(--text-primary)}
+.profile-card-left{flex:0 0 320px;min-width:0;padding:0 20px 24px;overflow-y:auto;border-right:1px solid rgba(255,215,0,.08)}
+.profile-card-banner-full{height:80px;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow));border-radius:16px 16px 0 0;margin:0 -20px 0 -20px}
+.profile-card-avatar-wrap-full{margin-top:-40px;margin-bottom:12px;text-align:center}
+.profile-card-avatar-full{width:88px;height:88px;margin:0 auto;border-radius:50%;border:4px solid rgba(24,21,18,.98);font-size:32px}
+.profile-card-display-name{font-size:18px;font-weight:700;color:var(--text-primary);margin:0 0 2px}
+.profile-card-tag{font-size:13px;color:var(--text-muted);margin:0 0 14px}
+.profile-card-actions-row{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.profile-card-btn-msg{flex:1;min-width:100px;height:36px;border-radius:8px;font-size:13px;padding:0 14px;background:var(--primary-blue, #5865f2);border:none;color:#fff}
+.profile-card-btn-msg:hover:not(:disabled){filter:brightness(1.1)}
+.profile-card-btn-icon{width:36px;height:36px;flex-shrink:0}
+.profile-card-section{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,215,0,.06)}
+.profile-card-section h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary);margin:0 0 8px}
+.profile-links-list{display:flex;flex-direction:column;gap:6px}
+.profile-link-item{font-size:13px;color:var(--primary-yellow);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.profile-link-item:hover{text-decoration:underline}
+.profile-links-empty{font-size:12px;color:var(--text-muted);margin:0}
+.profile-links-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.profile-card-link-add{padding:6px 12px;border-radius:8px;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.1);color:var(--text-primary);font-family:inherit}
+.profile-card-link-add:hover{border-color:var(--primary-yellow);color:var(--primary-yellow)}
+.profile-card-link-add.secondary{background:transparent}
+.profile-card-note-input{width:100%;padding:8px 10px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px;font-family:inherit;resize:none;height:56px;box-sizing:border-box}
+.profile-card-note-input:focus{outline:none;border-color:var(--primary-yellow)}
+.profile-card-right{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;padding:16px 20px 24px}
+.profile-card-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid rgba(255,215,0,.08)}
+.profile-card-tab{padding:8px 12px;font-size:13px;color:var(--text-muted);background:none;border:none;cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s}
+.profile-card-tab:hover{color:var(--text-secondary)}
+.profile-card-tab.active{color:var(--primary-yellow);border-bottom-color:var(--primary-yellow)}
+.profile-card-tab-content{flex:1;overflow-y:auto;min-height:0}
+.profile-card-tab-content h4{font-size:12px;font-weight:600;color:var(--text-secondary);margin:0 0 8px}
+.profile-card-activity-empty{font-size:13px;color:var(--text-muted);margin:0}
 .settings-overlay{position:fixed;inset:0;background:var(--primary-black);z-index:3500;display:flex;animation:settingsFadeIn .25s var(--ease-out-expo)}
 @keyframes settingsFadeIn{from{opacity:0}to{opacity:1}}
 .settings-overlay .settings-sidebar{flex:0 0 auto;background:var(--secondary-black);display:flex;justify-content:flex-end;overflow-y:auto;min-width:218px;padding-left:max(20px,calc(50vw - 480px))}
@@ -98,6 +134,22 @@
 .settings-overlay .settings-account-hero-name{font-size:18px;font-weight:700;color:var(--primary-black);flex:1}
 .settings-overlay .settings-account-hero .btn-change-photo{background:var(--primary-black);color:var(--primary-yellow);border:none;padding:8px 14px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .settings-overlay .settings-account-hero .btn-change-photo:hover{background:rgba(0,0,0,.8)}
+.settings-overlay .settings-avatar-card{background:var(--secondary-black);border:1px solid rgba(255,215,0,.1);border-radius:var(--radius-lg);padding:24px;margin-bottom:24px}
+.settings-overlay .settings-avatar-preview-wrap{position:relative;width:160px;height:160px;margin:0 auto 20px;border-radius:50%;overflow:hidden;border:3px solid rgba(255,215,0,.25);background:var(--dark-gray);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .2s,box-shadow .2s}
+.settings-overlay .settings-avatar-preview-wrap:hover{border-color:var(--primary-yellow);box-shadow:0 0 24px rgba(255,215,0,.2)}
+.settings-overlay .settings-avatar-preview-wrap.drag-over{border-color:var(--primary-yellow);background:rgba(255,215,0,.08)}
+.settings-overlay .settings-avatar-preview{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:700;color:var(--text-secondary);position:relative;z-index:1}
+.settings-overlay .settings-avatar-preview img{width:100%;height:100%;object-fit:cover}
+.settings-overlay .settings-avatar-overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;opacity:0;transition:opacity .2s;z-index:2;color:#fff;font-size:13px;font-weight:600}
+.settings-overlay .settings-avatar-preview-wrap:hover .settings-avatar-overlay{opacity:1}
+.settings-overlay .settings-avatar-overlay i{font-size:28px;opacity:.9}
+.settings-overlay .settings-avatar-file-input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;z-index:3}
+.settings-overlay .settings-avatar-actions{display:flex;flex-direction:column;align-items:center;gap:14px}
+.settings-overlay .settings-avatar-btn-file{cursor:pointer;margin:0}
+.settings-overlay .settings-avatar-divider{font-size:12px;color:var(--text-muted);text-transform:lowercase}
+.settings-overlay .settings-avatar-url-row{display:flex;gap:10px;width:100%;max-width:400px;flex-wrap:wrap}
+.settings-overlay .settings-avatar-url-input{flex:1;min-width:180px;padding:10px 14px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit}
+.settings-overlay .settings-avatar-url-input:focus{outline:none;border-color:var(--primary-yellow)}
 .settings-overlay .settings-subscription-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px}
 .settings-overlay .settings-subscription-label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--text-primary)}
 .settings-overlay .settings-subscription-label i{color:var(--primary-yellow)}
@@ -316,6 +368,42 @@ class LibertyApp {
         this.init();
     }
 
+    applyBackground() {
+        const type = localStorage.getItem('liberty-bg-type') || 'default';
+        const body = document.body;
+        body.style.backgroundImage = '';
+        body.style.backgroundSize = '';
+        body.style.backgroundPosition = '';
+        if (type === 'default') {
+            body.style.background = '#000';
+            return;
+        }
+        if (type === 'solid') {
+            const color = localStorage.getItem('liberty-bg-solid') || '#000000';
+            body.style.background = color;
+            return;
+        }
+        if (type === 'gradient') {
+            try {
+                const g = JSON.parse(localStorage.getItem('liberty-bg-gradient') || '{}');
+                const angle = g.angle ?? 135;
+                const c1 = g.color1 || '#0d0b09';
+                const c2 = g.color2 || '#1a1814';
+                body.style.background = `linear-gradient(${angle}deg, ${c1}, ${c2})`;
+            } catch (_) { body.style.background = '#000'; }
+            return;
+        }
+        if (type === 'image') {
+            const url = (localStorage.getItem('liberty-bg-image') || '').trim();
+            body.style.background = '#000';
+            if (url) {
+                body.style.backgroundImage = `url(${url})`;
+                body.style.backgroundSize = 'cover';
+                body.style.backgroundPosition = 'center';
+            }
+        }
+    }
+
     applyTheme(themeClass) {
         const body = document.body;
         body.classList.remove('Dark-theme', 'Light-theme', 'Dark-Accent-theme');
@@ -335,6 +423,7 @@ class LibertyApp {
     async init() {
         try {
             this.applyTheme(localStorage.getItem('liberty-theme') || 'Dark-theme');
+            this.applyBackground();
             await this.simulateLoading();
             if (typeof API !== 'undefined' && API.Token && API.Token.isAuthenticated()) {
                 try {
@@ -408,6 +497,10 @@ class LibertyApp {
         }, 60 * 1000);
     }
 
+    _updateUserAvatarInUI() {
+        this.updateUserPanel();
+    }
+
     updateUserPanel() {
         if (!this.currentUser) return;
         const nameEl = document.getElementById('user-name');
@@ -418,8 +511,9 @@ class LibertyApp {
             const letter = (this.currentUser.username || 'U').charAt(0).toUpperCase();
             const statusColor = this.currentStatus === 'invisible' ? 'var(--status-offline)' : `var(--status-${this.currentStatus})`;
             avatarEl.style.setProperty('--status-color', statusColor);
-            avatarEl.innerHTML = this.currentUser.avatar
-                ? `<img src="${this.escapeHtml(this.currentUser.avatar)}" alt="${this.escapeHtml(this.currentUser.username)}"><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`
+            const avatarSrc = this.currentUser.avatar_url || this.currentUser.avatar;
+            avatarEl.innerHTML = avatarSrc
+                ? `<img src="${this.escapeHtml(avatarSrc)}" alt="${this.escapeHtml(this.currentUser.username)}"><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`
                 : `<span>${letter}</span><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`;
         }
         if (statusEl) {
@@ -459,8 +553,6 @@ class LibertyApp {
         });
         document.getElementById('login-form')?.addEventListener('submit', e => { e.preventDefault(); this.handleLogin(); });
         document.getElementById('register-form')?.addEventListener('submit', e => { e.preventDefault(); this.handleRegister(); });
-        const pw = document.getElementById('register-password');
-        if (pw) pw.addEventListener('input', () => this.updatePasswordStrength(pw.value));
 
         // Home button
         const homeBtn = document.querySelector('.server-item.home');
@@ -720,7 +812,56 @@ class LibertyApp {
         this._setupVoiceCallButton();
     }
 
-    _voiceCallState = { pc: null, stream: null, targetUserId: null, pendingOffer: null, incomingFromUserId: null };
+    _voiceCallState = { pc: null, stream: null, targetUserId: null, pendingOffer: null, incomingFromUserId: null, displayStream: null, videoEnabled: true, callId: null };
+
+    _webrtcClearRemote() {
+        const remoteV = document.getElementById('webrtc-remote-video');
+        const remoteS = document.getElementById('webrtc-remote-screen');
+        const screenWrap = document.getElementById('webrtc-remote-screen-wrap');
+        const placeholder = document.getElementById('webrtc-remote-placeholder');
+        if (remoteV) { remoteV.srcObject = null; remoteV.classList.add('hidden'); }
+        if (remoteS) { remoteS.srcObject = null; }
+        if (screenWrap) screenWrap.classList.add('hidden');
+        if (placeholder) placeholder.classList.remove('hidden');
+    }
+
+    _attachRemoteTrack(e) {
+        const stream = e.streams && e.streams[0];
+        if (!stream) return;
+        const track = e.track;
+        if (track.kind === 'audio') {
+            const audio = document.createElement('audio');
+            audio.autoplay = true;
+            audio.srcObject = stream;
+            document.getElementById('webrtc-remote-wrap')?.appendChild(audio);
+            return;
+        }
+        if (track.kind === 'video') {
+            const isScreen = track.label.toLowerCase().includes('screen');
+            const placeholder = document.getElementById('webrtc-remote-placeholder');
+            if (placeholder) placeholder.classList.add('hidden');
+            if (isScreen) {
+                const wrap = document.getElementById('webrtc-remote-screen-wrap');
+                const vid = document.getElementById('webrtc-remote-screen');
+                if (vid) { vid.srcObject = stream; vid.classList.remove('hidden'); }
+                if (wrap) wrap.classList.remove('hidden');
+            } else {
+                const vid = document.getElementById('webrtc-remote-video');
+                if (vid) { vid.srcObject = stream; vid.classList.remove('hidden'); }
+            }
+            track.onended = () => {
+                if (isScreen) {
+                    const wrap = document.getElementById('webrtc-remote-screen-wrap');
+                    const vid = document.getElementById('webrtc-remote-screen');
+                    if (vid) vid.srcObject = null;
+                    if (wrap) wrap.classList.add('hidden');
+                } else {
+                    const vid = document.getElementById('webrtc-remote-video');
+                    if (vid) { vid.srcObject = null; vid.classList.add('hidden'); }
+                }
+            };
+        }
+    }
 
     _setupVoiceCallHandlers() {
         if (!this.gateway) return;
@@ -751,31 +892,23 @@ class LibertyApp {
                     this._voiceCallState.stream.getTracks().forEach((t) => t.stop());
                     this._voiceCallState.stream = null;
                 }
+                this._webrtcClearRemote();
                 const voiceView = document.getElementById('voice-call-view');
                 if (voiceView) voiceView.classList.add('hidden');
-                const participants = document.getElementById('voice-call-participants');
-                if (participants) participants.innerHTML = '';
+                const localV = document.getElementById('webrtc-local-video');
+                if (localV) localV.srcObject = null;
             }
             this.showToast('Chamada recusada.', 'info');
         });
         g.on('stream_started', () => {
-            const participants = document.getElementById('voice-call-participants');
-            if (!participants) return;
-            let el = document.getElementById('voice-call-remote-stream');
-            if (!el) {
-                el = document.createElement('div');
-                el.id = 'voice-call-remote-stream';
-                el.className = 'voice-call-remote-stream-live';
-                el.innerHTML = '<span class="voice-call-live-badge"><i class="fas fa-circle"></i> LIVE</span><div class="voice-call-remote-video"></div>';
-                const ref = participants.firstChild;
-                if (ref && participants.contains(ref)) participants.insertBefore(el, ref);
-                else participants.appendChild(el);
-            }
-            el.classList.remove('hidden');
+            const wrap = document.getElementById('webrtc-remote-screen-wrap');
+            if (wrap) wrap.classList.remove('hidden');
         });
         g.on('stream_stopped', () => {
-            const el = document.getElementById('voice-call-remote-stream');
-            if (el) el.classList.add('hidden');
+            const wrap = document.getElementById('webrtc-remote-screen-wrap');
+            const vid = document.getElementById('webrtc-remote-screen');
+            if (vid) vid.srcObject = null;
+            if (wrap) wrap.classList.add('hidden');
         });
     }
 
@@ -815,24 +948,16 @@ class LibertyApp {
         this._voiceCallState.pendingOffer = null;
         this._voiceCallState.targetUserId = from;
         try {
-            this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         } catch (e) {
-            this.showToast('Permissão de microfone negada.', 'error');
+            this.showToast('Permissão de câmara/microfone negada.', 'error');
             if (this.gateway) this.gateway.send('webrtc_reject', { target_user_id: from });
             return;
         }
         const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
         this._voiceCallState.pc = pc;
-        pc.addTrack(this._voiceCallState.stream.getTracks()[0], this._voiceCallState.stream);
-        pc.ontrack = (e) => {
-            const el = document.getElementById('voice-call-participants');
-            if (el) {
-                const audio = document.createElement('audio');
-                audio.autoplay = true;
-                audio.srcObject = e.streams[0];
-                el.appendChild(audio);
-            }
-        };
+        this._voiceCallState.stream.getTracks().forEach((track) => pc.addTrack(track, this._voiceCallState.stream));
+        pc.ontrack = (e) => this._attachRemoteTrack(e);
         pc.onicecandidate = (e) => {
             if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: from, payload: e.candidate });
         };
@@ -843,9 +968,14 @@ class LibertyApp {
             .catch((err) => console.error('Voice answer error', err));
         const voiceView = document.getElementById('voice-call-view');
         if (voiceView) voiceView.classList.remove('hidden');
-        const participants = document.getElementById('voice-call-participants');
-        if (participants) participants.innerHTML = '<p class="voice-call-subtitle">Conectado.</p>';
+        this._webrtcClearRemote();
+        const localV = document.getElementById('webrtc-local-video');
+        if (localV) localV.srcObject = this._voiceCallState.stream;
+        const titleEl = document.getElementById('voice-call-channel-name');
+        const other = (this.currentChannel?.recipients || []).find((r) => r.id === from) || this.dmChannels.find(c => c.recipients?.[0]?.id === from)?.recipients?.[0];
+        if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
         this._updateVoiceCallParticipantsBar();
+        this._updateWebrtcControlButtons();
     }
 
     _rejectIncomingCall() {
@@ -863,6 +993,9 @@ class LibertyApp {
         const muteBtn = document.getElementById('voice-call-mute');
         if (!btn) return;
         const closeVoiceCall = () => {
+            if (this._voiceCallState.callId && typeof API !== 'undefined' && API.Call) {
+                API.Call.end(this._voiceCallState.callId).catch(() => {});
+            }
             if (this._voiceCallState.stream) {
                 this._voiceCallState.stream.getTracks().forEach((t) => t.stop());
                 this._voiceCallState.stream = null;
@@ -877,19 +1010,27 @@ class LibertyApp {
             }
             this._voiceCallState.targetUserId = null;
             this._voiceCallState.pendingOffer = null;
+            this._voiceCallState.callId = null;
             if (voiceView) voiceView.classList.add('hidden');
-            const participants = document.getElementById('voice-call-participants');
-            if (participants) participants.innerHTML = '';
+            this._webrtcClearRemote();
+            const localV = document.getElementById('webrtc-local-video');
+            if (localV) localV.srcObject = null;
             const screenshareBtn = document.getElementById('voice-call-screenshare');
             if (screenshareBtn) {
                 screenshareBtn.classList.remove('active');
                 screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
                 screenshareBtn.querySelector('i').className = 'fas fa-desktop';
             }
+            const videoBtn = document.getElementById('voice-call-video');
+            if (videoBtn) {
+                videoBtn.classList.remove('off');
+                videoBtn.querySelector('i').className = 'fas fa-video';
+                videoBtn.querySelector('span').textContent = 'Vídeo';
+            }
         };
         btn.addEventListener('click', async () => {
             if (!this.currentUser?.id) {
-                this.showToast('Faça login para iniciar uma chamada de voz.', 'error');
+                this.showToast('Faça login para iniciar uma chamada.', 'error');
                 return;
             }
             const ch = this.currentChannel;
@@ -897,27 +1038,20 @@ class LibertyApp {
             const others = (ch?.recipients || []).filter((r) => r.id !== this.currentUser.id);
             const targetId = others[0]?.id || null;
             if (!isDMOrGroup || !targetId) {
-                this.showToast('Abra uma DM ou grupo com alguém para ligar.', 'error');
+                this.showToast('Abra uma DM com alguém para ligar.', 'error');
                 return;
             }
             try {
-                this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
             } catch (e) {
-                this.showToast('Permissão de microfone negada ou indisponível.', 'error');
+                this.showToast('Permissão de câmara/microfone negada ou indisponível.', 'error');
                 return;
             }
             this._voiceCallState.targetUserId = targetId;
+            this._voiceCallState.videoEnabled = true;
             const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            pc.addTrack(this._voiceCallState.stream.getTracks()[0], this._voiceCallState.stream);
-            pc.ontrack = (e) => {
-                const el = document.getElementById('voice-call-participants');
-                if (el) {
-                    const audio = document.createElement('audio');
-                    audio.autoplay = true;
-                    audio.srcObject = e.streams[0];
-                    el.appendChild(audio);
-                }
-            };
+            this._voiceCallState.stream.getTracks().forEach((track) => pc.addTrack(track, this._voiceCallState.stream));
+            pc.ontrack = (e) => this._attachRemoteTrack(e);
             pc.onicecandidate = (e) => {
                 if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: e.candidate });
             };
@@ -927,13 +1061,36 @@ class LibertyApp {
                 .then(() => { if (this.gateway) this.gateway.send('webrtc_offer', { target_user_id: this._voiceCallState.targetUserId, payload: pc.localDescription }); })
                 .catch((err) => console.error('Voice offer error', err));
             if (voiceView) voiceView.classList.remove('hidden');
-            const participants = document.getElementById('voice-call-participants');
-            if (participants) participants.innerHTML = '<p class="voice-call-subtitle">Chamando...</p>';
+            this._webrtcClearRemote();
+            const localV = document.getElementById('webrtc-local-video');
+            if (localV) localV.srcObject = this._voiceCallState.stream;
+            const titleEl = document.getElementById('voice-call-channel-name');
+            const other = (this.currentChannel?.recipients || []).find((r) => r.id === targetId);
+            if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
             this._updateVoiceCallParticipantsBar();
+            this._updateWebrtcControlButtons();
+            if (typeof API !== 'undefined' && API.Call) {
+                API.Call.start(targetId, ch?.id).then((r) => { if (r && r.id) this._voiceCallState.callId = r.id; }).catch(() => {});
+            }
         });
         if (disconnectBtn) disconnectBtn.addEventListener('click', closeVoiceCall);
         if (muteBtn) muteBtn.addEventListener('click', () => {
-            if (this._voiceCallState.stream) this._voiceCallState.stream.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
+            if (this._voiceCallState.stream) {
+                this._voiceCallState.stream.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
+                this._updateWebrtcControlButtons();
+            }
+        });
+        const videoBtn = document.getElementById('voice-call-video');
+        if (videoBtn) videoBtn.addEventListener('click', () => {
+            if (!this._voiceCallState.stream || !this._voiceCallState.pc) return;
+            const videoTracks = this._voiceCallState.stream.getVideoTracks();
+            if (videoTracks.length === 0) return;
+            this._voiceCallState.videoEnabled = !this._voiceCallState.videoEnabled;
+            const track = videoTracks[0];
+            track.enabled = this._voiceCallState.videoEnabled;
+            const localV = document.getElementById('webrtc-local-video');
+            if (localV) localV.style.opacity = this._voiceCallState.videoEnabled ? '1' : '0.3';
+            this._updateWebrtcControlButtons();
         });
         const screenshareBtn = document.getElementById('voice-call-screenshare');
         if (screenshareBtn) {
@@ -945,7 +1102,8 @@ class LibertyApp {
                     this._voiceCallState.displayStream = null;
                     const senders = pc.getSenders();
                     const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
-                    if (videoSender) videoSender.replaceTrack(null);
+                    if (videoSender) videoSender.replaceTrack(this._voiceCallState.videoEnabled && this._voiceCallState.stream ? this._voiceCallState.stream.getVideoTracks()[0] || null : null);
+                    if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
                     screenshareBtn.classList.remove('active');
                     screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
                     screenshareBtn.querySelector('i').className = 'fas fa-desktop';
@@ -970,6 +1128,10 @@ class LibertyApp {
                     displayStream.getVideoTracks()[0].onended = () => {
                         if (this._voiceCallState.displayStream === displayStream) {
                             this._voiceCallState.displayStream = null;
+                            const senders = pc.getSenders();
+                            const vs = senders.find((s) => s.track && s.track.kind === 'video');
+                            if (vs && this._voiceCallState.stream) vs.replaceTrack(this._voiceCallState.stream.getVideoTracks()[0] || null);
+                            if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
                             screenshareBtn.classList.remove('active');
                             screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
                             screenshareBtn.querySelector('i').className = 'fas fa-desktop';
@@ -982,6 +1144,23 @@ class LibertyApp {
                     this.showToast(err.name === 'NotAllowedError' ? 'Compartilhamento de tela cancelado.' : 'Não foi possível compartilhar a tela.', 'error');
                 }
             });
+        }
+    }
+
+    _updateWebrtcControlButtons() {
+        const muteBtn = document.getElementById('voice-call-mute');
+        const videoBtn = document.getElementById('voice-call-video');
+        if (muteBtn && this._voiceCallState.stream) {
+            const enabled = this._voiceCallState.stream.getAudioTracks().some((t) => t.enabled);
+            muteBtn.classList.toggle('muted', !enabled);
+            muteBtn.querySelector('i').className = enabled ? 'fas fa-microphone' : 'fas fa-microphone-slash';
+            muteBtn.querySelector('span').textContent = enabled ? 'Mute' : 'Desmutar';
+        }
+        if (videoBtn) {
+            const on = this._voiceCallState.videoEnabled !== false;
+            videoBtn.classList.toggle('off', !on);
+            videoBtn.querySelector('i').className = on ? 'fas fa-video' : 'fas fa-video-slash';
+            videoBtn.querySelector('span').textContent = on ? 'Vídeo' : 'Ligar vídeo';
         }
     }
 
@@ -1057,37 +1236,20 @@ class LibertyApp {
 
     async handleRegister() {
         const usernameEl = document.getElementById('register-username');
-        const passwordEl = document.getElementById('register-password');
         if (!usernameEl) return;
         const username = usernameEl.value.trim();
-        const password = passwordEl ? passwordEl.value : '';
         const btn = document.querySelector('#register-form .btn-primary');
         if (!username) return;
         try {
             this._setButtonLoading(btn, true);
             const deviceId = this.getOrCreateDeviceId();
-            const result = await API.Auth.register(username, null, password || undefined, deviceId);
+            const result = await API.Auth.register(username, null, undefined, deviceId);
             this.showSecurityWarningThenConnect(result);
         } catch (error) {
-            this.showToast(error.message || 'Registration failed', 'error');
+            this.showToast(error.message || 'Falha ao registrar', 'error');
         } finally {
             this._setButtonLoading(btn, false);
         }
-    }
-
-    updatePasswordStrength(password) {
-        const bar = document.querySelector('.strength-bar');
-        if (!bar) return;
-        let score = 0;
-        if (password.length >= 8) score++;
-        if (password.length >= 12) score++;
-        if (/[A-Z]/.test(password)) score++;
-        if (/[0-9]/.test(password)) score++;
-        if (/[^A-Za-z0-9]/.test(password)) score++;
-        const colors = ['#F44336', '#FF9800', '#FFEB3B', '#8BC34A', '#4CAF50'];
-        const widths = ['20%', '40%', '60%', '80%', '100%'];
-        bar.style.width = widths[score - 1] || '0%';
-        bar.style.background = colors[score - 1] || 'transparent';
     }
 
     _setButtonLoading(btn, loading) {
@@ -1256,6 +1418,7 @@ class LibertyApp {
             return;
         }
 
+        dmList.innerHTML = '';
         this.dmChannels.forEach((dm, idx) => {
             const isGroup = dm.type === 'group_dm';
             const displayName = isGroup ? (dm.name || (dm.recipients || []).map((r) => r.username).join(', ')) : (dm.recipients?.[0]?.username || 'Unknown');
@@ -1268,12 +1431,15 @@ class LibertyApp {
             if (recipient.id) item.dataset.recipientId = recipient.id;
             const letter = displayName.charAt(0).toUpperCase();
             const bgColor = avatarColors[idx % avatarColors.length];
+            const hasUnread = dm.id && this.unreadChannels.has(dm.id);
+            if (hasUnread) item.classList.add('dm-list-item-unread');
             item.innerHTML = `
                 <div class="dm-list-item-avatar ${recipient.status || 'offline'}" style="background:${bgColor}"><span style="color:#fff">${letter}</span></div>
                 <div class="dm-list-item-info">
                     <div class="dm-list-item-name">${this.escapeHtml(displayName)}</div>
                     <div class="dm-list-item-msg"></div>
                 </div>
+                ${hasUnread ? '<span class="dm-unread-dot" aria-label="Não lida"></span>' : ''}
             `;
             item.addEventListener('click', async () => {
                 dmList.querySelectorAll('.dm-list-item').forEach(d => d.classList.remove('active'));
@@ -1281,7 +1447,7 @@ class LibertyApp {
                 item.classList.add('active');
                 const channelNameEl = document.getElementById('channel-name');
                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
-                if (channelNameEl) channelNameEl.textContent = recipient.username;
+                if (channelNameEl) channelNameEl.textContent = recipient.username || displayName;
                 if (channelIconEl) channelIconEl.className = 'fas fa-at channel-header-icon';
 
                 let channel = dm;
@@ -1296,10 +1462,19 @@ class LibertyApp {
                         return;
                     }
                 }
-                this._renderDMChat(channel);
                 if (channel.id) {
-                    try { history.replaceState({}, '', `/channels/@me/${channel.id}`); } catch (_) {}
+                    this.unreadChannels.delete(channel.id);
+                    this._updateChannelUnread(channel.id, false);
                 }
+                document.getElementById('friends-view')?.classList?.add('hidden');
+                document.getElementById('messages-container').style.display = '';
+                document.querySelector('.message-input-container').style.display = '';
+                if (this.currentChannel?.id && this.currentChannel.id !== channel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
+                this.currentChannel = channel;
+                if (channel?.id && this.gateway) this.gateway.subscribeChannel(channel.id);
+                this._renderDMChat(channel);
+                this._updateUserControlsVoiceVisibility();
+                if (channel.id) try { history.replaceState({}, '', `/channels/@me/${channel.id}`); } catch (_) {}
             });
             dmList.appendChild(item);
         });
@@ -1657,16 +1832,14 @@ class LibertyApp {
             const data = await API.Ranking.list(10);
             const byActivity = data?.by_activity || [];
             const byContent = data?.by_content || [];
-            const avatarColors = ['#5865F2','#57F287','#FEE75C','#EB459E','#ED4245','#3BA55D','#FAA61A','#9B59B6','#E67E22','#1ABC9C'];
             const renderRankRow = (row, type) => {
-                const color = avatarColors[(row.rank || 0) % avatarColors.length];
                 const initials = (row.username || 'U').slice(0, 2).toUpperCase().replace(/\s/g, '') || 'U';
                 const stat = type === 'activity'
                     ? `${this._formatActivityTime(row.minutes || 0)} · Nível ${row.level || 0 ? row.level : 'UNKNOWN'}`
                     : `${row.xp || 0} XP · Nível ${row.level || 0 ? row.level : 'UNKNOWN'}`;
                 return `<div class="ranking-item" data-user-id="${this.escapeHtml(row.id)}">
                     <span class="rank">#${row.rank}</span>
-                    <div class="rank-avatar" style="background:${color}"><span>${this.escapeHtml(initials)}</span></div>
+                    <div class="rank-avatar"><span>${this.escapeHtml(initials)}</span></div>
                     <div class="rank-info">
                         <span class="rank-name">${this.escapeHtml(row.username || 'User')}</span>
                         <span class="rank-stat">${stat}</span>
@@ -1696,10 +1869,17 @@ class LibertyApp {
                             </div>
                         </div>
                     </div>
+                    <div class="ranking-footer">
+                        <i class="fas fa-shield-alt" aria-hidden="true"></i>
+                        <span class="ranking-footer-encryption">End-to-end encryption</span>
+                        <span class="ranking-footer-badge">AES-GCM</span>
+                    </div>
                 </div>`;
             friendsList.innerHTML = html;
+            friendsList.classList.add('ranking-container');
         } catch (err) {
             friendsList.innerHTML = '<div class="ranking-empty" style="padding:24px;text-align:center;color:var(--error)">Falha ao carregar ranking.</div>';
+            friendsList.classList.remove('ranking-container');
         }
     }
 
@@ -2568,7 +2748,6 @@ class LibertyApp {
         const sameAuthorById = authorId && lastGroup?.dataset.authorId === String(authorId);
         const sameAuthorByName = lastGroup && lastGroup.dataset.author === authorName;
         const isContinuation = lastGroup && (sameAuthorById || sameAuthorByName);
-        const barColor = this._authorColor(authorName);
 
         const messageEl = document.createElement('div');
         messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
@@ -2577,7 +2756,6 @@ class LibertyApp {
         if (authorId) messageEl.dataset.authorId = String(authorId);
 
         messageEl.innerHTML = `
-            <div class="message-group-bar" style="background-color:${barColor}" aria-hidden="true"></div>
             <div class="message-avatar">
                 ${authorAvatar ? `<img src="${this.escapeHtml(authorAvatar)}" alt="${this.escapeHtml(authorName)}">` : `<span>${avatarLetter}</span>`}
             </div>
@@ -3029,6 +3207,23 @@ class LibertyApp {
         }
     }
 
+    _getProfileLinks(userId) {
+        try {
+            const raw = localStorage.getItem('liberty_profile_links');
+            const data = raw ? JSON.parse(raw) : {};
+            return Array.isArray(data[userId]) ? data[userId] : [];
+        } catch (_) { return []; }
+    }
+
+    _setProfileLinks(userId, links) {
+        try {
+            const raw = localStorage.getItem('liberty_profile_links');
+            const data = raw ? JSON.parse(raw) : {};
+            data[userId] = links;
+            localStorage.setItem('liberty_profile_links', JSON.stringify(data));
+        } catch (_) {}
+    }
+
     showProfileCard(member, e) {
         this.hideProfileCard();
         const name = member.nickname || member.username || member.display_name || 'User';
@@ -3036,45 +3231,83 @@ class LibertyApp {
         const status = member.status || member.presence?.status || 'online';
         const letter = name.charAt(0).toUpperCase();
         const avatarText = name.length >= 2 ? name.slice(0, 2).toUpperCase() : letter;
-        const displayId = (userId && String(userId).length >= 6) ? String(userId).slice(-6) : (name.replace(/\s/g, '').slice(0, 6) || '414123');
+        const tag = (member.username || name).replace(/\s/g, '');
         const isSelf = this.currentUser && (String(this.currentUser.id) === String(userId) || this.currentUser.username === name);
         const isFriend = this.relationships && this.relationships.some(r => r.type === 1 && (r.user?.id === userId || r.user?.username === name));
         const pendingOut = this.relationships && this.relationships.some(r => r.type === 4 && (r.user?.id === userId || r.user?.username === name));
+        const profileLinks = this._getProfileLinks(userId);
+
+        const linksHtml = profileLinks.length
+            ? profileLinks.map((link) => `<a href="${this.escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="profile-link-item"><i class="fab ${link.type === 'github' ? 'fa-github' : 'fa-link'}"></i> ${this.escapeHtml(link.label || link.url)}</a>`).join('')
+            : (isSelf ? '<p class="profile-links-empty">Nenhum link ainda. Adicione GitHub ou outros.</p>' : '<p class="profile-links-empty">Esta pessoa ainda não adicionou links.</p>');
 
         const overlay = document.getElementById('modal-overlay');
         const card = document.createElement('div');
-        card.className = 'profile-card profile-card-modal';
+        card.className = 'profile-card profile-card-modal profile-card-full';
+        card.dataset.profileUserId = userId;
         card.innerHTML = `
-            <div class="profile-card-modal-inner">
-                <i class="fas fa-trophy profile-card-trophy" aria-hidden="true"></i>
-                <div class="profile-card-avatar-wrap">
-                    <div class="profile-card-avatar"><span>${avatarText}</span><span class="profile-card-online-dot ${status}"></span></div>
+            <div class="profile-card-backdrop" aria-hidden="true"></div>
+            <div class="profile-card-modal-inner profile-card-two-panels">
+                <button type="button" class="profile-card-close-btn" aria-label="Fechar"><i class="fas fa-times"></i></button>
+                <div class="profile-card-left">
+                    <div class="profile-card-banner-full"></div>
+                    <div class="profile-card-avatar-wrap-full">
+                        <div class="profile-card-avatar profile-card-avatar-full"><span>${avatarText}</span><span class="profile-card-online-dot ${status}"></span></div>
+                    </div>
+                    <h2 class="profile-card-display-name">${this.escapeHtml(name)}</h2>
+                    <p class="profile-card-tag">${this.escapeHtml(tag)}</p>
+                    <div class="profile-card-actions profile-card-actions-row">
+                        <button type="button" class="profile-card-btn profile-card-btn-msg" title="Mensagem" data-action="message"><i class="fas fa-comment"></i> Mensagem</button>
+                        <button type="button" class="profile-card-btn profile-card-btn-icon" title="Adicionar amigo" data-action="addfriend"><i class="fas fa-user-plus"></i></button>
+                        <button type="button" class="profile-card-btn profile-card-btn-icon" title="Mais" data-action="more"><i class="fas fa-ellipsis-h"></i></button>
+                    </div>
+                    <div class="profile-card-section profile-card-links">
+                        <h4>Links</h4>
+                        <div class="profile-links-list">${linksHtml}</div>
+                        ${isSelf ? '<div class="profile-links-actions"><button type="button" class="profile-card-link-add" data-action="add-link"><i class="fab fa-github"></i> Vincular GitHub</button><button type="button" class="profile-card-link-add secondary" data-action="add-link-generic"><i class="fas fa-link"></i> Adicionar link</button></div>' : ''}
+                    </div>
+                    <div class="profile-card-section">
+                        <h4>Nota (visível apenas para você)</h4>
+                        <textarea class="profile-card-note-input" placeholder="Adicionar nota..." maxlength="256" aria-label="Nota privada"></textarea>
+                    </div>
                 </div>
-                <div class="profile-card-user-id">${this.escapeHtml(name)}</div>
-                <input type="text" class="profile-card-desc" placeholder="Sem descrição" value="" maxlength="128" aria-label="Descrição">
-                <div class="profile-card-actions">
-                    <button type="button" class="profile-card-btn" title="Mensagem" data-action="message"><i class="fas fa-comment"></i></button>
-                    <button type="button" class="profile-card-btn" title="Ligar" data-action="call"><i class="fas fa-phone"></i></button>
-                    <button type="button" class="profile-card-btn" title="Adicionar amigo" data-action="addfriend"><i class="fas fa-user-plus"></i></button>
+                <div class="profile-card-right">
+                    <div class="profile-card-tabs">
+                        <button type="button" class="profile-card-tab active" data-tab="activity">Atividade</button>
+                        <button type="button" class="profile-card-tab" data-tab="mutual">Amigos mútuos</button>
+                        <button type="button" class="profile-card-tab" data-tab="servers">Servidores mútuos</button>
+                    </div>
+                    <div class="profile-card-tab-content" data-tab-content="activity">
+                        <h4>Atividade atual</h4>
+                        <p class="profile-card-activity-empty">Nenhuma atividade no momento.</p>
+                    </div>
+                    <div class="profile-card-tab-content hidden" data-tab-content="mutual">
+                        <h4>Amigos em comum</h4>
+                        <p class="profile-card-activity-empty">Nenhum amigo mútuo.</p>
+                    </div>
+                    <div class="profile-card-tab-content hidden" data-tab-content="servers">
+                        <h4>Servidores em comum</h4>
+                        <p class="profile-card-activity-empty">Nenhum servidor mútuo.</p>
+                    </div>
                 </div>
-                <button type="button" class="profile-card-close">Fechar</button>
             </div>
         `;
         if (!overlay) return;
         overlay.classList.remove('hidden');
-        overlay.classList.remove('fade-out');
         overlay.appendChild(card);
         this._profileCard = card;
 
+        card.querySelector('.profile-card-backdrop').addEventListener('click', () => this.hideProfileCard());
+        card.querySelector('.profile-card-close-btn').addEventListener('click', () => this.hideProfileCard());
+
         const msgBtn = card.querySelector('[data-action="message"]');
-        const callBtn = card.querySelector('[data-action="call"]');
         const addBtn = card.querySelector('[data-action="addfriend"]');
-        const closeBtn = card.querySelector('.profile-card-close');
+        const moreBtn = card.querySelector('[data-action="more"]');
 
         if (isSelf) {
+            msgBtn.closest('.profile-card-actions-row').querySelector('[data-action="message"]').style.display = 'none';
             addBtn.style.display = 'none';
-            msgBtn.style.display = 'none';
-            callBtn.style.display = 'none';
+            moreBtn.style.display = 'none';
         } else {
             if (isFriend) { addBtn.innerHTML = '<i class="fas fa-check"></i>'; addBtn.title = 'Já são amigos'; addBtn.disabled = true; }
             else if (pendingOut) { addBtn.innerHTML = '<i class="fas fa-clock"></i>'; addBtn.title = 'Pedido enviado'; addBtn.disabled = true; }
@@ -3083,10 +3316,6 @@ class LibertyApp {
         msgBtn.addEventListener('click', () => {
             this.hideProfileCard();
             if (!isSelf && userId) this.openDMWithUser(userId, name);
-        });
-        callBtn.addEventListener('click', () => {
-            this.hideProfileCard();
-            if (!isSelf) this.showToast('Chamada de voz em breve.', 'info');
         });
         addBtn.addEventListener('click', async () => {
             if (isFriend || pendingOut) return;
@@ -3098,7 +3327,38 @@ class LibertyApp {
                 this.showToast(err.message || 'Erro ao adicionar', 'error');
             }
         });
-        closeBtn.addEventListener('click', () => this.hideProfileCard());
+        moreBtn.addEventListener('click', () => this.showToast('Mais opções em breve.', 'info'));
+
+        card.querySelectorAll('.profile-card-tab').forEach((tab) => {
+            tab.addEventListener('click', () => {
+                card.querySelectorAll('.profile-card-tab').forEach(t => t.classList.remove('active'));
+                card.querySelectorAll('.profile-card-tab-content').forEach(c => c.classList.add('hidden'));
+                tab.classList.add('active');
+                const content = card.querySelector(`[data-tab-content="${tab.dataset.tab}"]`);
+                if (content) content.classList.remove('hidden');
+            });
+        });
+
+        if (isSelf) {
+            card.querySelector('[data-action="add-link"]').addEventListener('click', () => this._profileAddLink(userId, 'github', 'GitHub', card));
+            card.querySelector('[data-action="add-link-generic"]').addEventListener('click', () => this._profileAddLink(userId, 'link', 'Link', card));
+        }
+    }
+
+    _profileAddLink(userId, type, label, card) {
+        const url = type === 'github'
+            ? prompt('URL do seu perfil GitHub (ex: https://github.com/username):', 'https://github.com/')
+            : prompt('URL do link:', 'https://');
+        if (!url || !url.trim()) return;
+        let finalUrl = url.trim();
+        if (type === 'github' && !finalUrl.includes('github.com')) finalUrl = 'https://github.com/' + finalUrl.replace(/^https?:\/\//, '').split('/')[0];
+        const links = this._getProfileLinks(userId);
+        const displayLabel = type === 'github' ? (finalUrl.replace(/\/$/, '').split('/').pop() || 'GitHub') : finalUrl;
+        links.push({ type: type === 'github' ? 'github' : 'link', url: finalUrl, label: displayLabel });
+        this._setProfileLinks(userId, links);
+        const list = card.querySelector('.profile-card-links .profile-links-list');
+        if (list) list.innerHTML = links.map((link) => `<a href="${this.escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="profile-link-item"><i class="fab ${link.type === 'github' ? 'fa-github' : 'fa-link'}"></i> ${this.escapeHtml(link.label || link.url)}</a>`).join('');
+        this.showToast('Link adicionado.', 'success');
     }
 
     async openDMWithUser(userId, username) {
@@ -3629,25 +3889,27 @@ class LibertyApp {
             account: () => {
                 const initial = (this.currentUser?.username || 'U').charAt(0).toUpperCase();
                 const uname = this.escapeHtml(this.currentUser?.username || 'User');
-                const avatarUrl = (this.currentUser && this.currentUser.avatar_url) ? this.escapeHtml(this.currentUser.avatar_url) : '';
-                const avatarHtml = avatarUrl ? `<img src="${avatarUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px;font-weight:700;color:#fff">${initial}</span>` : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px;font-weight:700;color:#fff">${initial}</span>`;
+                const avatarUrl = (this.currentUser && (this.currentUser.avatar_url || this.currentUser.avatar)) ? this.escapeHtml(this.currentUser.avatar_url || this.currentUser.avatar) : '';
+                const avatarHtml = avatarUrl ? `<img src="${avatarUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${initial}</span>` : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${initial}</span>`;
                 return `<h2 class="settings-page-title">Minha Conta</h2>
                 <div class="settings-subscription-row">
                     <div class="settings-subscription-label"><i class="fas fa-crown"></i> Subscription Plan</div>
                     <div><select class="settings-plan-select" disabled><option>Free - 5.000 chars / 100 MB</option></select></div>
                 </div>
                 <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px">Choose your plan to increase character and file size limits.</p>
-                <div class="settings-account-hero">
-                    <div class="settings-account-hero-avatar" id="settings-avatar-preview">${avatarHtml}</div>
-                    <div class="settings-account-hero-name">${uname}</div>
-                    <button type="button" class="btn-change-photo" id="settings-btn-change-photo"><i class="fas fa-camera"></i> Alterar foto</button>
-                </div>
-                <div class="settings-section-block">
-                    <h3>AVATAR POR URL OU ARQUIVO</h3>
-                    <p>Use a URL abaixo ou clique em "Alterar foto" / na foto para enviar um arquivo de imagem.</p>
-                    <div class="input-row">
-                        <input type="url" id="settings-avatar-url" placeholder="https://exemplo.com/sua-foto.jpg" value="${avatarUrl}" />
-                        <button type="button" class="btn-save" id="settings-save-avatar-btn">Salvar avatar</button>
+                <div class="settings-avatar-card">
+                    <div class="settings-avatar-preview-wrap" id="settings-avatar-drop-zone">
+                        <input type="file" id="settings-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" class="settings-avatar-file-input" />
+                        <div class="settings-avatar-preview" id="settings-avatar-preview">${avatarHtml}</div>
+                        <div class="settings-avatar-overlay"><i class="fas fa-camera"></i><span>Clique ou arraste uma foto</span></div>
+                    </div>
+                    <div class="settings-avatar-actions">
+                        <label for="settings-avatar-file" class="btn btn-primary settings-avatar-btn-file"><i class="fas fa-upload"></i> Enviar arquivo</label>
+                        <span class="settings-avatar-divider">ou</span>
+                        <div class="settings-avatar-url-row">
+                            <input type="url" id="settings-avatar-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-foto.jpg" value="${avatarUrl}" />
+                            <button type="button" class="btn-save" id="settings-save-avatar-btn"><i class="fas fa-link"></i> Usar URL</button>
+                        </div>
                     </div>
                 </div>
                 <div class="settings-section-block">
@@ -3667,17 +3929,34 @@ class LibertyApp {
                     <button type="button" class="btn-clear-db" id="settings-clear-db-btn">Limpar banco de dados</button>
                 </div>`;
             },
-            'auth-security': () => `<h2 class="settings-page-title">Autenticação e Segurança</h2>
+            'auth-security': () => {
+                const hasPassword = this.currentUser && this.currentUser.has_password === true;
+                return `<h2 class="settings-page-title">Autenticação e Segurança</h2>
                 <div class="settings-card">
-                    <h3 style="margin-top:0">Senha</h3>
-                    <p style="margin-bottom:12px">Altere sua senha para manter a conta segura.</p>
-                    <button type="button" class="btn btn-primary btn-sm" onclick="app.showToast('Alterar senha em breve!','info')">Alterar senha</button>
-                    <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)">
+                    <h3 style="margin-top:0">${hasPassword ? 'Alterar senha' : 'Ativar senha'}</h3>
+                    <p style="margin-bottom:12px">${hasPassword ? 'Altere sua senha para manter a conta segura.' : 'Ative uma senha para proteger a conta. Depois poderá entrar com nome de usuário e senha.'}</p>
+                    ${hasPassword ? `
+                    <div class="settings-section-block" style="margin-bottom:12px">
+                        <label class="settings-row-label" for="settings-current-password">Senha atual</label>
+                        <input type="password" id="settings-current-password" class="settings-password-input" placeholder="••••••••" autocomplete="current-password" maxlength="128" />
+                    </div>
+                    ` : ''}
+                    <div class="settings-section-block" style="margin-bottom:12px">
+                        <label class="settings-row-label" for="settings-new-password">${hasPassword ? 'Nova senha' : 'Nova senha'}</label>
+                        <input type="password" id="settings-new-password" class="settings-password-input" placeholder="••••••••" autocomplete="new-password" maxlength="128" />
+                    </div>
+                    <div class="settings-section-block" style="margin-bottom:16px">
+                        <label class="settings-row-label" for="settings-confirm-password">Confirmar senha</label>
+                        <input type="password" id="settings-confirm-password" class="settings-password-input" placeholder="••••••••" autocomplete="new-password" maxlength="128" />
+                    </div>
+                    <button type="button" class="btn btn-primary" id="settings-save-password-btn">${hasPassword ? 'Alterar senha' : 'Ativar senha'}</button>
+                    <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)">
                         <div class="settings-row-label" style="margin-bottom:4px">Autenticação em dois fatores</div>
                         <div class="settings-row-desc" style="margin-bottom:12px">Proteja sua conta com uma camada extra de segurança.</div>
                         <button type="button" class="btn btn-primary btn-sm" onclick="app.showToast('2FA em breve!','info')">Ativar 2FA</button>
                     </div>
-                </div>`,
+                </div>`;
+            },
             profile: () => `<h2 class="settings-page-title">Perfil</h2>
                 <div style="display:flex;gap:32px;flex-wrap:wrap">
                     <div style="flex:1;min-width:280px">
@@ -3704,13 +3983,57 @@ class LibertyApp {
             appearance: () => {
                 const current = localStorage.getItem('liberty-theme') || 'Dark-theme';
                 const border = (t) => (t === current ? 'var(--primary-yellow)' : 'transparent');
-                let html = `<h2>Appearance</h2>
-                <div class="settings-card"><h3 style="margin-top:0">Theme</h3>
+                const bgType = localStorage.getItem('liberty-bg-type') || 'default';
+                const bgSolid = localStorage.getItem('liberty-bg-solid') || '#1a1814';
+                let bgGrad = { color1: '#0d0b09', color2: '#1a1814', angle: 135 };
+                try { const g = localStorage.getItem('liberty-bg-gradient'); if (g) bgGrad = { ...bgGrad, ...JSON.parse(g) }; } catch (_) {}
+                const bgImage = localStorage.getItem('liberty-bg-image') || '';
+                let html = `<h2>Aparência</h2>
+                <div class="settings-card"><h3 style="margin-top:0">Tema</h3>
                 <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
                     <div class="theme-option" data-theme="Dark-theme" style="width:80px;height:60px;background:var(--primary-black);border:2px solid ${border('Dark-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-primary);font-weight:600" onclick="app.applyTheme('Dark-theme')">Dark</div>
                     <div class="theme-option" data-theme="Light-theme" style="width:80px;height:60px;background:#f5f2eb;border:2px solid ${border('Light-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:#1a1814;font-weight:600" onclick="app.applyTheme('Light-theme')">Light</div>
                     <div class="theme-option" data-theme="Dark-Accent-theme" style="width:80px;height:60px;background:linear-gradient(135deg,#1a1814,#2a2520);border:2px solid ${border('Dark-Accent-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-primary);font-weight:600;text-align:center;padding:4px" onclick="app.applyTheme('Dark-Accent-theme')">Dark<br>Accent</div>
-                </div></div>`;
+                </div></div>
+                <div class="settings-card settings-bg-card"><h3 style="margin-top:0">Fundo do site</h3>
+                <p class="settings-row-desc" style="margin-bottom:12px">Escolha cor sólida, gradiente ou imagem/GIF como fundo da aplicação.</p>
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+                    <label class="settings-bg-type-opt" data-bg-type="default" style="padding:10px 16px;border-radius:var(--radius-md);border:2px solid ${bgType==='default'?'var(--primary-yellow)':'rgba(255,255,255,.1)'};background:${bgType==='default'?'rgba(255,215,0,.1)':'transparent'};cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)"><i class="fas fa-square-full" style="font-size:10px;margin-right:6px"></i>Preto</label>
+                    <label class="settings-bg-type-opt" data-bg-type="solid" style="padding:10px 16px;border-radius:var(--radius-md);border:2px solid ${bgType==='solid'?'var(--primary-yellow)':'rgba(255,255,255,.1)'};background:${bgType==='solid'?'rgba(255,215,0,.1)':'transparent'};cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)"><i class="fas fa-fill-drip" style="margin-right:6px"></i>Cor sólida</label>
+                    <label class="settings-bg-type-opt" data-bg-type="gradient" style="padding:10px 16px;border-radius:var(--radius-md);border:2px solid ${bgType==='gradient'?'var(--primary-yellow)':'rgba(255,255,255,.1)'};background:${bgType==='gradient'?'rgba(255,215,0,.1)':'transparent'};cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)"><i class="fas fa-fill" style="margin-right:6px"></i>Gradiente</label>
+                    <label class="settings-bg-type-opt" data-bg-type="image" style="padding:10px 16px;border-radius:var(--radius-md);border:2px solid ${bgType==='image'?'var(--primary-yellow)':'rgba(255,255,255,.1)'};background:${bgType==='image'?'rgba(255,215,0,.1)':'transparent'};cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)"><i class="fas fa-image" style="margin-right:6px"></i>Imagem / GIF</label>
+                </div>
+                <div id="settings-bg-solid-wrap" class="settings-bg-pane" style="display:${bgType==='solid'?'block':'none'}">
+                    <div class="settings-section-block" style="margin-bottom:0">
+                        <h3 style="margin-top:0">Cor</h3>
+                        <div class="input-row" style="align-items:center;gap:12px">
+                            <input type="color" id="settings-bg-solid-color" value="${bgSolid}" style="width:48px;height:36px;padding:2px;border:none;border-radius:var(--radius-sm);cursor:pointer;background:transparent" />
+                            <input type="text" id="settings-bg-solid-hex" value="${bgSolid}" placeholder="#000000" maxlength="7" style="flex:1;min-width:100px;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit" />
+                        </div>
+                    </div>
+                </div>
+                <div id="settings-bg-gradient-wrap" class="settings-bg-pane" style="display:${bgType==='gradient'?'block':'none'}">
+                    <div class="settings-section-block" style="margin-bottom:0">
+                        <h3 style="margin-top:0">Gradiente</h3>
+                        <div class="input-row" style="flex-wrap:wrap;gap:12px;margin-bottom:10px">
+                            <div style="display:flex;align-items:center;gap:8px"><label style="font-size:12px;color:var(--text-secondary)">Cor 1</label><input type="color" id="settings-bg-grad-color1" value="${bgGrad.color1}" style="width:40px;height:28px;padding:2px;border:none;border-radius:4px;cursor:pointer" /><input type="text" id="settings-bg-grad-hex1" value="${bgGrad.color1}" maxlength="7" style="width:80px;padding:6px 8px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px" /></div>
+                            <div style="display:flex;align-items:center;gap:8px"><label style="font-size:12px;color:var(--text-secondary)">Cor 2</label><input type="color" id="settings-bg-grad-color2" value="${bgGrad.color2}" style="width:40px;height:28px;padding:2px;border:none;border-radius:4px;cursor:pointer" /><input type="text" id="settings-bg-grad-hex2" value="${bgGrad.color2}" maxlength="7" style="width:80px;padding:6px 8px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px" /></div>
+                            <div style="display:flex;align-items:center;gap:8px"><label style="font-size:12px;color:var(--text-secondary)">Ângulo</label><input type="number" id="settings-bg-grad-angle" value="${bgGrad.angle}" min="0" max="360" style="width:70px;padding:6px 8px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px" /></div>
+                        </div>
+                    </div>
+                </div>
+                <div id="settings-bg-image-wrap" class="settings-bg-pane" style="display:${bgType==='image'?'block':'none'}">
+                    <div class="settings-section-block" style="margin-bottom:0">
+                        <h3 style="margin-top:0">URL da imagem ou GIF</h3>
+                        <p class="settings-row-desc" style="margin-bottom:8px">Cole o link de uma imagem ou GIF. Será redimensionada para cobrir o fundo.</p>
+                        <input type="url" id="settings-bg-image-url" value="${this.escapeHtml(bgImage)}" placeholder="https://exemplo.com/imagem.jpg ou .gif" style="width:100%;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit;box-sizing:border-box" />
+                    </div>
+                </div>
+                <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+                    <button type="button" class="btn-save" id="settings-bg-apply">Aplicar fundo</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="settings-bg-reset">Restaurar preto</button>
+                </div>
+                </div>`;
                 html += `<div class="settings-card"><h3 style="margin-top:0">Message Display</h3>
                 <div class="settings-row"><div><div class="settings-row-label">Chat Font Scaling</div><div class="settings-row-desc">14px</div></div><input type="range" min="12" max="20" value="14" style="width:150px"></div>
                 </div>`;
@@ -3829,26 +4152,68 @@ class LibertyApp {
         if (section === 'account' && type === 'user') {
             const saveAvatarBtn = content.querySelector('#settings-save-avatar-btn');
             const avatarUrlInput = content.querySelector('#settings-avatar-url');
-            const changePhotoBtn = content.querySelector('#settings-btn-change-photo');
+            const avatarFileInput = content.querySelector('#settings-avatar-file');
             const avatarPreview = content.querySelector('#settings-avatar-preview');
+            const dropZone = content.querySelector('#settings-avatar-drop-zone');
             const saveNameBtn = content.querySelector('#settings-save-name-btn');
             const displayNameInput = content.querySelector('#settings-display-name');
             const clearDbBtn = content.querySelector('#settings-clear-db-btn');
+            const initial = (this.currentUser?.username || 'U').charAt(0).toUpperCase();
+            const setPreviewHtml = (url) => {
+                if (!avatarPreview) return;
+                if (url) avatarPreview.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">' + initial + '</span>';
+                else avatarPreview.innerHTML = '<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:var(--text-secondary)">' + initial + '</span>';
+            };
+            const uploadAvatarFile = (file) => {
+                if (!file || !file.type.startsWith('image/')) { this.showToast('Escolha uma imagem (JPEG, PNG, GIF ou WebP).', 'error'); return; }
+                if (file.size > 4 * 1024 * 1024) { this.showToast('Imagem demasiado grande (máx. 4 MB).', 'error'); return; }
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const dataUrl = reader.result;
+                    if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
+                        API.User.uploadAvatar(dataUrl).then((r) => {
+                            const url = (r && r.avatar_url) ? r.avatar_url : dataUrl;
+                            if (this.currentUser) { this.currentUser.avatar_url = url; this.currentUser.avatar = url; }
+                            setPreviewHtml(url);
+                            if (avatarUrlInput) avatarUrlInput.value = url;
+                            this.showToast('Foto de perfil atualizada!', 'success');
+                            this._updateUserAvatarInUI();
+                        }).catch(e => this.showToast(e.message || 'Erro ao enviar foto', 'error'));
+                    } else this.showToast('Faça login para enviar uma foto.', 'info');
+                };
+                reader.readAsDataURL(file);
+            };
+            if (avatarFileInput) {
+                avatarFileInput.addEventListener('change', () => {
+                    const file = avatarFileInput.files && avatarFileInput.files[0];
+                    if (file) uploadAvatarFile(file);
+                    avatarFileInput.value = '';
+                });
+            }
+            if (dropZone) {
+                ['dragenter', 'dragover'].forEach((ev) => dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drag-over'); }));
+                ['dragleave', 'drop'].forEach((ev) => dropZone.addEventListener(ev, (e) => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drag-over'); }));
+                dropZone.addEventListener('drop', (e) => {
+                    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+                    if (file) uploadAvatarFile(file);
+                });
+            }
             if (saveAvatarBtn && avatarUrlInput) {
                 saveAvatarBtn.addEventListener('click', () => {
                     const url = (avatarUrlInput.value || '').trim();
-                    if (!url) { this.showToast('Cole uma URL de imagem.', 'info'); return; }
+                    if (!url) { this.showToast('Cole uma URL de imagem ou envie um arquivo.', 'info'); return; }
+                    if (!/^https?:\/\//i.test(url) && !/^\/uploads\//.test(url)) { this.showToast('URL deve começar por http://, https:// ou /uploads/', 'error'); return; }
                     if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
                         API.User.updateCurrentUser({ avatar_url: url }).then(() => {
                             this.showToast('Avatar salvo!', 'success');
-                            if (this.currentUser) this.currentUser.avatar_url = url;
-                            if (avatarPreview) { avatarPreview.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px;font-weight:700;color:#fff">' + (this.currentUser?.username || 'U').charAt(0).toUpperCase() + '</span>'; }
+                            if (this.currentUser) { this.currentUser.avatar_url = url; this.currentUser.avatar = url; }
+                            setPreviewHtml(url);
+                            this._updateUserAvatarInUI();
                         }).catch(e => this.showToast(e.message || 'Erro ao salvar avatar', 'error'));
-                    } else this.showToast('Faça login para salvar o avatar na nuvem.', 'info');
+                    } else this.showToast('Faça login para salvar o avatar.', 'info');
                 });
             }
-            if (changePhotoBtn && avatarUrlInput) changePhotoBtn.addEventListener('click', () => avatarUrlInput.focus());
-            if (avatarPreview && avatarUrlInput) avatarUrlInput.addEventListener('input', () => { const v = avatarUrlInput.value.trim(); if (v) avatarPreview.innerHTML = '<img src="' + v.replace(/"/g, '&quot;') + '" alt="" onerror="this.style.display=\'none\'" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px;font-weight:700;color:#fff">' + (this.currentUser?.username || 'U').charAt(0).toUpperCase() + '</span>'; });
+            if (avatarPreview && avatarUrlInput) avatarUrlInput.addEventListener('input', () => { const v = avatarUrlInput.value.trim(); if (v) setPreviewHtml(v); });
             if (saveNameBtn && displayNameInput) {
                 saveNameBtn.addEventListener('click', () => {
                     const name = (displayNameInput.value || '').trim().substring(0, 32);
@@ -3865,6 +4230,119 @@ class LibertyApp {
                     this.showToast('Dados locais removidos.', 'success');
                     this.hideSettingsPanel();
                     setTimeout(() => window.location.reload(), 800);
+                });
+            }
+        }
+        if (section === 'auth-security' && type === 'user') {
+            const savePwBtn = content.querySelector('#settings-save-password-btn');
+            const currentPw = content.querySelector('#settings-current-password');
+            const newPw = content.querySelector('#settings-new-password');
+            const confirmPw = content.querySelector('#settings-confirm-password');
+            if (savePwBtn) {
+                savePwBtn.addEventListener('click', async () => {
+                    const newVal = (newPw && newPw.value) ? newPw.value : '';
+                    const confirmVal = (confirmPw && confirmPw.value) ? confirmPw.value : '';
+                    if (newVal.length < 6) { this.showToast('A senha deve ter pelo menos 6 caracteres.', 'error'); return; }
+                    if (newVal !== confirmVal) { this.showToast('As senhas não coincidem.', 'error'); return; }
+                    const currentVal = (currentPw && currentPw.value) ? currentPw.value : undefined;
+                    try {
+                        await API.User.updatePassword(this.currentUser?.has_password ? currentVal : undefined, newVal);
+                        this.showToast('Senha guardada com sucesso.', 'success');
+                        if (this.currentUser) this.currentUser.has_password = true;
+                        if (currentPw) currentPw.value = '';
+                        if (newPw) newPw.value = '';
+                        if (confirmPw) confirmPw.value = '';
+                    } catch (e) {
+                        this.showToast(e.message || 'Erro ao guardar senha', 'error');
+                    }
+                });
+            }
+        }
+        if (section === 'appearance' && type === 'user') {
+            const bgTypeOpts = content.querySelectorAll('.settings-bg-type-opt');
+            const solidWrap = content.querySelector('#settings-bg-solid-wrap');
+            const gradientWrap = content.querySelector('#settings-bg-gradient-wrap');
+            const imageWrap = content.querySelector('#settings-bg-image-wrap');
+            const applyBtn = content.querySelector('#settings-bg-apply');
+            const resetBtn = content.querySelector('#settings-bg-reset');
+            const setBgType = (type) => {
+                [solidWrap, gradientWrap, imageWrap].forEach((el) => { if (el) el.style.display = 'none'; });
+                if (type === 'solid' && solidWrap) solidWrap.style.display = 'block';
+                if (type === 'gradient' && gradientWrap) gradientWrap.style.display = 'block';
+                if (type === 'image' && imageWrap) imageWrap.style.display = 'block';
+                bgTypeOpts.forEach((opt) => {
+                    const t = opt.dataset.bgType;
+                    opt.style.borderColor = t === type ? 'var(--primary-yellow)' : 'rgba(255,255,255,.1)';
+                    opt.style.background = t === type ? 'rgba(255,215,0,.1)' : 'transparent';
+                });
+            };
+            bgTypeOpts.forEach((opt) => {
+                opt.addEventListener('click', () => {
+                    const t = opt.dataset.bgType;
+                    localStorage.setItem('liberty-bg-type', t);
+                    setBgType(t);
+                });
+            });
+            const solidColor = content.querySelector('#settings-bg-solid-color');
+            const solidHex = content.querySelector('#settings-bg-solid-hex');
+            if (solidColor && solidHex) {
+                solidColor.addEventListener('input', () => { solidHex.value = solidColor.value; });
+                solidHex.addEventListener('input', () => { const v = solidHex.value.trim(); if (/^#[0-9A-Fa-f]{6}$/.test(v)) solidColor.value = v; });
+            }
+            const gradC1 = content.querySelector('#settings-bg-grad-color1');
+            const gradH1 = content.querySelector('#settings-bg-grad-hex1');
+            const gradC2 = content.querySelector('#settings-bg-grad-color2');
+            const gradH2 = content.querySelector('#settings-bg-grad-hex2');
+            if (gradC1 && gradH1) { gradC1.addEventListener('input', () => { gradH1.value = gradC1.value; }); gradH1.addEventListener('input', () => { const v = gradH1.value.trim(); if (/^#[0-9A-Fa-f]{6}$/.test(v)) gradC1.value = v; }); }
+            if (gradC2 && gradH2) { gradC2.addEventListener('input', () => { gradH2.value = gradC2.value; }); gradH2.addEventListener('input', () => { const v = gradH2.value.trim(); if (/^#[0-9A-Fa-f]{6}$/.test(v)) gradC2.value = v; }); }
+            if (applyBtn) {
+                applyBtn.addEventListener('click', () => {
+                    const type = localStorage.getItem('liberty-bg-type') || 'default';
+                    if (type === 'solid' && solidColor) {
+                        const hex = (solidHex && solidHex.value.trim()) || solidColor.value;
+                        if (/^#[0-9A-Fa-f]{6}$/.test(hex)) { localStorage.setItem('liberty-bg-solid', hex); this.applyBackground(); this.showToast('Fundo aplicado.', 'success'); } else this.showToast('Cor inválida. Use #RRGGBB.', 'error');
+                    } else if (type === 'gradient') {
+                        const c1 = (gradH1 && gradH1.value.trim()) || gradC1?.value || '#0d0b09';
+                        const c2 = (gradH2 && gradH2.value.trim()) || gradC2?.value || '#1a1814';
+                        const angle = parseInt(content.querySelector('#settings-bg-grad-angle')?.value, 10) || 135;
+                        if (/^#[0-9A-Fa-f]{6}$/.test(c1) && /^#[0-9A-Fa-f]{6}$/.test(c2)) {
+                            localStorage.setItem('liberty-bg-gradient', JSON.stringify({ color1: c1, color2: c2, angle }));
+                            this.applyBackground();
+                            this.showToast('Gradiente aplicado.', 'success');
+                        } else this.showToast('Cores inválidas. Use #RRGGBB.', 'error');
+                    } else if (type === 'image') {
+                        const url = content.querySelector('#settings-bg-image-url')?.value?.trim() || '';
+                        if (url) {
+                            localStorage.setItem('liberty-bg-image', url);
+                            this.applyBackground();
+                            this.showToast('Imagem de fundo aplicada.', 'success');
+                        } else this.showToast('Cole a URL da imagem ou GIF.', 'error');
+                    } else {
+                        localStorage.setItem('liberty-bg-type', 'default');
+                        this.applyBackground();
+                        this.showToast('Fundo preto aplicado.', 'success');
+                    }
+                });
+            }
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    localStorage.setItem('liberty-bg-type', 'default');
+                    localStorage.removeItem('liberty-bg-solid');
+                    localStorage.removeItem('liberty-bg-gradient');
+                    localStorage.removeItem('liberty-bg-image');
+                    this.applyBackground();
+                    setBgType('default');
+                    if (solidHex) solidHex.value = '#1a1814';
+                    if (solidColor) solidColor.value = '#1a1814';
+                    if (gradH1) gradH1.value = '#0d0b09';
+                    if (gradC1) gradC1.value = '#0d0b09';
+                    if (gradH2) gradH2.value = '#1a1814';
+                    if (gradC2) gradC2.value = '#1a1814';
+                    const angleEl = content.querySelector('#settings-bg-grad-angle');
+                    if (angleEl) angleEl.value = '135';
+                    const imgUrl = content.querySelector('#settings-bg-image-url');
+                    if (imgUrl) imgUrl.value = '';
+                    this.showToast('Fundo preto restaurado.', 'success');
                 });
             }
         }
@@ -3995,15 +4473,25 @@ class LibertyApp {
     }
 
     _updateChannelUnread(channelId, hasUnread) {
-        const item = document.querySelector(`.channel-item[data-channel="${channelId}"]`);
-        if (!item) return;
-        let dot = item.querySelector('.channel-unread-dot');
-        if (hasUnread && !dot) {
-            dot = document.createElement('div');
-            dot.className = 'channel-unread-dot';
-            item.appendChild(dot);
-        } else if (!hasUnread && dot) {
-            dot.remove();
+        const channelItem = document.querySelector(`.channel-item[data-channel="${channelId}"]`);
+        if (channelItem) {
+            let dot = channelItem.querySelector('.channel-unread-dot');
+            if (hasUnread && !dot) {
+                dot = document.createElement('div');
+                dot.className = 'channel-unread-dot';
+                channelItem.appendChild(dot);
+            } else if (!hasUnread && dot) dot.remove();
+        }
+        const dmItem = document.querySelector(`.dm-list-item[data-dm-id="${channelId}"]`);
+        if (dmItem) {
+            dmItem.classList.toggle('dm-list-item-unread', !!hasUnread);
+            let redDot = dmItem.querySelector('.dm-unread-dot');
+            if (hasUnread && !redDot) {
+                redDot = document.createElement('span');
+                redDot.className = 'dm-unread-dot';
+                redDot.setAttribute('aria-label', 'Não lida');
+                dmItem.appendChild(redDot);
+            } else if (!hasUnread && redDot) redDot.remove();
         }
     }
 

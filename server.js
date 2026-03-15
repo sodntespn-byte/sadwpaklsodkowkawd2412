@@ -225,6 +225,19 @@ CREATE TABLE IF NOT EXISTS friendships (
 );
 CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
 CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id);
+CREATE TABLE IF NOT EXISTS webrtc_calls (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  caller_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  callee_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chat_id      UUID REFERENCES chats(id) ON DELETE SET NULL,
+  status       VARCHAR(20) NOT NULL DEFAULT 'ringing' CHECK (status IN ('ringing', 'active', 'ended', 'rejected', 'missed')),
+  started_at   TIMESTAMPTZ,
+  ended_at     TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_webrtc_calls_caller ON webrtc_calls(caller_id);
+CREATE INDEX IF NOT EXISTS idx_webrtc_calls_callee ON webrtc_calls(callee_id);
+CREATE INDEX IF NOT EXISTS idx_webrtc_calls_created ON webrtc_calls(created_at DESC);
 `;
 
 async function dbInit() {
@@ -374,6 +387,9 @@ const ws = {
           } else if (msg.type === 'webrtc_offer' || msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice') {
             const target = msg.target_user_id || msg.to;
             if (target && msg.payload !== undefined) _wsSendToUser(target, { type: msg.type, from_user_id: userId, payload: msg.payload });
+          } else if (msg.type === 'webrtc_reject') {
+            const target = msg.target_user_id || msg.to;
+            if (target) _wsSendToUser(target, { type: 'webrtc_reject', from_user_id: userId });
           } else if (msg.type === 'stream_started') {
             const target = msg.target_user_id || msg.to;
             if (target) _wsSendToUser(target, { type: 'stream_started', from_user_id: userId, stream_type: msg.stream_type || 'screen' });
@@ -415,7 +431,7 @@ app.use(helmet({
   },
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 // Parse Cookie header into req.cookies (evita dependência cookie-parser em deploy)
 app.use((req, _res, next) => {
   req.cookies = Object.create(null);
@@ -667,7 +683,7 @@ async function start() {
       if (!row) {
         return res.status(401).json({ message: 'Usuário não encontrado' });
       }
-      const user = { id: String(row.id), username: row.username, email: row.email };
+      const user = { id: String(row.id), username: row.username, email: row.email, has_password: Boolean(row.password_hash) };
       const access_token = auth.sign(user);
       res.cookie('liberty_token', access_token, {
         path: '/',
@@ -716,7 +732,7 @@ async function start() {
       }
       await ensureLibertyServer();
       await ensureUserInLibertyServer(row.id);
-      const user = { id: String(row.id), username: row.username, email: row.email };
+      const user = { id: String(row.id), username: row.username, email: row.email, has_password: Boolean(row.password_hash) };
       const access_token = auth.sign(user);
       res.cookie('liberty_token', access_token, {
         path: '/',
@@ -1371,6 +1387,67 @@ async function start() {
     return res.status(400).json({ message: 'Envie recipient_id (DM) ou recipient_ids (array com 2+) para grupo' });
   });
 
+  // POST /api/v1/calls — registar início de chamada WebRTC (ringing)
+  app.post('/api/v1/calls', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const callerId = req.userId;
+    const calleeId = req.body?.callee_id ? String(req.body.callee_id).trim() : null;
+    const chatId = req.body?.chat_id ? String(req.body.chat_id).trim() : null;
+    if (!calleeId || calleeId === callerId) {
+      return res.status(400).json({ message: 'callee_id inválido' });
+    }
+    try {
+      const r = await db.query(
+        `INSERT INTO webrtc_calls (caller_id, callee_id, chat_id, status)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, 'ringing')
+         RETURNING id, caller_id, callee_id, chat_id, status, created_at`,
+        [callerId, calleeId, chatId || null]
+      );
+      const row = r.rows[0];
+      return res.status(201).json({
+        id: String(row.id),
+        caller_id: String(row.caller_id),
+        callee_id: String(row.callee_id),
+        chat_id: row.chat_id ? String(row.chat_id) : null,
+        status: row.status,
+        created_at: row.created_at,
+      });
+    } catch (err) {
+      console.error('[LIBERTY] POST /api/v1/calls', err);
+      return res.status(500).json({ message: err.message || 'Erro ao criar chamada' });
+    }
+  });
+
+  // PATCH /api/v1/calls/:id — atualizar estado da chamada (active, ended, rejected, missed)
+  app.patch('/api/v1/calls/:id', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const callId = req.params.id;
+    const status = req.body?.status ? String(req.body.status).trim() : null;
+    const valid = ['ringing', 'active', 'ended', 'rejected', 'missed'];
+    if (!status || !valid.includes(status)) {
+      return res.status(400).json({ message: 'status deve ser um de: ' + valid.join(', ') });
+    }
+    try {
+      const r = await db.query(
+        `UPDATE webrtc_calls SET status = $1, started_at = CASE WHEN $1 = 'active' AND started_at IS NULL THEN now() ELSE started_at END, ended_at = CASE WHEN $1 IN ('ended','rejected','missed') THEN now() ELSE ended_at END
+         WHERE id = $2::uuid AND (caller_id = $3::uuid OR callee_id = $3::uuid)
+         RETURNING id, status, started_at, ended_at`,
+        [status, callId, req.userId]
+      );
+      if (r.rows.length === 0) {
+        return res.status(404).json({ message: 'Chamada não encontrada' });
+      }
+      return res.status(200).json(r.rows[0]);
+    } catch (err) {
+      console.error('[LIBERTY] PATCH /api/v1/calls/:id', err);
+      return res.status(500).json({ message: err.message || 'Erro ao atualizar chamada' });
+    }
+  });
+
   // GET /api/v1/users/me e GET /api/v1/users/@me — perfil do usuário autenticado (frontend usa @me)
   const getMe = async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
@@ -1378,7 +1455,7 @@ async function start() {
     }
     try {
       const r = await db.query(
-        'SELECT id, username, email, avatar_url, created_at FROM users WHERE id = $1 LIMIT 1',
+        'SELECT id, username, email, avatar_url, password_hash, created_at FROM users WHERE id = $1 LIMIT 1',
         [req.userId]
       );
       const row = r.rows[0];
@@ -1388,6 +1465,7 @@ async function start() {
         username: row.username,
         email: row.email || null,
         avatar_url: row.avatar_url || null,
+        has_password: Boolean(row.password_hash),
         created_at: row.created_at,
       });
     } catch (err) {
@@ -1431,6 +1509,89 @@ async function start() {
   };
   app.patch('/api/v1/users/me', auth.requireAuth, patchMe);
   app.patch('/api/v1/users/@me', auth.requireAuth, patchMe);
+
+  // PATCH /api/v1/users/me/password — definir ou alterar senha (ativar depois nas configurações)
+  app.patch('/api/v1/users/me/password', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const { current_password, new_password } = req.body || {};
+    const newPass = new_password != null ? String(new_password).trim() : '';
+    if (!newPass || newPass.length < 6) {
+      return res.status(400).json({ message: 'Nova senha é obrigatória (mín. 6 caracteres)' });
+    }
+    try {
+      const r = await db.query(
+        'SELECT password_hash FROM users WHERE id = $1 LIMIT 1',
+        [req.userId]
+      );
+      const row = r.rows[0];
+      if (!row) return res.status(404).json({ message: 'Usuário não encontrado' });
+      if (row.password_hash) {
+        const cur = (current_password != null ? String(current_password) : '').trim();
+        if (!cur || !(await bcrypt.compare(cur, row.password_hash))) {
+          return res.status(401).json({ message: 'Senha atual incorreta' });
+        }
+      }
+      const password_hash = await bcrypt.hash(newPass, 10);
+      await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, req.userId]);
+      return res.status(200).json({ success: true, message: 'Senha atualizada' });
+    } catch (err) {
+      console.error('[LIBERTY] PATCH /users/me/password', err);
+      return res.status(500).json({ message: err.message || 'Erro ao atualizar senha' });
+    }
+  });
+
+  // POST /api/v1/users/me/avatar — upload de foto (body: { image: "data:image/...;base64,..." })
+  const UPLOADS_DIR = path.join(__dirname, 'uploads');
+  const AVATARS_DIR = path.join(UPLOADS_DIR, 'avatars');
+  try {
+    if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    if (!fs.existsSync(AVATARS_DIR)) fs.mkdirSync(AVATARS_DIR, { recursive: true });
+  } catch (e) {
+    console.warn('[LIBERTY] Não foi possível criar pasta uploads:', e.message);
+  }
+
+  app.post('/api/v1/users/me/avatar', auth.requireAuth, async (req, res) => {
+    const userId = req.userId;
+    const raw = req.body?.image;
+    if (!raw || typeof raw !== 'string') {
+      return res.status(400).json({ message: 'Envie { image: "data:image/...;base64,..." }' });
+    }
+    const match = raw.match(/^data:image\/(jpeg|jpg|png|gif|webp);base64,(.+)$/i);
+    if (!match) {
+      return res.status(400).json({ message: 'Imagem inválida. Use JPEG, PNG, GIF ou WebP em base64.' });
+    }
+    const ext = match[1].toLowerCase() === 'jpg' ? 'jpg' : match[1].toLowerCase();
+    const base64 = match[2];
+    let buf;
+    try {
+      buf = Buffer.from(base64, 'base64');
+    } catch (_) {
+      return res.status(400).json({ message: 'Base64 inválido.' });
+    }
+    if (buf.length > 4 * 1024 * 1024) {
+      return res.status(400).json({ message: 'Imagem demasiado grande (máx. 4 MB).' });
+    }
+    const filename = `${userId}.${ext}`;
+    const filepath = path.join(AVATARS_DIR, filename);
+    try {
+      fs.writeFileSync(filepath, buf);
+    } catch (e) {
+      console.error('[LIBERTY] Erro ao gravar avatar:', e.message);
+      return res.status(500).json({ message: 'Erro ao guardar a imagem.' });
+    }
+    const avatarUrl = `/uploads/avatars/${filename}?t=${Date.now()}`;
+    if (db.isConfigured() && db.isConnected()) {
+      try {
+        await db.query('UPDATE users SET avatar_url = $1 WHERE id = $2', [avatarUrl, userId]);
+      } catch (e) {
+        console.error('[LIBERTY] Erro ao atualizar avatar_url:', e.message);
+        return res.status(500).json({ message: 'Erro ao atualizar perfil.' });
+      }
+    }
+    return res.status(200).json({ avatar_url: avatarUrl });
+  });
 
   // POST /api/v1/activity/ping — incrementa tempo em app (para ranking By Activity)
   app.post('/api/v1/activity/ping', auth.requireAuth, async (req, res) => {
@@ -1623,6 +1784,9 @@ async function start() {
       res.type('svg').send(logoFallbackSvg);
     }
   });
+
+  // Avatares enviados pelos utilizadores
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
   // Static + rota raiz
   app.use(express.static(STATIC_DIR));
