@@ -618,7 +618,7 @@ class LibertyApp {
 
     setupEventListeners() {
         // Auth tabs
-        document.querySelectorAll('.auth-tab').forEach(tab => {
+        document.querySelectorAll('.auth-choice-btn, .auth-tab').forEach(tab => {
             tab.addEventListener('click', () => this.switchAuthTab(tab.dataset.tab));
         });
         document.getElementById('login-form')?.addEventListener('submit', e => { e.preventDefault(); this.handleLogin(); });
@@ -673,14 +673,41 @@ class LibertyApp {
             if (!this.isHomeView) this.toggleServerDropdown(e);
         });
 
-        // Mobile: toggle channel sidebar
+        // Mobile: toggle channel sidebar + backdrop (tap outside to close)
         const channelSidebarToggle = document.querySelector('.channel-sidebar-toggle');
-        if (channelSidebarToggle) {
+        const channelSidebarBackdrop = document.getElementById('channel-sidebar-backdrop');
+        const channelSidebar = document.querySelector('.channel-sidebar');
+        const closeMobileChannelDrawer = () => {
+            if (channelSidebar) channelSidebar.classList.add('mobile-hidden');
+            if (channelSidebarBackdrop) channelSidebarBackdrop.classList.remove('is-open');
+        };
+        this._closeMobileChannelDrawer = closeMobileChannelDrawer;
+        if (channelSidebarToggle && channelSidebar) {
             channelSidebarToggle.addEventListener('click', () => {
-                const sidebar = document.querySelector('.channel-sidebar');
-                if (sidebar) sidebar.classList.toggle('mobile-hidden');
+                const isHidden = channelSidebar.classList.toggle('mobile-hidden');
+                if (channelSidebarBackdrop) {
+                    if (isHidden) channelSidebarBackdrop.classList.remove('is-open');
+                    else channelSidebarBackdrop.classList.add('is-open');
+                }
             });
         }
+        if (channelSidebarBackdrop) {
+            channelSidebarBackdrop.addEventListener('click', closeMobileChannelDrawer);
+        }
+        // Em mobile, iniciar com drawer fechado
+        const mq = window.matchMedia('(max-width: 768px)');
+        const applyMobileDrawerState = () => {
+            if (!channelSidebar || !channelSidebarBackdrop) return;
+            if (mq.matches) {
+                channelSidebar.classList.add('mobile-hidden');
+                channelSidebarBackdrop.classList.remove('is-open');
+            } else {
+                channelSidebar.classList.remove('mobile-hidden');
+                channelSidebarBackdrop.classList.remove('is-open');
+            }
+        };
+        applyMobileDrawerState();
+        mq.addEventListener('change', applyMobileDrawerState);
 
         // User panel buttons
         const muteBtn = document.querySelector('[data-tooltip="Mute"]');
@@ -1295,7 +1322,7 @@ class LibertyApp {
     // ═══════════════════════════════════════════
 
     switchAuthTab(tab) {
-        document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        document.querySelectorAll('.auth-choice-btn, .auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
         document.querySelectorAll('.auth-form').forEach(f => f.classList.toggle('active', f.id === `${tab}-form`));
     }
 
@@ -1416,6 +1443,7 @@ class LibertyApp {
     }
 
     selectHome() {
+        if (this._closeMobileChannelDrawer) this._closeMobileChannelDrawer();
         this.isHomeView = true;
         this.currentHomeSubView = 'friends';
         this.currentServer = null;
@@ -1445,6 +1473,7 @@ class LibertyApp {
         if (navArea) {
             navArea.querySelectorAll('.home-nav-item').forEach(btn => {
                 btn.onclick = () => {
+                    if (this._closeMobileChannelDrawer) this._closeMobileChannelDrawer();
                     navArea.querySelectorAll('.home-nav-item').forEach(b => b.classList.remove('active'));
                     btn.classList.add('active');
                     if (dmList) dmList.querySelectorAll('.dm-list-item').forEach(d => d.classList.remove('active'));
@@ -2438,6 +2467,7 @@ class LibertyApp {
     }
 
     async selectChannel(channelId) {
+        if (this._closeMobileChannelDrawer) this._closeMobileChannelDrawer();
         const prevRoom = this.currentChannel?.room || this.currentChannel?.id;
         const channel = this.channels.find(c => c.id === channelId);
         if (!channel) return;

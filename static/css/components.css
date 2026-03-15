@@ -1428,6 +1428,8 @@
     flex: 1;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .friends-header {
@@ -1494,6 +1496,7 @@
     border-radius: var(--radius-md);
     border-bottom: 1px solid rgba(255, 255, 255, 0.02);
     transition: background var(--transition-fast);
+    flex-wrap: wrap;
 }
 .friend-item:hover {
     background: var(--dark-gray);
@@ -1502,6 +1505,7 @@
 .friend-info {
     flex: 1;
     min-width: 0;
+    overflow: hidden;
 }
 
 .friend-name {

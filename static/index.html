@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5, user-scalable=yes">
     <meta name="description" content="LIBERTY — Freedom to Connect. Plataforma de comunicação segura e livre.">
     <meta name="theme-color" content="#FFD700">
     <title>LIBERTY — Freedom to Connect</title>
@@ -17,6 +17,7 @@
     <link rel="stylesheet" href="/css/main.css">
     <link rel="stylesheet" href="/css/themes.css">
     <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/mobile.css">
 </head>
 <body>
 
@@ -51,20 +52,20 @@
                     <img src="/assets/logo.png" alt="LIBERTY" width="68" height="68" data-logo-fallback>
                 </div>
                 <h1>LIBERTY</h1>
-                <p class="tagline">Freedom to Connect</p>
+                <p class="tagline">Secure communication</p>
             </div>
 
-            <div class="auth-tabs" role="tablist" aria-label="Modo de autenticação">
-                <button class="auth-tab active"
+            <div class="auth-choice-buttons" role="tablist" aria-label="Modo de autenticação">
+                <button type="button" class="auth-choice-btn auth-choice-login active"
                         role="tab"
                         aria-selected="true"
                         aria-controls="login-form"
-                        data-tab="login">Entrar</button>
-                <button class="auth-tab"
+                        data-tab="login">Log in</button>
+                <button type="button" class="auth-choice-btn auth-choice-register"
                         role="tab"
                         aria-selected="false"
                         aria-controls="register-form"
-                        data-tab="register">Registrar</button>
+                        data-tab="register">Create account</button>
             </div>
 
             <!-- Login: apenas Nome de Usuário -->
@@ -247,11 +248,13 @@
                         </button>
                     </div>
                     <button class="btn-icon tooltip" id="user-settings-btn" data-tooltip="Settings" aria-label="Configurações do usuário">
-                        <i class="fas fa-sliders" aria-hidden="true"></i>
+                        <img src="/assets/settings-player.png" alt="" class="user-settings-icon" width="20" height="20" aria-hidden="true">
                     </button>
                 </div>
             </div>
         </aside>
+        <!-- Backdrop mobile: tap outside to close channel drawer -->
+        <div id="channel-sidebar-backdrop" class="channel-sidebar-backdrop" aria-hidden="true"></div>
 
         <!-- ─── Main Content ─── -->
         <main class="main-content" role="main">

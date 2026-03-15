@@ -1,0 +1,365 @@
+/* ═══════════════════════════════════════════════════════════════
+   LIBERTY — Mobile: compatibilidade extrema com celulares
+   viewport-fit=cover + safe-area, touch 44px, drawer, sem overflow
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Backdrop do drawer: escondido por defeito (só mostra em mobile quando drawer aberto) */
+.channel-sidebar-backdrop {
+    display: none;
+    pointer-events: none;
+}
+
+/* Evitar scroll horizontal em todo o app */
+html, body {
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Safe area para notch e gestos (iOS/Android) */
+.app {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Redução do highlight de toque (Android) e área de toque consistente */
+@media (max-width: 768px) {
+    * {
+        -webkit-tap-highlight-color: rgba(255, 215, 0, 0.15);
+    }
+    .messages-container {
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* ─── 768px: tablet / telemóvel em paisagem ─── */
+@media (max-width: 768px) {
+    .app {
+        min-height: 100vh;
+        min-height: 100dvh;
+    }
+
+    /* Botão hamburger visível e com área de toque mínima 44px */
+    .channel-sidebar-toggle.mobile-only {
+        display: flex !important;
+        min-width: 44px;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        margin-right: 4px;
+    }
+
+    /* Drawer da sidebar: overlay escuro quando aberto */
+    .channel-sidebar-backdrop {
+        pointer-events: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 140;
+        animation: mobileBackdropFade 0.2s ease;
+    }
+    .channel-sidebar-backdrop.is-open {
+        display: block;
+        pointer-events: auto;
+    }
+    @keyframes mobileBackdropFade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    .channel-sidebar {
+        left: 0;
+        width: min(280px, 85vw);
+        max-width: none;
+        padding-top: env(safe-area-inset-top);
+    }
+
+    .main-content {
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .channel-header {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+        min-height: 48px;
+    }
+
+    .channel-actions .btn-icon {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .messages-container {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+    }
+
+    .message-input-container {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+        padding-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+}
+
+/* ─── 480px: telemóvel ─── */
+@media (max-width: 480px) {
+    :root {
+        --server-sidebar-width: 56px;
+    }
+
+    .server-sidebar {
+        width: 56px;
+        padding-left: env(safe-area-inset-left);
+    }
+
+    .server-icon {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .channel-sidebar {
+        width: min(260px, 92vw);
+    }
+
+    .channel-info h3 {
+        font-size: 15px;
+        max-width: 140px;
+    }
+
+    /* Menos botões no header em mobile: esconder threads, inbox, help */
+    .channel-actions .btn-icon[data-tooltip="Threads"],
+    .channel-actions .btn-icon[data-tooltip="Inbox"],
+    .channel-actions #help-btn {
+        display: none !important;
+    }
+
+    .friend-item {
+        min-height: 56px;
+        padding: 12px 12px;
+    }
+
+    .friend-item-avatar {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .member-item {
+        min-height: 52px;
+        padding: 10px 12px;
+    }
+
+    .member-avatar-yellow,
+    .member-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .member-action-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .message {
+        padding: 12px 0;
+    }
+
+    .message-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .message-content {
+        font-size: 15px;
+        line-height: 1.45;
+    }
+
+    .message-input-wrapper textarea {
+        min-height: 44px;
+        font-size: 16px; /* evita zoom no iOS ao focar */
+    }
+
+    .message-input-wrapper .btn-icon,
+    .btn-send-message {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .friends-view .friends-search-wrapper input {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    .dm-list .dm-list-item {
+        min-height: 48px;
+        padding: 10px 12px;
+    }
+
+    .home-nav-item {
+        min-height: 44px;
+        padding: 10px 14px;
+    }
+}
+
+/* ─── 400px: telemóveis pequenos ─── */
+@media (max-width: 400px) {
+    .server-sidebar {
+        width: 52px;
+    }
+
+    .server-icon {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .channel-sidebar {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 0;
+    }
+
+    .channel-header .channel-info h3 {
+        max-width: 100px;
+        font-size: 14px;
+    }
+
+    .channel-actions .btn-icon {
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .friends-header {
+        padding: 10px 12px;
+    }
+
+    .friends-tabs .tab {
+        padding: 10px 12px;
+        min-height: 44px;
+    }
+
+    .modal-overlay {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    .modal-overlay .modal {
+        max-width: 100%;
+        width: 100%;
+        max-height: 90vh;
+        border-radius: 16px 16px 0 0;
+        margin-bottom: env(safe-area-inset-bottom);
+    }
+
+    .player-banner-card,
+    .profile-card-modal .profile-card-modal-inner {
+        max-width: 100%;
+        margin: 12px;
+        margin-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+}
+
+/* ─── 360px: ecrãs muito pequenos ─── */
+@media (max-width: 360px) {
+    .channel-header {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .channel-actions .btn-icon {
+        min-width: 36px;
+        min-height: 36px;
+    }
+
+    .message-input-container {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .message-input-wrapper {
+        padding: 8px 0 8px 0;
+    }
+
+    .friend-item,
+    .member-item {
+        padding: 10px 8px;
+    }
+}
+
+/* ─── Touch: evitar hover como único feedback ─── */
+@media (hover: none) and (pointer: coarse) {
+    .btn-icon,
+    .channel-sidebar-toggle,
+    .server-icon,
+    .friend-item,
+    .member-item,
+    .dm-list-item,
+    .home-nav-item,
+    .channel-item {
+        min-height: 44px;
+    }
+
+    .btn-icon {
+        min-width: 44px;
+    }
+
+    /* Aumentar área clicável dos botões do input de mensagem */
+    .message-input-wrapper .btn-icon,
+    .input-actions .btn-icon {
+        padding: 10px;
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .attach-btn,
+    #emoji-btn,
+    #send-message-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* Remover hover que depende de cursor para ações críticas */
+    .friend-item:active,
+    .member-item:active {
+        background: rgba(255, 215, 0, 0.12);
+    }
+}
+
+/* Modais em fullscreen em mobile */
+@media (max-width: 480px) {
+    .modal-overlay .modal.modal-full,
+    .settings-overlay {
+        max-height: 100vh;
+        max-height: 100dvh;
+        border-radius: 0;
+    }
+
+    .modal-overlay .security-warning-modal,
+    .modal-overlay .modal:not(.modal-full) {
+        width: calc(100% - 24px);
+        max-width: 100%;
+        margin: 12px;
+        margin-bottom: max(12px, env(safe-area-inset-bottom));
+    }
+}
+
+/* Input de mensagem: fixo no fundo com safe area */
+@media (max-width: 768px) {
+    .message-input-container {
+        background: rgba(18, 16, 14, 0.98);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-top: 1px solid rgba(255, 215, 0, 0.08);
+    }
+}

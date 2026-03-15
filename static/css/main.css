@@ -401,100 +401,122 @@ a:hover {
 
 .auth-container {
     width: 100%;
-    max-width: 420px;
-    background: rgba(24, 21, 18, 0.80);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
-    border-radius: var(--radius-2xl);
-    padding: var(--spacing-xl);
-    border: 1px solid rgba(255, 215, 0, 0.12);
+    max-width: 400px;
+    background: rgba(28, 26, 24, 0.98);
+    border-radius: 20px;
+    padding: 36px 32px;
+    border: 1px solid rgba(255, 215, 0, 0.1);
     box-shadow:
-        var(--glass-shadow),
-        inset 0 1px 0 rgba(255, 215, 0, 0.08);
+        0 24px 48px rgba(0, 0, 0, 0.45),
+        0 0 0 1px rgba(0, 0, 0, 0.2);
     position: relative;
     z-index: 1;
 }
 
 .auth-brand {
     text-align: center;
-    margin-bottom: var(--spacing-xl);
+    margin-bottom: 28px;
 }
 
 .brand-logo {
-    width: 68px;
-    height: 68px;
-    background: linear-gradient(135deg, var(--primary-yellow) 0%, var(--dark-yellow) 100%);
-    border-radius: var(--radius-xl);
+    width: 72px;
+    height: 72px;
+    background: rgba(38, 35, 32, 0.95);
+    border-radius: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto var(--spacing-md);
+    margin: 0 auto 16px;
     font-size: 30px;
-    color: var(--primary-black);
-    box-shadow: var(--glow-sm);
-    transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+    color: var(--primary-yellow);
     overflow: hidden;
+    border: 1px solid rgba(255, 215, 0, 0.08);
 }
 .brand-logo img {
-    width: 100%;
-    height: 100%;
+    width: 56px;
+    height: 56px;
     object-fit: contain;
-    /* Evitar que a logo fique branca (temas/filter) */
     filter: none;
     opacity: 1;
-    background-color: var(--primary-yellow);
 }
 .brand-logo:hover {
-    box-shadow: var(--glow-md);
-    transform: translateY(-2px);
+    border-color: rgba(255, 215, 0, 0.2);
 }
 
 .auth-brand h1 {
-    font-size: 32px;
+    font-size: 26px;
     font-weight: 800;
-    background: linear-gradient(135deg, var(--primary-yellow) 0%, var(--light-yellow) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: var(--spacing-xs);
-    letter-spacing: 3px;
+    color: var(--primary-yellow);
+    margin: 0 0 6px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
 }
 
-.tagline {
-    color: var(--text-secondary);
-    font-size: 13px;
-    letter-spacing: 0.5px;
+.auth-brand .tagline {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    margin: 0;
 }
 
+/* Dois botões no estilo da UI: Log in (preenchido) + Create account (contorno) */
+.auth-choice-buttons,
 .auth-tabs {
     display: flex;
-    gap: var(--spacing-xs);
-    margin-bottom: var(--spacing-lg);
-    background: var(--dark-gray);
-    padding: 3px;
-    border-radius: var(--radius-md);
-    border: 1px solid rgba(255, 255, 255, 0.04);
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
 }
 
+.auth-choice-btn,
 .auth-tab {
-    flex: 1;
-    padding: 8px var(--spacing-md);
-    background: transparent;
-    border: none;
-    border-radius: calc(var(--radius-md) - 2px);
-    color: var(--text-secondary);
-    font-size: 14px;
-    font-weight: 500;
+    width: 100%;
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 700;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition: all 0.2s ease;
     font-family: inherit;
+    border: none;
+    text-align: center;
 }
-.auth-tab:hover { color: var(--text-primary); }
-.auth-tab.active {
-    background: linear-gradient(135deg, var(--primary-yellow) 0%, var(--dark-yellow) 100%);
+.auth-choice-login,
+.auth-tab[data-tab="login"] {
+    background: var(--primary-yellow);
     color: var(--primary-black);
-    font-weight: 600;
-    box-shadow: var(--glow-xs);
+    box-shadow: 0 2px 12px rgba(255, 215, 0, 0.35);
+}
+.auth-choice-login:hover,
+.auth-tab[data-tab="login"]:hover {
+    filter: brightness(1.06);
+    box-shadow: 0 4px 16px rgba(255, 215, 0, 0.4);
+}
+.auth-choice-register,
+.auth-tab[data-tab="register"] {
+    background: transparent;
+    color: var(--primary-yellow);
+    border: 2px solid var(--primary-yellow);
+}
+.auth-choice-register:hover,
+.auth-tab[data-tab="register"]:hover {
+    background: rgba(255, 215, 0, 0.08);
+}
+.auth-choice-btn.active,
+.auth-tab.active {
+    /* mantém o estilo do botão selecionado */
+}
+.auth-choice-login.active,
+.auth-tab[data-tab="login"].active {
+    background: var(--primary-yellow);
+    color: var(--primary-black);
+}
+.auth-choice-register.active,
+.auth-tab[data-tab="register"].active {
+    background: rgba(255, 215, 0, 0.12);
+    color: var(--primary-yellow);
+    border-color: var(--primary-yellow);
 }
 
 .auth-form {
@@ -613,6 +635,8 @@ a:hover {
     display: flex;
     height: 100vh;
     width: 100vw;
+    overflow: hidden;
+    min-width: 0;
 }
 
 /* ── Server Sidebar ── */
@@ -772,10 +796,13 @@ a:hover {
 /* ── Channel Sidebar ── */
 .channel-sidebar {
     width: var(--channel-sidebar-width);
+    min-width: 0;
+    flex-shrink: 0;
     background: #000;
     display: flex;
     flex-direction: column;
     border-right: 1px solid rgba(255, 215, 0, 0.05);
+    overflow: hidden;
 }
 
 .server-header {
@@ -963,6 +990,18 @@ a:hover {
     gap: 2px;
 }
 
+.user-settings-icon {
+    display: block;
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    opacity: 0.9;
+    transition: opacity var(--transition-fast);
+}
+.user-controls .btn-icon:hover .user-settings-icon {
+    opacity: 1;
+}
+
 /* ══════════════════════════════════════════
    MAIN CONTENT
    ══════════════════════════════════════════ */
@@ -1041,6 +1080,7 @@ a:hover {
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
+    flex-wrap: wrap;
 }
 .channel-actions .btn-icon {
     color: var(--text-secondary);
@@ -1416,6 +1456,7 @@ a:hover {
 /* ── Members Sidebar (estilo MEMBROS — imagem) ── */
 .members-sidebar {
     width: var(--members-sidebar-width);
+    min-width: 0;
     background: #000;
     border-left: 1px solid rgba(255, 255, 255, 0.06);
     overflow-y: auto;
@@ -1668,19 +1709,76 @@ a:hover {
 .member-item:hover .member-name { color: var(--text-primary); }
 
 /* ═══════════════════════════════════════════ */
-/*  RESPONSIVE                                */
+/*  RESPONSIVE — adaptar a resoluções sem encobrir */
 /* ═══════════════════════════════════════════ */
 
+/* Reduzir sidebars em ecrãs médios para dar espaço ao conteúdo */
+@media (max-width: 1400px) {
+    .channel-sidebar { width: 220px; }
+    .members-sidebar { width: 220px; }
+}
+
 @media (max-width: 1200px) {
-    .members-sidebar { display: none; }
+    .channel-sidebar { width: 200px; }
+    .members-sidebar { width: 200px; }
 }
 
+/* Esconder painel "Active Now" / membros em tablets para evitar sobreposição */
+@media (max-width: 1100px) {
+    .members-sidebar { width: 0; min-width: 0; overflow: hidden; opacity: 0; padding: 0; border: none; }
+    .members-sidebar.collapsed { width: 0; }
+}
+
+/* Sidebar de canais mais estreita; header do canal adapta */
+@media (max-width: 1000px) {
+    .channel-sidebar { width: 200px; }
+    .channel-header .channel-topic { max-width: 160px; }
+    .channel-actions { flex-wrap: wrap; gap: 4px; }
+    .channel-actions .btn-icon { flex-shrink: 0; }
+    .channel-search-wrapper { max-width: 120px; }
+}
+
+/* Friends view: tabs e campos em linha/coluna conforme espaço */
 @media (max-width: 900px) {
-    .sidebar { width: 200px; min-width: 200px; }
+    .friends-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .friends-tabs { flex-wrap: wrap; }
+    .friends-search { padding: 12px 16px; }
+    .friend-item { flex-wrap: wrap; }
+    .friend-item-actions { width: 100%; justify-content: flex-end; margin-top: 4px; }
 }
 
+/* Mobile: sidebar de canais em drawer; conteúdo a 100% */
 @media (max-width: 768px) {
-    .server-list { width: 56px; min-width: 56px; }
-    .sidebar { width: 180px; min-width: 180px; }
-    .channel-header { padding: 0 10px; }
+    .channel-sidebar {
+        position: fixed;
+        left: var(--server-sidebar-width);
+        top: 0;
+        bottom: 0;
+        z-index: 150;
+        width: 260px;
+        max-width: calc(100vw - var(--server-sidebar-width) - 48px);
+        box-shadow: 4px 0 20px rgba(0,0,0,0.4);
+        transition: transform 0.2s ease;
+    }
+    .channel-sidebar.mobile-hidden { transform: translateX(-100%); }
+    .main-content { min-width: 0; width: 100%; }
+    .channel-header { padding: 0 12px; flex-wrap: wrap; min-height: 48px; height: auto; }
+    .channel-info { min-width: 0; }
+    .channel-info h3 { max-width: 120px; }
+    .channel-topic { display: none; }
+    .channel-actions { flex-wrap: wrap; }
+    .channel-search-wrapper { display: none; }
+    .friends-view .friends-search-wrapper { padding: 8px 12px; }
+    .friends-list { padding: 8px; }
+}
+
+/* Ecrãs muito pequenos: server bar mais compacta */
+@media (max-width: 500px) {
+    :root { --server-sidebar-width: 56px; }
+    .server-sidebar { width: 56px; }
+    .channel-sidebar { left: 56px; width: 240px; }
+    .channel-header .channel-info h3 { max-width: 100px; font-size: 14px; }
+    .friend-item { padding: 10px 8px; }
+    .member-item { padding: 6px 8px; }
+    .member-item-actions { flex-wrap: wrap; }
 }
