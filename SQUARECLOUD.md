@@ -13,11 +13,11 @@
 
 **Importante:** depois de adicionar ou alterar variáveis, é obrigatório **Redeploy** (ou Reiniciar) a aplicação — as variáveis são lidas apenas ao iniciar o processo.
 
-| Variável       | Exemplo |
-|----------------|---------|
+| Variável       | Exemplo                                                                            |
+| -------------- | ---------------------------------------------------------------------------------- |
 | `DATABASE_URL` | `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require` |
-| `JWT_SECRET`   | string longa e aleatória para produção |
-| `NODE_ENV`     | `production` (opcional) |
+| `JWT_SECRET`   | string longa e aleatória para produção                                             |
+| `NODE_ENV`     | `production` (opcional)                                                            |
 
 - Nome exato: `DATABASE_URL` (tudo junto, maiúsculas). Podes colar a URL do Neon com `channel_binding=require`; o servidor remove esse parâmetro automaticamente.
 - O backend usa **PostgreSQL** (Neon). Na primeira subida, o schema é aplicado automaticamente. Se as tabelas já existirem, os `CREATE` são ignorados.

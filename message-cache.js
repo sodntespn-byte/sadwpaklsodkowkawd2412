@@ -10,6 +10,7 @@
  * Opcional: definir REDIS_URL para usar Redis em vez de memória (útil para múltiplas instâncias).
  * Para Redis, instale: npm install redis
  */
+import { logger } from './src/lib/logger.js';
 
 const MAX_CACHE_PER_CHANNEL = 300;
 const PREFIX = 'liberty:msg:';
@@ -28,11 +29,11 @@ async function getRedisClient() {
     const redis = await import('redis');
     redisClient = redis.createClient({ url: process.env.REDIS_URL });
     await redisClient.connect();
-    redisClient.on('error', (err) => console.warn('[message-cache] Redis:', err.message));
-    console.log('[LIBERTY] Cache de mensagens usando Redis');
+    redisClient.on('error', err => logger.warn('[message-cache] Redis:', err.message));
+    logger.info('[LIBERTY] Cache de mensagens usando Redis');
     return redisClient;
   } catch (err) {
-    console.warn('[message-cache] Redis indisponível, usando memória:', err.message);
+    logger.warn('[message-cache] Redis indisponível, usando memória:', err.message);
     return null;
   }
 }
@@ -41,7 +42,7 @@ async function getRedisClient() {
 function dedupeById(messages) {
   if (!Array.isArray(messages)) return [];
   const seen = new Set();
-  return messages.filter((m) => {
+  return messages.filter(m => {
     const id = m.id || m.message_id;
     if (!id || seen.has(id)) return false;
     seen.add(id);
@@ -67,7 +68,7 @@ async function getCachedMessages(chatId) {
       const raw = await r.get(key);
       const list = raw ? JSON.parse(raw) : [];
       return Array.isArray(list) ? list : [];
-    } catch (_) {
+    } catch {
       return [];
     }
   }
@@ -87,7 +88,7 @@ async function setCachedMessages(chatId, messages) {
     try {
       await r.setEx(key, TTL_SEC, JSON.stringify(list));
     } catch (err) {
-      console.warn('[message-cache] setCachedMessages Redis:', err.message);
+      logger.warn('[message-cache] setCachedMessages Redis:', err.message);
     }
     return;
   }
@@ -101,7 +102,7 @@ async function addCachedMessage(chatId, msg) {
   if (!chatId || !msg) return;
   const list = await getCachedMessages(chatId);
   const id = msg.id || msg.message_id;
-  const filtered = id ? list.filter((m) => (m.id || m.message_id) !== id) : list;
+  const filtered = id ? list.filter(m => (m.id || m.message_id) !== id) : list;
   const next = cap([...filtered, msg], MAX_CACHE_PER_CHANNEL);
   await setCachedMessages(chatId, next);
 }
@@ -116,13 +117,20 @@ async function getAllMessageLists() {
     try {
       const keys = await r.keys(PREFIX + '*');
       if (!keys.length) return [];
-      const lists = await Promise.all(keys.map((k) => r.get(k).then((raw) => (raw ? JSON.parse(raw) : [])).catch(() => [])));
-      return lists.filter((arr) => Array.isArray(arr) && arr.length > 0);
-    } catch (_) {
+      const lists = await Promise.all(
+        keys.map(k =>
+          r
+            .get(k)
+            .then(raw => (raw ? JSON.parse(raw) : []))
+            .catch(() => [])
+        )
+      );
+      return lists.filter(arr => Array.isArray(arr) && arr.length > 0);
+    } catch {
       return [];
     }
   }
-  return Array.from(memory.values()).filter((arr) => Array.isArray(arr) && arr.length > 0);
+  return Array.from(memory.values()).filter(arr => Array.isArray(arr) && arr.length > 0);
 }
 
 export default {

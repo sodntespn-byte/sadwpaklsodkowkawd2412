@@ -42,10 +42,10 @@ A mensagem **"no pg_hba.conf entry for host …"** significa que o **servidor Po
 
 ### Resumo
 
-| Onde o banco está        | O que fazer |
-|--------------------------|-------------|
-| **Neon**                 | Usar URL com `?sslmode=require`; não costuma bloquear por IP. |
+| Onde o banco está        | O que fazer                                                                                                                       |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Neon**                 | Usar URL com `?sslmode=require`; não costuma bloquear por IP.                                                                     |
 | **Square Cloud (banco)** | No painel da Square Cloud, liberar/whitelist do IP **162.249.173.59** (ou ver na documentação deles como liberar IPs de conexão). |
-| **Seu próprio servidor** | No servidor do PostgreSQL, editar `pg_hba.conf` para permitir 162.249.173.59 e recarregar o serviço. |
+| **Seu próprio servidor** | No servidor do PostgreSQL, editar `pg_hba.conf` para permitir 162.249.173.59 e recarregar o serviço.                              |
 
 Depois de ajustar o banco (SSL na URL no Neon ou liberação do IP no provedor/servidor), use apenas variáveis de ambiente (`.env` local e variáveis no deploy) para a URL — sem senha no código nem no GitHub.

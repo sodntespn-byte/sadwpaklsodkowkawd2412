@@ -8,12 +8,25 @@ import { fileURLToPath } from 'url';
 import http from 'http';
 import express from 'express';
 import helmet from 'helmet';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcrypt';
 import { Server as SocketIOServer } from 'socket.io';
 import { Pool } from 'pg';
 import jwt from 'jsonwebtoken';
 import WebSocket, { WebSocketServer } from 'ws';
 import crypto from 'node:crypto';
+import Joi from 'joi';
+import config from './src/config.js';
+import { logger } from './src/lib/logger.js';
+
+/** Em produção não expõe mensagens de erro internas ao cliente (evita vazamento de stack/paths). */
+function safeApiMessage(err, fallback) {
+  if (config.isProduction) return fallback || 'Erro interno. Tente novamente mais tarde.';
+  return (err && err.message) || fallback || 'Erro';
+}
+import { schemas, validateBody } from './src/middleware/validate.js';
+import { registerAuthRoutes } from './src/routes/auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,7 +65,7 @@ async function ensureMessageInDb(msg, chatId) {
       [id, dbChatId, userId, content, createdAt, createdAt]
     );
   } catch (err) {
-    console.warn('[LIBERTY] ensureMessageInDb:', err.message);
+    logger.warn('[LIBERTY] ensureMessageInDb:', err.message);
   }
 }
 
@@ -73,7 +86,7 @@ async function loadMessagesFromDb(chatId, limit = 300) {
       [chatId, limit]
     );
     const rows = r.rows || [];
-    return rows.map((row) => ({
+    return rows.map(row => ({
       id: String(row.id),
       chat_id: String(row.chat_id),
       content: row.content || '',
@@ -85,7 +98,7 @@ async function loadMessagesFromDb(chatId, limit = 300) {
       created_at: row.created_at,
     }));
   } catch (err) {
-    console.warn('[LIBERTY] loadMessagesFromDb:', err.message);
+    logger.warn('[LIBERTY] loadMessagesFromDb:', err.message);
     return [];
   }
 }
@@ -121,7 +134,7 @@ function computeContentXpByUser(messagesByChannel) {
       const id = msg.author_id || msg.author;
       if (!id) continue;
       const cur = byUser.get(id) || { xp: 0, username: msg.author_username || msg.author || 'User' };
-      cur.xp += (msg.content && msg.content.length) ? msg.content.length : 0;
+      cur.xp += msg.content && msg.content.length ? msg.content.length : 0;
       if (msg.author_username) cur.username = msg.author_username;
       if (msg.author && typeof msg.author === 'string') cur.username = msg.author;
       byUser.set(id, cur);
@@ -131,12 +144,9 @@ function computeContentXpByUser(messagesByChannel) {
 }
 
 // --- db (inline para deploy sem pasta db/)
-// Usa env (DATABASE_URL, BANCO_DADOS, DB_URL) ou, se não definida, esta URL embutida (Neon).
-// O parâmetro channel_binding=require é removido na conexão.
-const EMBEDDED_DATABASE_URL = 'postgresql://neondb_owner:npg_z2MNWjJgXSB7@ep-icy-art-ameh1o7b-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-
+// URL do banco APENAS via variáveis de ambiente. Nunca embutir credenciais no código.
 function _dbGetUrl() {
-  const url = process.env.DATABASE_URL || process.env.BANCO_DADOS || process.env.DB_URL || EMBEDDED_DATABASE_URL || '';
+  const url = process.env.DATABASE_URL || process.env.BANCO_DADOS || process.env.DB_URL || '';
   return typeof url === 'string' ? url.trim() : '';
 }
 function _dbLoadMtlsOptions() {
@@ -156,12 +166,20 @@ let _dbConnected = false;
 async function _dbConnect() {
   let rawUrl = _dbGetUrl();
   if (!rawUrl || !rawUrl.startsWith('postgres')) {
-    console.warn('[LIBERTY] DATABASE_URL não definida — banco desativado');
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('LIBERTY', 'DATABASE_URL é obrigatória em produção. Defina no ambiente.');
+      process.exitCode = 1;
+    } else {
+      logger.warn('[LIBERTY] DATABASE_URL não definida — banco desativado');
+    }
     return null;
   }
   // Neon: remover channel_binding=require (causa falha em muitos ambientes Node)
   if (rawUrl.includes('channel_binding=require')) {
-    rawUrl = rawUrl.replace(/&channel_binding=require/g, '').replace(/\?channel_binding=require&?/g, '?').replace(/\?&/, '?');
+    rawUrl = rawUrl
+      .replace(/&channel_binding=require/g, '')
+      .replace(/\?channel_binding=require&?/g, '?')
+      .replace(/\?&/, '?');
   }
   if (!_dbPool) {
     const isLocalhost = /@localhost[\s:]|@127\.0\.0\.1[\s:]/.test(rawUrl);
@@ -181,19 +199,19 @@ async function _dbConnect() {
   try {
     await tryConnect();
     _dbConnected = true;
-    console.log('[LIBERTY] PostgreSQL conectado');
+    logger.info('[LIBERTY] PostgreSQL conectado');
     return _dbPool;
   } catch (err) {
-    console.warn('[LIBERTY] PostgreSQL primeira tentativa:', err.message);
+    logger.warn('[LIBERTY] PostgreSQL primeira tentativa:', err.message);
     _dbConnected = false;
-    await new Promise((r) => setTimeout(r, 2500));
+    await new Promise(r => setTimeout(r, 2500));
     try {
       await tryConnect();
       _dbConnected = true;
-      console.log('[LIBERTY] PostgreSQL conectado (2ª tentativa)');
+      logger.info('[LIBERTY] PostgreSQL conectado (2ª tentativa)');
       return _dbPool;
     } catch (err2) {
-      console.warn('[LIBERTY] PostgreSQL indisponível:', err2.message);
+      logger.warn('[LIBERTY] PostgreSQL indisponível:', err2.message);
       _dbConnected = false;
       return null;
     }
@@ -300,8 +318,13 @@ CREATE INDEX IF NOT EXISTS idx_webrtc_calls_created ON webrtc_calls(created_at D
 
 async function dbInit() {
   if (!db.isConfigured() || !db.isConnected()) return;
-  const sql = LIBERTY_SCHEMA_SQL.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '').trim();
-  const statements = sql.split(';').map((s) => s.trim()).filter(Boolean);
+  const sql = LIBERTY_SCHEMA_SQL.replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/--[^\n]*/g, '')
+    .trim();
+  const statements = sql
+    .split(';')
+    .map(s => s.trim())
+    .filter(Boolean);
   let applied = 0;
   for (const stmt of statements) {
     if (!stmt.toUpperCase().startsWith('CREATE')) continue;
@@ -310,54 +333,56 @@ async function dbInit() {
       applied++;
     } catch (err) {
       if (err.code === '42P07') applied++;
-      else console.warn('[LIBERTY] Schema statement falhou:', err.message, '\n', stmt.slice(0, 60) + '...');
+      else logger.warn('[LIBERTY] Schema statement falhou:', err.message, '\n', stmt.slice(0, 60) + '...');
     }
   }
   try {
     await db.query(`ALTER TABLE chats DROP CONSTRAINT IF EXISTS chats_type_check`);
-    await db.query(`ALTER TABLE chats ADD CONSTRAINT chats_type_check CHECK (type IN ('channel', 'dm', 'group_dm', 'category'))`);
+    await db.query(
+      `ALTER TABLE chats ADD CONSTRAINT chats_type_check CHECK (type IN ('channel', 'dm', 'group_dm', 'category'))`
+    );
   } catch (err) {
-    if (err.code !== '42704' && err.code !== '42P01') console.warn('[LIBERTY] Migração chats_type_check:', err.message);
+    if (err.code !== '42704' && err.code !== '42P01') logger.warn('[LIBERTY] Migração chats_type_check:', err.message);
   }
   try {
     await db.query(`ALTER TABLE chats ADD COLUMN parent_id UUID REFERENCES chats(id) ON DELETE SET NULL`);
   } catch (err) {
-    if (err.code !== '42701') console.warn('[LIBERTY] Migração chats.parent_id:', err.message);
+    if (err.code !== '42701') logger.warn('[LIBERTY] Migração chats.parent_id:', err.message);
   }
   try {
     await db.query(`ALTER TABLE chats ADD COLUMN channel_type VARCHAR(20) DEFAULT 'text'`);
   } catch (err) {
-    if (err.code !== '42701') console.warn('[LIBERTY] Migração chats.channel_type:', err.message);
+    if (err.code !== '42701') logger.warn('[LIBERTY] Migração chats.channel_type:', err.message);
   }
   try {
     await db.query(`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`);
   } catch (err) {
-    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.password_hash:', err.message);
+    if (err.code !== '42701') logger.warn('[LIBERTY] Migração users.password_hash:', err.message);
   }
   try {
     await db.query(`ALTER TABLE users ALTER COLUMN email DROP NOT NULL`);
   } catch (err) {
-    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.email:', err.message);
+    if (err.code !== '42701') logger.warn('[LIBERTY] Migração users.email:', err.message);
   }
   try {
     await db.query(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
   } catch (err) {
-    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.avatar_url:', err.message);
+    if (err.code !== '42701') logger.warn('[LIBERTY] Migração users.avatar_url:', err.message);
   }
   try {
     await db.query(`ALTER TABLE servers ADD COLUMN icon_url TEXT`);
   } catch (err) {
-    if (err.code !== '42701') console.warn('[LIBERTY] Migração servers.icon_url:', err.message);
+    if (err.code !== '42701') logger.warn('[LIBERTY] Migração servers.icon_url:', err.message);
   }
   try {
     await db.query(`ALTER TABLE users ADD COLUMN banner_url TEXT`);
   } catch (err) {
-    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.banner_url:', err.message);
+    if (err.code !== '42701') logger.warn('[LIBERTY] Migração users.banner_url:', err.message);
   }
   try {
     await db.query(`ALTER TABLE users ADD COLUMN description TEXT`);
   } catch (err) {
-    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.description:', err.message);
+    if (err.code !== '42701') logger.warn('[LIBERTY] Migração users.description:', err.message);
   }
   try {
     await db.query(`
@@ -372,7 +397,7 @@ async function dbInit() {
     `);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_message_pins_chat ON message_pins(chat_id)`);
   } catch (err) {
-    if (err.code !== '42P07') console.warn('[LIBERTY] Migração message_pins:', err.message);
+    if (err.code !== '42P07') logger.warn('[LIBERTY] Migração message_pins:', err.message);
   }
   try {
     await db.query(`
@@ -388,7 +413,7 @@ async function dbInit() {
     `);
     await db.query(`CREATE INDEX IF NOT EXISTS idx_server_bans_server ON server_bans(server_id)`);
   } catch (err) {
-    if (err.code !== '42P07') console.warn('[LIBERTY] Migração server_bans:', err.message);
+    if (err.code !== '42P07') logger.warn('[LIBERTY] Migração server_bans:', err.message);
   }
   try {
     await db.query(`
@@ -400,18 +425,28 @@ async function dbInit() {
       )
     `);
   } catch (err) {
-    if (err.code !== '42P07') console.warn('[LIBERTY] Migração server_members:', err.message);
+    if (err.code !== '42P07') logger.warn('[LIBERTY] Migração server_members:', err.message);
   }
-  console.log('[LIBERTY] Schema PostgreSQL aplicado (' + applied + ' statements)');
+  logger.info('[LIBERTY] Schema PostgreSQL aplicado (' + applied + ' statements)');
 }
 
-const ADMIN_USERNAMES = ['zerk', 'noeb'];
+// Lista de admins via variável de ambiente (ex.: ADMIN_USERNAMES=user1,user2). Nunca hardcodar em produção.
+function _getAdminUsernames() {
+  const raw = process.env.ADMIN_USERNAMES || '';
+  if (typeof raw !== 'string') return [];
+  return raw
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean);
+}
 async function isAdmin(req) {
   if (!req.userId) return false;
+  const admins = _getAdminUsernames();
+  if (admins.length === 0) return false;
   try {
     const r = await db.query('SELECT username FROM users WHERE id = $1::uuid LIMIT 1', [req.userId]);
     const u = (r.rows[0]?.username || '').trim().toLowerCase();
-    return ADMIN_USERNAMES.includes(u);
+    return admins.includes(u);
   } catch (_) {
     return false;
   }
@@ -424,10 +459,17 @@ function isOfficialLibertyServer(row) {
 }
 
 // --- auth (inline para deploy sem auth.js)
-const _authSecret = process.env.JWT_SECRET || 'dev-secret-mudar-depois';
-if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
-  console.warn('[AUTH] Defina JWT_SECRET em produção.');
+function _getAuthSecret() {
+  const secret =
+    process.env.JWT_SECRET || (process.env.NODE_ENV !== 'production' ? 'dev-secret-not-for-production' : null);
+  if (process.env.NODE_ENV === 'production' && (!secret || secret.length < 32)) {
+    logger.error('AUTH', 'JWT_SECRET obrigatório em produção (mín. 32 caracteres). Defina no ambiente.');
+    process.exit(1);
+  }
+  return secret || '';
 }
+const _authSecret = _getAuthSecret();
+
 const auth = {
   sign(user) {
     return jwt.sign({ sub: user.id }, _authSecret, { expiresIn: '90d' });
@@ -445,8 +487,14 @@ const auth = {
     const bearerToken = header && header.startsWith('Bearer ') ? header.slice(7).trim() : null;
     const xToken = (req.headers['x-auth-token'] || req.headers['X-Auth-Token'] || '').trim() || null;
     const cookieToken = (req.cookies && req.cookies.liberty_token) || null;
-    const bodyToken = (req.body && (req.body.token || req.body.access_token)) ? String(req.body.token || req.body.access_token).trim() : null;
-    const queryToken = (req.query && (req.query.token || req.query.access_token)) ? String(req.query.token || req.query.access_token).trim() : null;
+    const bodyToken =
+      req.body && (req.body.token || req.body.access_token)
+        ? String(req.body.token || req.body.access_token).trim()
+        : null;
+    const queryToken =
+      req.query && (req.query.token || req.query.access_token)
+        ? String(req.query.token || req.query.access_token).trim()
+        : null;
     const token = cookieToken || bearerToken || xToken || bodyToken || queryToken;
     if (token) {
       const payload = auth.verify(token);
@@ -466,37 +514,54 @@ const _wsUserConnections = new Map();
 function _wsAddUserConnection(userId, ws) {
   if (!userId) return;
   let set = _wsUserConnections.get(userId);
-  if (!set) { set = new Set(); _wsUserConnections.set(userId, set); }
+  if (!set) {
+    set = new Set();
+    _wsUserConnections.set(userId, set);
+  }
   set.add(ws);
 }
 function _wsRemoveUserConnection(userId, ws) {
   const set = _wsUserConnections.get(userId);
-  if (set) { set.delete(ws); if (set.size === 0) _wsUserConnections.delete(userId); }
+  if (set) {
+    set.delete(ws);
+    if (set.size === 0) _wsUserConnections.delete(userId);
+  }
 }
 function _wsSubscribe(chatId, ws) {
   if (!chatId) return;
   let set = _wsSubscriptions.get(chatId);
-  if (!set) { set = new Set(); _wsSubscriptions.set(chatId, set); }
+  if (!set) {
+    set = new Set();
+    _wsSubscriptions.set(chatId, set);
+  }
   set.add(ws);
 }
 function _wsUnsubscribe(chatId, ws) {
   const set = _wsSubscriptions.get(chatId);
-  if (set) { set.delete(ws); if (set.size === 0) _wsSubscriptions.delete(chatId); }
+  if (set) {
+    set.delete(ws);
+    if (set.size === 0) _wsSubscriptions.delete(chatId);
+  }
 }
 function _wsUnsubscribeAll(ws) {
-  _wsSubscriptions.forEach((set) => set.delete(ws));
+  _wsSubscriptions.forEach(set => set.delete(ws));
 }
 function _wsSendToUser(userId, payload) {
   const set = _wsUserConnections.get(userId);
   if (!set) return;
   const str = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  set.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(str); });
+  set.forEach(c => {
+    if (c.readyState === WebSocket.OPEN) c.send(str);
+  });
 }
 function _wsEmitToRoom(roomId, payload) {
   if (!roomId) return;
   const str = typeof payload === 'string' ? payload : JSON.stringify(payload);
   const set = _wsSubscriptions.get(roomId);
-  if (set) set.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(str); });
+  if (set)
+    set.forEach(c => {
+      if (c.readyState === WebSocket.OPEN) c.send(str);
+    });
 }
 const ws = {
   emitMessage(message) {
@@ -508,13 +573,16 @@ const ws = {
     const wss = new WebSocketServer({ server, path: '/ws' });
     wss.on('connection', (wsClient, req) => {
       const url = new URL(req.url || '', 'http://localhost');
-      const token = url.searchParams.get('token') || (req.headers['sec-websocket-protocol'] && req.headers['sec-websocket-protocol'].split(',').map(s => s.trim())[0]);
+      const token =
+        url.searchParams.get('token') ||
+        (req.headers['sec-websocket-protocol'] &&
+          req.headers['sec-websocket-protocol'].split(',').map(s => s.trim())[0]);
       const payload = token ? auth.verify(token) : null;
       const userId = payload ? payload.sub : null;
       wsClient.userId = userId;
       wsClient.subscribedChats = new Set();
       _wsAddUserConnection(userId, wsClient);
-      wsClient.on('message', (raw) => {
+      wsClient.on('message', raw => {
         try {
           const msg = JSON.parse(raw.toString());
           const type = msg.type || msg.op;
@@ -535,7 +603,12 @@ const ws = {
             if (target) _wsSendToUser(target, { type: 'webrtc_reject', from_user_id: userId });
           } else if (type === 'stream_started') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
-            if (target) _wsSendToUser(target, { type: 'stream_started', from_user_id: userId, stream_type: msg.stream_type || d.stream_type || 'screen' });
+            if (target)
+              _wsSendToUser(target, {
+                type: 'stream_started',
+                from_user_id: userId,
+                stream_type: msg.stream_type || d.stream_type || 'screen',
+              });
           } else if (type === 'stream_stopped') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
             if (target) _wsSendToUser(target, { type: 'stream_stopped', from_user_id: userId });
@@ -544,7 +617,7 @@ const ws = {
       });
       wsClient.on('close', () => {
         _wsRemoveUserConnection(userId, wsClient);
-        wsClient.subscribedChats.forEach((chatId) => _wsUnsubscribe(chatId, wsClient));
+        wsClient.subscribedChats.forEach(chatId => _wsUnsubscribe(chatId, wsClient));
         _wsUnsubscribeAll(wsClient);
       });
     });
@@ -555,25 +628,62 @@ const ws = {
 };
 
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
-const STATIC_DIR = path.join(__dirname, 'static');
+app.disable('x-powered-by');
+const PORT = config.PORT;
+const STATIC_DIR = config.STATIC_DIR;
+const ALLOWED_ORIGINS = config.ALLOWED_ORIGINS;
+const corsOptions = {
+  origin:
+    ALLOWED_ORIGINS.length > 0
+      ? (origin, cb) => (origin && ALLOWED_ORIGINS.includes(origin) ? cb(null, true) : cb(null, false))
+      : config.isProduction
+        ? false
+        : true,
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+app.use(cors(corsOptions));
 
-// CSP: Socket.io servido localmente; conexões wss/ws permitidas; imagens externas (avatar URL)
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'sha256-iNdzJueCLgGX4W5su4mORbOameseXUZO+P+Hm0wFzX0='"],
-      connectSrc: ["'self'", "wss:", "ws:"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
-      imgSrc: ["'self'", "data:", "blob:", "https:"],
-      frameSrc: ["'none'"],
-      objectSrc: ["'none'"],
+const limiterGeneral = rateLimit({
+  windowMs: 60 * 1000,
+  max: config.RATE_LIMIT_MAX,
+  message: { message: 'Muitas requisições. Tente novamente em breve.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const limiterAuth = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { message: 'Muitas tentativas de login. Tente em 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(limiterGeneral);
+app.use('/api/v1/auth', limiterAuth);
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'sha256-iNdzJueCLgGX4W5su4mORbOameseXUZO+P+Hm0wFzX0='"],
+        connectSrc: ["'self'", 'wss:', 'ws:'],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        frameSrc: ["'none'"],
+        objectSrc: ["'none'"],
+      },
     },
-  },
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-}));
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    xssFilter: true,
+    noSniff: true,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hidePoweredBy: true,
+  })
+);
 app.use(express.json({ limit: '5mb' }));
 // Parse Cookie header into req.cookies (evita dependência cookie-parser em deploy)
 app.use((req, _res, next) => {
@@ -624,10 +734,7 @@ async function getDefaultChatId() {
     if (s.rows[0]?.id) {
       serverId = s.rows[0].id;
     } else {
-      const insServer = await db.query(
-        `INSERT INTO servers (name) VALUES ($1) RETURNING id`,
-        ['Global Server']
-      );
+      const insServer = await db.query(`INSERT INTO servers (name) VALUES ($1) RETURNING id`, ['Global Server']);
       serverId = insServer.rows[0].id;
     }
 
@@ -641,33 +748,40 @@ async function getDefaultChatId() {
     defaultChatId = String(insChat.rows[0].id);
     return defaultChatId;
   } catch (err) {
-    console.error('[MESSAGES] Erro ao garantir chat padrão:', err.message);
+    logger.error('ensureDefaultChat', err);
     return null;
   }
 }
 
 async function start() {
-  const dbUrl = _dbGetUrl();
-  if (dbUrl && dbUrl.startsWith('postgres')) {
-    console.log('[LIBERTY] DATABASE_URL definida (' + dbUrl.length + ' chars). Conectando…');
+  const hasDbUrl = _dbGetUrl().startsWith('postgres');
+  if (process.env.NODE_ENV === 'production' && !hasDbUrl) {
+    logger.error('LIBERTY', 'DATABASE_URL é obrigatória em produção.');
+    process.exit(1);
+  }
+  if (hasDbUrl) {
+    logger.info('[LIBERTY] Conectando ao banco…');
     try {
       await db.connect();
       if (db.isConnected()) {
         await dbInit();
       } else {
-        console.warn('[LIBERTY] Primeira conexão falhou; será tentado de novo na primeira requisição.');
+        logger.warn('[LIBERTY] Primeira conexão falhou; será tentado na primeira requisição.');
       }
     } catch (err) {
-      console.warn('[LIBERTY] Banco na subida:', err.message);
+      logger.warn('[LIBERTY] Banco na subida:', err.message);
     }
   } else {
-    console.warn('[LIBERTY] DATABASE_URL não definida (valor atual: ' + (dbUrl ? dbUrl.length + ' chars' : 'vazio') + '). Defina no painel: Square Cloud → Configurações → Environment.');
+    logger.warn('[LIBERTY] DATABASE_URL não definida. Defina no .env ou no painel do host.');
   }
 
   ws.attach(server);
   const io = new SocketIOServer(server, {
     path: '/socket.io',
-    cors: { origin: '*' },
+    cors: {
+      origin: ALLOWED_ORIGINS.length > 0 ? ALLOWED_ORIGINS : process.env.NODE_ENV === 'production' ? false : true,
+      credentials: true,
+    },
     transports: ['websocket', 'polling'],
     allowEIO3: true,
   });
@@ -677,7 +791,8 @@ async function start() {
     if (message) {
       const payload = { type: 'message', data: message };
       if (message.chat_id) io.to(message.chat_id).emit('message', payload);
-      if (message.channel_id && message.channel_id !== message.chat_id) io.to(message.channel_id).emit('message', payload);
+      if (message.channel_id && message.channel_id !== message.chat_id)
+        io.to(message.channel_id).emit('message', payload);
     }
   };
 
@@ -687,12 +802,12 @@ async function start() {
     socket.userId = payload ? payload.sub : null;
     next();
   });
-  io.on('connection', (socket) => {
-    socket.on('subscribe', (payload) => {
+  io.on('connection', socket => {
+    socket.on('subscribe', payload => {
       const chatId = payload && (payload.chat_id || payload.chatId);
       if (chatId) socket.join(chatId);
     });
-    socket.on('unsubscribe', (payload) => {
+    socket.on('unsubscribe', payload => {
       const chatId = payload && (payload.chat_id || payload.chatId);
       if (chatId) socket.leave(chatId);
     });
@@ -703,15 +818,11 @@ async function start() {
     if (!db.isConnected()) return null;
     const existing = await db.query(`SELECT id FROM servers WHERE name = $1 LIMIT 1`, ['Liberty']);
     if (existing.rows[0]?.id) return String(existing.rows[0].id);
-    const ins = await db.query(
-      `INSERT INTO servers (name, owner_id) VALUES ($1, NULL) RETURNING id`,
-      ['Liberty']
-    );
+    const ins = await db.query(`INSERT INTO servers (name, owner_id) VALUES ($1, NULL) RETURNING id`, ['Liberty']);
     const serverId = ins.rows[0].id;
-    await db.query(
-      `INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`,
-      [serverId]
-    );
+    await db.query(`INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`, [
+      serverId,
+    ]);
     return String(serverId);
   }
 
@@ -720,10 +831,9 @@ async function start() {
     const serverRow = await db.query(`SELECT id FROM servers WHERE name = $1 LIMIT 1`, ['Liberty']);
     const serverId = serverRow.rows[0]?.id;
     if (!serverId) return;
-    const chatRow = await db.query(
-      `SELECT id FROM chats WHERE server_id = $1::uuid AND type = 'channel' LIMIT 1`,
-      [serverId]
-    );
+    const chatRow = await db.query(`SELECT id FROM chats WHERE server_id = $1::uuid AND type = 'channel' LIMIT 1`, [
+      serverId,
+    ]);
     const chatId = chatRow.rows[0]?.id;
     if (!chatId) return;
     await db.query(
@@ -754,159 +864,18 @@ async function start() {
       if (r.rows[0]?.id) return String(r.rows[0].id);
       return getDefaultChatId();
     } catch (err) {
-      console.error('[MESSAGES] getChatIdForServerAndChannel:', err.message);
+      logger.error('getChatIdForServerAndChannel', err);
       return getDefaultChatId();
     }
   }
 
-  // Registro: apenas username obrigatório; email e senha opcionais (senha pode ser definida depois nas configurações)
-  app.post('/api/v1/auth/register', async (req, res) => {
-    if (!db.isConfigured()) {
-      return res.status(503).json({ message: 'Banco de dados indisponível. Defina DATABASE_URL no ambiente.' });
-    }
-    const ok = await db.ensureConnected();
-    if (!ok) {
-      return res.status(503).json({ message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-
-    const { username, email, password } = req.body || {};
-    const name = username ? String(username).trim() : '';
-    if (!name || name.length < 2) {
-      return res.status(400).json({ message: 'username é obrigatório (mín. 2 caracteres)' });
-    }
-
-    try {
-      await ensureLibertyServer();
-      const emailVal = email && String(email).trim() ? String(email).trim().toLowerCase() : null;
-      const password_hash = password && String(password).trim()
-        ? await bcrypt.hash(String(password).trim(), 10)
-        : null;
-      const r = await db.query(
-        `INSERT INTO users (username, email, password_hash)
-         VALUES ($1, $2, $3)
-         RETURNING id, username, email, created_at`,
-        [name, emailVal, password_hash]
-      );
-      const row = r.rows[0];
-      const user = { id: String(row.id), username: row.username, email: row.email, has_password: Boolean(password_hash) };
-      await ensureUserInLibertyServer(row.id);
-      const access_token = auth.sign(user);
-      res.cookie('liberty_token', access_token, {
-        path: '/',
-        maxAge: 90 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
-        httpOnly: false,
-      });
-
-      return res.status(201).json({
-        success: true,
-        user,
-        access_token,
-        refresh_token: access_token,
-      });
-    } catch (err) {
-      if (err.code === '23505') {
-        return res.status(409).json({ message: 'Nome de usuário (ou email) já em uso' });
-      }
-      console.error('[API] register', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao criar conta' });
-    }
-  });
-
-  // Refresh: valida o token e devolve access_token + user (para o front não voltar ao login ao recarregar)
-  app.post('/api/v1/auth/refresh', async (req, res) => {
-    const token = (req.body && (req.body.refresh_token || req.body.token || req.body.access_token)) ? String(req.body.refresh_token || req.body.token || req.body.access_token).trim() : null;
-    if (!token) {
-      return res.status(401).json({ message: 'Token ausente' });
-    }
-    const payload = auth.verify(token);
-    if (!payload || !payload.sub) {
-      return res.status(401).json({ message: 'Token inválido ou expirado' });
-    }
-    try {
-      const r = await db.query(
-        `SELECT id, username, email FROM users WHERE id = $1::uuid LIMIT 1`,
-        [payload.sub]
-      );
-      const row = r.rows[0];
-      if (!row) {
-        return res.status(401).json({ message: 'Usuário não encontrado' });
-      }
-      const user = { id: String(row.id), username: row.username, email: row.email, has_password: Boolean(row.password_hash) };
-      const access_token = auth.sign(user);
-      res.cookie('liberty_token', access_token, {
-        path: '/',
-        maxAge: 90 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
-        httpOnly: false,
-      });
-      return res.status(200).json({
-        access_token,
-        refresh_token: access_token,
-        user,
-      });
-    } catch (err) {
-      console.error('[API] refresh', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao renovar sessão' });
-    }
-  });
-
-  // Login: username obrigatório; senha opcional (se usuário não tiver senha, login só com username)
-  app.post('/api/v1/auth/login', async (req, res) => {
-    if (!db.isConfigured()) {
-      return res.status(503).json({ message: 'Banco de dados indisponível. Defina DATABASE_URL no ambiente.' });
-    }
-    const ok = await db.ensureConnected();
-    if (!ok) {
-      return res.status(503).json({ message: 'Banco de dados indisponível.' });
-    }
-    const { username, password } = req.body || {};
-    const name = username ? String(username).trim() : '';
-    if (!name) {
-      return res.status(400).json({ message: 'username é obrigatório' });
-    }
-    try {
-      const r = await db.query(
-        `SELECT id, username, email, password_hash FROM users WHERE username = $1 LIMIT 1`,
-        [name]
-      );
-      const row = r.rows[0];
-      if (!row) {
-        return res.status(401).json({ message: 'Usuário ou senha inválidos' });
-      }
-      if (row.password_hash) {
-        if (!password || !(await bcrypt.compare(String(password), row.password_hash))) {
-          return res.status(401).json({ message: 'Usuário ou senha inválidos' });
-        }
-      }
-      await ensureLibertyServer();
-      await ensureUserInLibertyServer(row.id);
-      const user = { id: String(row.id), username: row.username, email: row.email, has_password: Boolean(row.password_hash) };
-      const access_token = auth.sign(user);
-      res.cookie('liberty_token', access_token, {
-        path: '/',
-        maxAge: 90 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
-        httpOnly: false,
-      });
-      return res.status(200).json({
-        success: true,
-        user,
-        access_token,
-        refresh_token: access_token,
-      });
-    } catch (err) {
-      console.error('[API] login', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao fazer login' });
-    }
-  });
+  const authRouter = express.Router();
+  registerAuthRoutes(authRouter, { db, auth, ensureLibertyServer, ensureUserInLibertyServer });
+  app.use('/api/v1/auth', authRouter);
 
   // Mensagens: cache em memória + persistência no DB (ensureMessageInDb)
-  app.post('/api/messages', auth.requireAuth, async (req, res) => {
+  app.post('/api/messages', auth.requireAuth, validateBody(schemas.messageContent), async (req, res) => {
     const { content, author } = req.body || {};
-    if (!content || !String(content).trim()) {
-      return res.status(400).json({ message: 'content é obrigatório' });
-    }
     const safeContent = String(content).trim().replace(/</g, '&lt;');
     const userId = req.userId;
     try {
@@ -952,8 +921,8 @@ async function start() {
         created_at: saved.created_at.toISOString(),
       });
     } catch (err) {
-      console.error('[API] POST /api/messages erro:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao salvar mensagem' });
+      logger.error('POST /api/messages', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao salvar mensagem') });
     }
   });
 
@@ -970,7 +939,7 @@ async function start() {
           list = await getCachedMessages(chatId);
         }
       }
-      const response = list.map((m) => ({
+      const response = list.map(m => ({
         id: m.id,
         content: String(m.content || '').trim(),
         author_username: m.author_username || m.author || 'User',
@@ -980,136 +949,148 @@ async function start() {
       }));
       return res.status(200).json(response);
     } catch (err) {
-      console.error('[API] GET /api/messages erro:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao carregar mensagens' });
+      logger.error('GET /api/messages', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao carregar mensagens') });
     }
   });
 
   // POST /api/servers/:serverId/channels/:channelId/messages — cache + persistência no DB
-  app.post('/api/servers/:serverId/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
-    const { content } = req.body || {};
-    if (!content || !String(content).trim()) {
-      return res.status(400).json({ message: 'content é obrigatório' });
-    }
-    const safeContent = String(content).trim().replace(/</g, '&lt;');
-    const userId = req.userId;
-    try {
-      let chatId = null;
-      if (db.isConfigured() && db.isConnected()) {
-        chatId = await getChatIdForServerAndChannel(req.params.serverId, req.params.channelId);
+  app.post(
+    '/api/servers/:serverId/channels/:channelId/messages',
+    auth.requireAuth,
+    validateBody(
+      Joi.object({
+        content: Joi.string()
+          .min(1)
+          .max(64 * 1024)
+          .trim()
+          .required(),
+      })
+    ),
+    async (req, res) => {
+      const { content } = req.body || {};
+      const safeContent = String(content).trim().replace(/</g, '&lt;');
+      const userId = req.userId;
+      try {
+        let chatId = null;
+        if (db.isConfigured() && db.isConnected()) {
+          chatId = await getChatIdForServerAndChannel(req.params.serverId, req.params.channelId);
+        }
+        if (!chatId) chatId = req.params.channelId;
+        let username = 'User';
+        let avatarUrl = null;
+        if (db.isConfigured() && db.isConnected()) {
+          try {
+            const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
+            if (u.rows[0]) {
+              username = u.rows[0].username || username;
+              avatarUrl = u.rows[0].avatar_url || null;
+            }
+          } catch (_) {}
+        }
+        const createdAt = new Date();
+        const saved = {
+          id: crypto.randomUUID(),
+          content: safeContent,
+          author: username,
+          author_username: username,
+          username,
+          avatar_url: avatarUrl,
+          author_id: String(userId),
+          channelId: req.params.channelId,
+          channel_id: chatId,
+          chat_id: chatId,
+          timestamp: createdAt,
+          created_at: createdAt,
+        };
+        await addCachedMessage(chatId, saved);
+        await ensureMessageInDb(saved, chatId);
+        const emit = req.app.locals.emitMessage;
+        if (emit && chatId) emit({ ...saved });
+        return res.status(201).json({
+          id: saved.id,
+          content: saved.content,
+          author_username: username,
+          username,
+          avatar_url: avatarUrl,
+          created_at: saved.created_at.toISOString(),
+        });
+      } catch (err) {
+        logger.error('POST /api/servers/.../channels/.../messages', err);
+        return res.status(500).json({ message: safeApiMessage(err, 'Erro ao salvar mensagem') });
       }
-      if (!chatId) chatId = req.params.channelId;
-      let username = 'User';
-      let avatarUrl = null;
-      if (db.isConfigured() && db.isConnected()) {
-        try {
-          const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
-          if (u.rows[0]) {
-            username = u.rows[0].username || username;
-            avatarUrl = u.rows[0].avatar_url || null;
-          }
-        } catch (_) {}
-      }
-      const createdAt = new Date();
-      const saved = {
-        id: crypto.randomUUID(),
-        content: safeContent,
-        author: username,
-        author_username: username,
-        username,
-        avatar_url: avatarUrl,
-        author_id: String(userId),
-        channelId: req.params.channelId,
-        channel_id: chatId,
-        chat_id: chatId,
-        timestamp: createdAt,
-        created_at: createdAt,
-      };
-      await addCachedMessage(chatId, saved);
-      await ensureMessageInDb(saved, chatId);
-      const emit = req.app.locals.emitMessage;
-      if (emit && chatId) emit({ ...saved });
-      return res.status(201).json({
-        id: saved.id,
-        content: saved.content,
-        author_username: username,
-        username,
-        avatar_url: avatarUrl,
-        created_at: saved.created_at.toISOString(),
-      });
-    } catch (err) {
-      console.error('[API] POST /api/servers/.../channels/.../messages erro:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao salvar mensagem' });
     }
-  });
+  );
 
   // Resolve channelId para chat_id: se for UUID válido, usa como chat_id (canal do servidor); senão resolve por nome
   async function resolveChannelToChatId(userId, channelId) {
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (uuidRegex.test(String(channelId).trim())) {
       const r = await db.query(
-        'SELECT c.id FROM chats c LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $2::uuid WHERE c.id = $1::uuid AND (c.type IN (\'channel\',\'dm\',\'group_dm\') AND (c.server_id IS NOT NULL OR cm.user_id IS NOT NULL)) LIMIT 1',
+        "SELECT c.id FROM chats c LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $2::uuid WHERE c.id = $1::uuid AND (c.type IN ('channel','dm','group_dm') AND (c.server_id IS NOT NULL OR cm.user_id IS NOT NULL)) LIMIT 1",
         [channelId, userId]
       );
       if (r.rows[0]) return String(r.rows[0].id);
       const any = await db.query('SELECT id FROM chats WHERE id = $1::uuid LIMIT 1', [channelId]);
       if (any.rows[0]) return String(any.rows[0].id);
     }
-    return await getChatIdForServerAndChannel(null, channelId) || await getDefaultChatId();
+    return (await getChatIdForServerAndChannel(null, channelId)) || (await getDefaultChatId());
   }
 
   // Mensagens por canal: cache + persistência no DB (ensureMessageInDb)
-  app.post('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
-    const { channelId } = req.params;
-    const { content, client_id: clientId } = req.body || {};
-    if (!content || !String(content).trim()) {
-      return res.status(400).json({ message: 'content é obrigatório' });
-    }
-    const safeContent = String(content).trim().replace(/</g, '&lt;');
-    const userId = req.userId;
-    try {
-      let chatId = null;
-      if (db.isConfigured() && db.isConnected()) {
-        chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
+  app.post(
+    '/api/v1/channels/:channelId/messages',
+    auth.requireAuth,
+    validateBody(schemas.messageContent),
+    async (req, res) => {
+      const { channelId } = req.params;
+      const { content, client_id: clientId } = req.body || {};
+      const safeContent = String(content).trim().replace(/</g, '&lt;');
+      const userId = req.userId;
+      try {
+        let chatId = null;
+        if (db.isConfigured() && db.isConnected()) {
+          chatId = (await resolveChannelToChatId(userId, channelId)) || (await getDefaultChatId());
+        }
+        if (!chatId) chatId = String(channelId);
+        let username = 'User';
+        let avatarUrl = null;
+        if (db.isConfigured() && db.isConnected()) {
+          try {
+            const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
+            if (u.rows[0]) {
+              username = u.rows[0].username || username;
+              avatarUrl = u.rows[0].avatar_url || null;
+            }
+          } catch (_) {}
+        }
+        const createdAt = new Date();
+        const saved = {
+          id: crypto.randomUUID(),
+          content: safeContent,
+          author: username,
+          author_username: username,
+          author_id: String(userId),
+          avatar_url: avatarUrl,
+          channelId,
+          channel_id: chatId,
+          chat_id: chatId,
+          timestamp: createdAt,
+          created_at: createdAt,
+        };
+        await addCachedMessage(chatId, saved);
+        await ensureMessageInDb(saved, chatId);
+        const emit = req.app.locals.emitMessage;
+        if (emit && chatId) emit({ ...saved });
+        const response = { success: true, message: saved };
+        if (clientId !== undefined) response.client_id = clientId;
+        return res.status(201).json(response);
+      } catch (err) {
+        logger.error('POST /api/v1/channels/:id/messages', err);
+        return res.status(500).json({ message: safeApiMessage(err, 'Erro ao salvar') });
       }
-      if (!chatId) chatId = String(channelId);
-      let username = 'User';
-      let avatarUrl = null;
-      if (db.isConfigured() && db.isConnected()) {
-        try {
-          const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
-          if (u.rows[0]) {
-            username = u.rows[0].username || username;
-            avatarUrl = u.rows[0].avatar_url || null;
-          }
-        } catch (_) {}
-      }
-      const createdAt = new Date();
-      const saved = {
-        id: crypto.randomUUID(),
-        content: safeContent,
-        author: username,
-        author_username: username,
-        author_id: String(userId),
-        avatar_url: avatarUrl,
-        channelId,
-        channel_id: chatId,
-        chat_id: chatId,
-        timestamp: createdAt,
-        created_at: createdAt,
-      };
-      await addCachedMessage(chatId, saved);
-      await ensureMessageInDb(saved, chatId);
-      const emit = req.app.locals.emitMessage;
-      if (emit && chatId) emit({ ...saved });
-      const response = { success: true, message: saved };
-      if (clientId !== undefined) response.client_id = clientId;
-      return res.status(201).json(response);
-    } catch (err) {
-      console.error('[API] POST /api/v1/channels/:id/messages', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao salvar' });
     }
-  });
+  );
 
   app.get('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
     const { channelId } = req.params;
@@ -1117,7 +1098,7 @@ async function start() {
     try {
       let chatId = null;
       if (db.isConfigured() && db.isConnected()) {
-        chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
+        chatId = (await resolveChannelToChatId(userId, channelId)) || (await getDefaultChatId());
       }
       if (!chatId) chatId = String(channelId);
       let list = await getCachedMessages(chatId);
@@ -1128,7 +1109,7 @@ async function start() {
           list = await getCachedMessages(chatId);
         }
       }
-      let result = list.map((m) => ({
+      let result = list.map(m => ({
         id: m.id,
         channel_id: channelId,
         content: String(m.content || ''),
@@ -1138,24 +1119,29 @@ async function start() {
         created_at: (m.created_at instanceof Date ? m.created_at : new Date(m.created_at)).toISOString(),
       }));
       if (db.isConfigured() && db.isConnected() && result.length > 0) {
-        const authorIds = [...new Set(result.map((m) => m.author_id).filter(Boolean))];
+        const authorIds = [...new Set(result.map(m => m.author_id).filter(Boolean))];
         if (authorIds.length > 0) {
           try {
             const placeholders = authorIds.map((_, i) => `$${i + 1}::uuid`).join(',');
             const r = await db.query(`SELECT id, avatar_url FROM users WHERE id IN (${placeholders})`, authorIds);
-            const avatarByAuthor = Object.fromEntries((r.rows || []).map((row) => [String(row.id), row.avatar_url || null]));
-            result = result.map((m) => ({ ...m, avatar_url: (m.author_id && avatarByAuthor[m.author_id]) || m.avatar_url }));
+            const avatarByAuthor = Object.fromEntries(
+              (r.rows || []).map(row => [String(row.id), row.avatar_url || null])
+            );
+            result = result.map(m => ({
+              ...m,
+              avatar_url: (m.author_id && avatarByAuthor[m.author_id]) || m.avatar_url,
+            }));
           } catch (_) {}
         }
       }
       return res.status(200).json(result);
     } catch (err) {
-      console.error('[API] GET /api/v1/channels/:id/messages', err.message);
-      return res.status(500).json({ message: err.message || 'Erro' });
+      logger.error('GET /api/v1/channels/:id/messages', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro') });
     }
   });
 
-  // Pins — apenas admins (Zerk, noeb) podem fixar/desfixar; qualquer um pode listar
+  // Pins — apenas admins (ADMIN_USERNAMES) podem fixar/desfixar; qualquer um pode listar
   app.get('/api/v1/channels/:channelId/pins', auth.requireAuth, async (req, res) => {
     const chatId = req.params.channelId;
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
@@ -1169,7 +1155,7 @@ async function start() {
          WHERE p.chat_id = $1::uuid ORDER BY p.pinned_at DESC`,
         [chatId]
       );
-      const list = (r.rows || []).map((row) => ({
+      const list = (r.rows || []).map(row => ({
         id: String(row.message_id),
         content: row.content || '',
         author_id: row.author_id ? String(row.author_id) : null,
@@ -1179,15 +1165,17 @@ async function start() {
       return res.status(200).json(list);
     } catch (err) {
       if (err.message && err.message.includes('does not exist')) return res.status(200).json([]);
-      return res.status(500).json({ message: err.message || 'Erro ao listar pins' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar pins') });
     }
   });
 
   app.put('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, async (req, res) => {
     const { channelId, messageId } = req.params;
-    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores (Zerk, noeb) podem fixar mensagens.' });
+    if (!(await isAdmin(req)))
+      return res.status(403).json({ message: 'Apenas administradores podem fixar mensagens.' });
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
-    if (!isUuid(channelId) || !isUuid(messageId)) return res.status(400).json({ message: 'channelId ou messageId inválido' });
+    if (!isUuid(channelId) || !isUuid(messageId))
+      return res.status(400).json({ message: 'channelId ou messageId inválido' });
     try {
       await db.query(
         `INSERT INTO message_pins (chat_id, message_id, pinned_by) VALUES ($1::uuid, $2::uuid, $3::uuid)
@@ -1197,26 +1185,32 @@ async function start() {
       return res.status(200).json({ success: true });
     } catch (err) {
       if (err.code === '23503') return res.status(404).json({ message: 'Canal ou mensagem não encontrados' });
-      return res.status(500).json({ message: err.message || 'Erro ao fixar' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao fixar') });
     }
   });
 
   app.delete('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, async (req, res) => {
     const { channelId, messageId } = req.params;
-    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores (Zerk, noeb) podem desfixar mensagens.' });
+    if (!(await isAdmin(req)))
+      return res.status(403).json({ message: 'Apenas administradores podem desfixar mensagens.' });
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
-    if (!isUuid(channelId) || !isUuid(messageId)) return res.status(400).json({ message: 'channelId ou messageId inválido' });
+    if (!isUuid(channelId) || !isUuid(messageId))
+      return res.status(400).json({ message: 'channelId ou messageId inválido' });
     try {
-      await db.query('DELETE FROM message_pins WHERE chat_id = $1::uuid AND message_id = $2::uuid', [channelId, messageId]);
+      await db.query('DELETE FROM message_pins WHERE chat_id = $1::uuid AND message_id = $2::uuid', [
+        channelId,
+        messageId,
+      ]);
       return res.status(204).end();
     } catch (err) {
-      return res.status(500).json({ message: err.message || 'Erro ao desfixar' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao desfixar') });
     }
   });
 
-  // GET /api/v1/admin/db — estatísticas do banco (apenas Zerk e noeb)
+  // GET /api/v1/admin/db — estatísticas do banco (apenas admins)
   app.get('/api/v1/admin/db', auth.requireAuth, async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Acesso negado. Apenas administradores podem ver o banco.' });
+    if (!(await isAdmin(req)))
+      return res.status(403).json({ message: 'Acesso negado. Apenas administradores podem ver o banco.' });
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     try {
       const [u, s, c, m, mp] = await Promise.all([
@@ -1234,7 +1228,7 @@ async function start() {
         pinned_messages: parseInt(mp.rows[0]?.n || 0, 10),
       });
     } catch (err) {
-      return res.status(500).json({ message: err.message || 'Erro ao obter estatísticas' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao obter estatísticas') });
     }
   });
 
@@ -1254,7 +1248,7 @@ async function start() {
          ORDER BY s.created_at ASC`,
         [userId]
       );
-      const servers = r.rows.map((row) => ({
+      const servers = r.rows.map(row => ({
         id: String(row.id),
         name: row.name,
         owner_id: row.owner_id ? String(row.owner_id) : null,
@@ -1267,8 +1261,10 @@ async function start() {
       if (err.message && err.message.includes('does not exist')) {
         try {
           await dbInit();
-          const r = await db.query(`SELECT id, name, owner_id, created_at, icon_url FROM servers ORDER BY created_at ASC`);
-          const servers = r.rows.map((row) => ({
+          const r = await db.query(
+            `SELECT id, name, owner_id, created_at, icon_url FROM servers ORDER BY created_at ASC`
+          );
+          const servers = r.rows.map(row => ({
             id: String(row.id),
             name: row.name,
             owner_id: row.owner_id ? String(row.owner_id) : null,
@@ -1278,12 +1274,12 @@ async function start() {
           }));
           return res.status(200).json(servers);
         } catch (e) {
-          console.error('[API] GET /api/v1/servers (após init):', e.message);
+          logger.error('GET /api/v1/servers (após init)', e);
           return res.status(500).json({ message: e.message || 'Erro ao listar servidores' });
         }
       }
-      console.error('[API] GET /api/v1/servers:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao listar servidores' });
+      logger.error('GET /api/v1/servers', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar servidores') });
     }
   });
 
@@ -1318,8 +1314,8 @@ async function start() {
       });
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Servidor não encontrado' });
-      console.error('[API] GET /api/v1/servers/:serverId:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao carregar servidor' });
+      logger.error('GET /api/v1/servers/:serverId', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao carregar servidor') });
     }
   });
 
@@ -1331,20 +1327,17 @@ async function start() {
     const serverId = req.params.serverId;
     const userId = req.userId;
     try {
-      const r = await db.query(
-        `SELECT id, name, owner_id FROM servers WHERE id = $1::uuid LIMIT 1`,
-        [serverId]
-      );
+      const r = await db.query(`SELECT id, name, owner_id FROM servers WHERE id = $1::uuid LIMIT 1`, [serverId]);
       if (!r.rows[0]) {
         return res.status(404).json({ message: 'Servidor não encontrado' });
       }
       if (isOfficialLibertyServer(r.rows[0])) {
         return res.status(403).json({ message: 'O servidor LIBERTY oficial não pode ser alterado.' });
       }
-      const ownerCheck = await db.query(
-        `SELECT id FROM servers WHERE id = $1::uuid AND owner_id = $2::uuid LIMIT 1`,
-        [serverId, userId]
-      );
+      const ownerCheck = await db.query(`SELECT id FROM servers WHERE id = $1::uuid AND owner_id = $2::uuid LIMIT 1`, [
+        serverId,
+        userId,
+      ]);
       if (!ownerCheck.rows[0]) {
         return res.status(403).json({ message: 'Apenas o dono pode alterar o servidor.' });
       }
@@ -1370,7 +1363,9 @@ async function start() {
         }
       }
       if (updates.length === 0) {
-        const row = await db.query(`SELECT id, name, owner_id, created_at, icon_url FROM servers WHERE id = $1::uuid`, [serverId]);
+        const row = await db.query(`SELECT id, name, owner_id, created_at, icon_url FROM servers WHERE id = $1::uuid`, [
+          serverId,
+        ]);
         const s = row.rows[0];
         return res.status(200).json({
           id: String(s.id),
@@ -1383,7 +1378,9 @@ async function start() {
       }
       values.push(serverId);
       await db.query(`UPDATE servers SET ${updates.join(', ')} WHERE id = $${idx}::uuid`, values);
-      const row = await db.query(`SELECT id, name, owner_id, created_at, icon_url FROM servers WHERE id = $1::uuid`, [serverId]);
+      const row = await db.query(`SELECT id, name, owner_id, created_at, icon_url FROM servers WHERE id = $1::uuid`, [
+        serverId,
+      ]);
       const s = row.rows[0];
       return res.status(200).json({
         id: String(s.id),
@@ -1395,8 +1392,8 @@ async function start() {
       });
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Servidor não encontrado' });
-      console.error('[API] PATCH /api/v1/servers/:serverId:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao atualizar servidor' });
+      logger.error('PATCH /api/v1/servers/:serverId', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao atualizar servidor') });
     }
   });
 
@@ -1408,20 +1405,17 @@ async function start() {
     const serverId = req.params.serverId;
     const userId = req.userId;
     try {
-      const r = await db.query(
-        `SELECT id, name, owner_id FROM servers WHERE id = $1::uuid LIMIT 1`,
-        [serverId]
-      );
+      const r = await db.query(`SELECT id, name, owner_id FROM servers WHERE id = $1::uuid LIMIT 1`, [serverId]);
       if (!r.rows[0]) {
         return res.status(404).json({ message: 'Servidor não encontrado' });
       }
       if (isOfficialLibertyServer(r.rows[0])) {
         return res.status(403).json({ message: 'O servidor LIBERTY oficial não pode ser alterado.' });
       }
-      const ownerCheck = await db.query(
-        `SELECT id FROM servers WHERE id = $1::uuid AND owner_id = $2::uuid LIMIT 1`,
-        [serverId, userId]
-      );
+      const ownerCheck = await db.query(`SELECT id FROM servers WHERE id = $1::uuid AND owner_id = $2::uuid LIMIT 1`, [
+        serverId,
+        userId,
+      ]);
       if (!ownerCheck.rows[0]) {
         return res.status(403).json({ message: 'Apenas o dono pode apagar o servidor.' });
       }
@@ -1429,8 +1423,8 @@ async function start() {
       return res.status(204).end();
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Servidor não encontrado' });
-      console.error('[API] DELETE /api/v1/servers/:serverId:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao apagar servidor' });
+      logger.error('DELETE /api/v1/servers/:serverId', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao apagar servidor') });
     }
   });
 
@@ -1462,7 +1456,7 @@ async function start() {
             iconUrl = `/uploads/servers/${serverId}.${ext}`;
             await db.query(`UPDATE servers SET icon_url = $1 WHERE id = $2::uuid`, [iconUrl, serverId]);
           } catch (e) {
-            console.warn('[API] Erro ao gravar ícone do servidor:', e.message);
+            logger.warn('[API] Erro ao gravar ícone do servidor:', e.message);
           }
         }
       }
@@ -1521,12 +1515,12 @@ async function start() {
             },
           });
         } catch (e) {
-          console.error('[API] POST /api/v1/servers (após init):', e.message);
+          logger.error('POST /api/v1/servers (após init)', e);
           return res.status(500).json({ message: e.message || 'Erro ao criar servidor' });
         }
       }
-      console.error('[API] POST /api/v1/servers:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao criar servidor' });
+      logger.error('POST /api/v1/servers', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar servidor') });
     }
   });
 
@@ -1544,7 +1538,7 @@ async function start() {
          ORDER BY type ASC, created_at ASC`,
         [serverId]
       );
-      const list = r.rows.map((row) => ({
+      const list = r.rows.map(row => ({
         id: String(row.id),
         name: row.name,
         type: row.type,
@@ -1555,8 +1549,8 @@ async function start() {
       }));
       return res.status(200).json(list);
     } catch (err) {
-      console.error('[API] GET /api/v1/servers/:serverId/channels:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao listar canais' });
+      logger.error('GET /api/v1/servers/:serverId/channels', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar canais') });
     }
   });
 
@@ -1578,7 +1572,7 @@ async function start() {
          ORDER BY u.username ASC`,
         [serverId]
       );
-      const list = r.rows.map((row) => ({
+      const list = r.rows.map(row => ({
         user_id: String(row.id),
         id: String(row.id),
         username: row.username,
@@ -1589,8 +1583,8 @@ async function start() {
       }));
       return res.status(200).json(list);
     } catch (err) {
-      console.error('[API] GET /api/v1/servers/:serverId/members:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao listar membros' });
+      logger.error('GET /api/v1/servers/:serverId/members', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar membros') });
     }
   });
 
@@ -1600,7 +1594,8 @@ async function start() {
     const { serverId, userId } = req.params;
     const role = req.body && req.body.role ? String(req.body.role).toLowerCase() : null;
     const allowedRoles = ['member', 'moderator', 'admin'];
-    if (!role || !allowedRoles.includes(role)) return res.status(400).json({ message: 'role deve ser member, moderator ou admin' });
+    if (!role || !allowedRoles.includes(role))
+      return res.status(400).json({ message: 'role deve ser member, moderator ou admin' });
     if (!isUuid(serverId) || !isUuid(userId)) return res.status(400).json({ message: 'IDs inválidos' });
     try {
       const serverRow = await db.query('SELECT owner_id FROM servers WHERE id = $1::uuid', [serverId]);
@@ -1608,7 +1603,8 @@ async function start() {
       if (!s) return res.status(404).json({ message: 'Servidor não encontrado' });
       const isOwner = s.owner_id && String(s.owner_id) === String(req.userId);
       const adminOk = await isAdmin(req);
-      if (!isOwner && !adminOk) return res.status(403).json({ message: 'Apenas o dono do servidor ou um administrador pode alterar cargos.' });
+      if (!isOwner && !adminOk)
+        return res.status(403).json({ message: 'Apenas o dono do servidor ou um administrador pode alterar cargos.' });
       await db.query(
         `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, $3)
          ON CONFLICT (server_id, user_id) DO UPDATE SET role = $3`,
@@ -1617,17 +1613,18 @@ async function start() {
       return res.status(200).json({ success: true, role });
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Servidor ou usuário não encontrado' });
-      return res.status(500).json({ message: err.message || 'Erro ao atualizar cargo' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao atualizar cargo') });
     }
   });
 
-  // POST /api/v1/servers/:serverId/bans — banir usuário do servidor (apenas Zerk, noeb)
+  // POST /api/v1/servers/:serverId/bans — banir usuário do servidor (apenas admins)
   app.post('/api/v1/servers/:serverId/bans', auth.requireAuth, async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores (Zerk, noeb) podem banir membros.' });
+    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores podem banir membros.' });
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     const serverId = req.params.serverId;
     const { user_id, reason } = req.body || {};
-    if (!isUuid(serverId) || !user_id || !isUuid(user_id)) return res.status(400).json({ message: 'serverId e user_id são obrigatórios' });
+    if (!isUuid(serverId) || !user_id || !isUuid(user_id))
+      return res.status(400).json({ message: 'serverId e user_id são obrigatórios' });
     try {
       await db.query(
         `INSERT INTO server_bans (server_id, user_id, banned_by, reason) VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
@@ -1641,13 +1638,13 @@ async function start() {
       return res.status(200).json({ success: true });
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Servidor ou usuário não encontrado' });
-      return res.status(500).json({ message: err.message || 'Erro ao banir' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao banir') });
     }
   });
 
-  // DELETE /api/v1/servers/:serverId/bans/:userId — desbanir (apenas Zerk, noeb)
+  // DELETE /api/v1/servers/:serverId/bans/:userId — desbanir (apenas admins)
   app.delete('/api/v1/servers/:serverId/bans/:userId', auth.requireAuth, async (req, res) => {
-    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores (Zerk, noeb) podem desbanir.' });
+    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores podem desbanir.' });
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     const { serverId, userId } = req.params;
     if (!isUuid(serverId) || !isUuid(userId)) return res.status(400).json({ message: 'IDs inválidos' });
@@ -1655,7 +1652,7 @@ async function start() {
       await db.query('DELETE FROM server_bans WHERE server_id = $1::uuid AND user_id = $2::uuid', [serverId, userId]);
       return res.status(204).end();
     } catch (err) {
-      return res.status(500).json({ message: err.message || 'Erro ao desbanir' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao desbanir') });
     }
   });
 
@@ -1675,7 +1672,8 @@ async function start() {
     const { name, type, parent_id } = req.body || {};
     const channelType = (type === 'voice' ? 'voice' : 'text').toLowerCase();
     const isCategory = String(type).toLowerCase() === 'category';
-    const channelName = name && String(name).trim() ? String(name).trim().replace(/\s+/g, '-').toLowerCase().substring(0, 100) : null;
+    const channelName =
+      name && String(name).trim() ? String(name).trim().replace(/\s+/g, '-').toLowerCase().substring(0, 100) : null;
     if (!channelName || channelName.length < 1) {
       return res.status(400).json({ message: 'Nome do canal ou categoria é obrigatório' });
     }
@@ -1714,8 +1712,8 @@ async function start() {
       if (err.code === '23503') {
         return res.status(400).json({ message: 'Servidor ou categoria inválida' });
       }
-      console.error('[API] POST /api/v1/servers/:serverId/channels:', err.message);
-      return res.status(500).json({ message: err.message || 'Erro ao criar canal' });
+      logger.error('POST /api/v1/servers/:serverId/channels', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar canal') });
     }
   });
 
@@ -1726,7 +1724,7 @@ async function start() {
       if (!chatId) return res.status(404).json({ message: 'Chat padrão indisponível' });
       return res.status(200).json({ chat_id: chatId });
     } catch (err) {
-      return res.status(500).json({ message: err.message });
+      return res.status(500).json({ message: safeApiMessage(err) });
     }
   });
 
@@ -1758,7 +1756,14 @@ async function start() {
             id: String(row.chat_id),
             type: 'dm',
             name: null,
-            recipients: [{ id: String(u.id), username: u.username, avatar_url: u.avatar_url || null, avatar: u.avatar_url || null }],
+            recipients: [
+              {
+                id: String(u.id),
+                username: u.username,
+                avatar_url: u.avatar_url || null,
+                avatar: u.avatar_url || null,
+              },
+            ],
           });
         }
       }
@@ -1779,15 +1784,20 @@ async function start() {
         channels.push({
           id: String(row.chat_id),
           type: 'group_dm',
-          name: row.name || members.rows.map((m) => m.username).join(', '),
-          recipients: members.rows.map((m) => ({ id: String(m.id), username: m.username, avatar_url: m.avatar_url || null, avatar: m.avatar_url || null })),
+          name: row.name || members.rows.map(m => m.username).join(', '),
+          recipients: members.rows.map(m => ({
+            id: String(m.id),
+            username: m.username,
+            avatar_url: m.avatar_url || null,
+            avatar: m.avatar_url || null,
+          })),
         });
       }
 
       return res.status(200).json(channels);
     } catch (err) {
-      console.error('[LIBERTY] GET @me/channels', err);
-      return res.status(500).json({ message: err.message || 'Erro ao listar canais' });
+      logger.error('GET @me/channels', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar canais') });
     }
   });
 
@@ -1826,12 +1836,17 @@ async function start() {
         return res.status(201).json({
           id: String(chatId),
           type: 'group_dm',
-          name: name || members.rows.map((m) => m.username).join(', '),
-          recipients: members.rows.map((m) => ({ id: String(m.id), username: m.username, avatar_url: m.avatar_url || null, avatar: m.avatar_url || null })),
+          name: name || members.rows.map(m => m.username).join(', '),
+          recipients: members.rows.map(m => ({
+            id: String(m.id),
+            username: m.username,
+            avatar_url: m.avatar_url || null,
+            avatar: m.avatar_url || null,
+          })),
         });
       } catch (err) {
-        console.error('[LIBERTY] POST @me/channels group', err);
-        return res.status(500).json({ message: err.message || 'Erro ao criar grupo' });
+        logger.error('POST @me/channels group', err);
+        return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar grupo') });
       }
     }
 
@@ -1875,8 +1890,8 @@ async function start() {
           recipients: [{ id: singleId, username, avatar_url: avatarUrl, avatar: avatarUrl }],
         });
       } catch (err) {
-        console.error('[LIBERTY] POST @me/channels dm', err);
-        return res.status(500).json({ message: err.message || 'Erro ao criar DM' });
+        logger.error('POST @me/channels dm', err);
+        return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar DM') });
       }
     }
 
@@ -1911,8 +1926,8 @@ async function start() {
         created_at: row.created_at,
       });
     } catch (err) {
-      console.error('[LIBERTY] POST /api/v1/calls', err);
-      return res.status(500).json({ message: err.message || 'Erro ao criar chamada' });
+      logger.error('POST /api/v1/calls', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar chamada') });
     }
   });
 
@@ -1939,8 +1954,8 @@ async function start() {
       }
       return res.status(200).json(r.rows[0]);
     } catch (err) {
-      console.error('[LIBERTY] PATCH /api/v1/calls/:id', err);
-      return res.status(500).json({ message: err.message || 'Erro ao atualizar chamada' });
+      logger.error('PATCH /api/v1/calls/:id', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao atualizar chamada') });
     }
   });
 
@@ -1969,8 +1984,8 @@ async function start() {
         admin: !!admin,
       });
     } catch (err) {
-      console.error('[LIBERTY] GET /users/me', err);
-      return res.status(500).json({ message: err.message || 'Erro ao buscar perfil' });
+      logger.error('GET /users/me', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao buscar perfil') });
     }
   };
   app.get('/api/v1/users/me', auth.requireAuth, getMe);
@@ -1997,7 +2012,7 @@ async function start() {
       });
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Usuário não encontrado' });
-      return res.status(500).json({ message: err.message || 'Erro ao buscar perfil' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao buscar perfil') });
     }
   });
 
@@ -2017,15 +2032,19 @@ async function start() {
       return res.status(400).json({ message: 'banner_url deve ser uma URL (http/https) ou caminho' });
     }
     try {
-      const cur = await db.query('SELECT avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1', [req.userId]);
+      const cur = await db.query('SELECT avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1', [
+        req.userId,
+      ]);
       const c = cur.rows[0];
       const newAvatar = avatar_url !== undefined ? avatarVal : (c?.avatar_url ?? null);
       const newBanner = banner_url !== undefined ? bannerVal : (c?.banner_url ?? null);
       const newDesc = description !== undefined ? descVal : (c?.description ?? null);
-      await db.query(
-        'UPDATE users SET avatar_url = $1, banner_url = $2, description = $3 WHERE id = $4',
-        [newAvatar, newBanner, newDesc, req.userId]
-      );
+      await db.query('UPDATE users SET avatar_url = $1, banner_url = $2, description = $3 WHERE id = $4', [
+        newAvatar,
+        newBanner,
+        newDesc,
+        req.userId,
+      ]);
       const r = await db.query(
         'SELECT id, username, email, avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1',
         [req.userId]
@@ -2040,8 +2059,8 @@ async function start() {
         description: row.description || null,
       });
     } catch (err) {
-      console.error('[LIBERTY] PATCH /users/me', err);
-      return res.status(500).json({ message: err.message || 'Erro ao atualizar perfil' });
+      logger.error('PATCH /users/me', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao atualizar perfil') });
     }
   };
   app.patch('/api/v1/users/me', auth.requireAuth, patchMe);
@@ -2058,10 +2077,7 @@ async function start() {
       return res.status(400).json({ message: 'Nova senha é obrigatória (mín. 6 caracteres)' });
     }
     try {
-      const r = await db.query(
-        'SELECT password_hash FROM users WHERE id = $1 LIMIT 1',
-        [req.userId]
-      );
+      const r = await db.query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [req.userId]);
       const row = r.rows[0];
       if (!row) return res.status(404).json({ message: 'Usuário não encontrado' });
       if (row.password_hash) {
@@ -2074,8 +2090,8 @@ async function start() {
       await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, req.userId]);
       return res.status(200).json({ success: true, message: 'Senha atualizada' });
     } catch (err) {
-      console.error('[LIBERTY] PATCH /users/me/password', err);
-      return res.status(500).json({ message: err.message || 'Erro ao atualizar senha' });
+      logger.error('PATCH /users/me/password', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao atualizar senha') });
     }
   });
 
@@ -2086,7 +2102,7 @@ async function start() {
     if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     if (!fs.existsSync(AVATARS_DIR)) fs.mkdirSync(AVATARS_DIR, { recursive: true });
   } catch (e) {
-    console.warn('[LIBERTY] Não foi possível criar pasta uploads:', e.message);
+    logger.warn('[LIBERTY] Não foi possível criar pasta uploads:', e.message);
   }
 
   app.post('/api/v1/users/me/avatar', auth.requireAuth, async (req, res) => {
@@ -2115,7 +2131,7 @@ async function start() {
     try {
       fs.writeFileSync(filepath, buf);
     } catch (e) {
-      console.error('[LIBERTY] Erro ao gravar avatar:', e.message);
+      logger.error('avatar', e);
       return res.status(500).json({ message: 'Erro ao guardar a imagem.' });
     }
     const avatarUrl = `/uploads/avatars/${filename}?t=${Date.now()}`;
@@ -2123,7 +2139,7 @@ async function start() {
       try {
         await db.query('UPDATE users SET avatar_url = $1 WHERE id = $2', [avatarUrl, userId]);
       } catch (e) {
-        console.error('[LIBERTY] Erro ao atualizar avatar_url:', e.message);
+        logger.error('avatar_url', e);
         return res.status(500).json({ message: 'Erro ao atualizar perfil.' });
       }
     }
@@ -2186,22 +2202,24 @@ async function start() {
         avatar_url: null,
       }));
 
-      const allIds = [...new Set([...by_activity.map((u) => u.id), ...by_content.map((u) => u.id)].filter((id) => id && isUuid(id)))];
+      const allIds = [
+        ...new Set([...by_activity.map(u => u.id), ...by_content.map(u => u.id)].filter(id => id && isUuid(id))),
+      ];
       let avatarByUser = {};
       if (db.isConfigured() && db.isConnected() && allIds.length > 0) {
         try {
           const placeholders = allIds.map((_, i) => `$${i + 1}::uuid`).join(',');
           const r = await db.query(`SELECT id, avatar_url FROM users WHERE id IN (${placeholders})`, allIds);
-          avatarByUser = Object.fromEntries((r.rows || []).map((row) => [String(row.id), row.avatar_url || null]));
+          avatarByUser = Object.fromEntries((r.rows || []).map(row => [String(row.id), row.avatar_url || null]));
         } catch (_) {}
       }
-      by_activity = by_activity.map((u) => ({ ...u, avatar_url: avatarByUser[u.id] || null }));
-      by_content = by_content.map((u) => ({ ...u, avatar_url: avatarByUser[u.id] || null }));
+      by_activity = by_activity.map(u => ({ ...u, avatar_url: avatarByUser[u.id] || null }));
+      by_content = by_content.map(u => ({ ...u, avatar_url: avatarByUser[u.id] || null }));
 
       return res.status(200).json({ by_activity, by_content });
     } catch (err) {
-      console.error('[LIBERTY] GET /ranking', err);
-      return res.status(500).json({ message: err.message || 'Erro ao buscar ranking' });
+      logger.error('GET /ranking', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao buscar ranking') });
     }
   });
 
@@ -2220,7 +2238,7 @@ async function start() {
          WHERE f.user_id = $1::uuid OR f.friend_id = $1::uuid`,
         [userId]
       );
-      const list = r.rows.map((row) => {
+      const list = r.rows.map(row => {
         const otherId = String(row.user_id) === userId ? row.friend_id : row.user_id;
         const sentByMe = String(row.user_id) === userId;
         let type = 1;
@@ -2234,8 +2252,8 @@ async function start() {
       });
       return res.status(200).json(list);
     } catch (err) {
-      console.error('[LIBERTY] GET @me/relationships', err);
-      return res.status(500).json({ message: err.message || 'Erro ao listar amigos' });
+      logger.error('GET @me/relationships', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar amigos') });
     }
   });
 
@@ -2259,8 +2277,10 @@ async function start() {
       );
       if (existing.rows[0]) {
         if (existing.rows[0].status === 'accepted') return res.status(400).json({ message: 'Já são amigos' });
-        if (existing.rows[0].status === 'pending') return res.status(400).json({ message: 'Pedido já enviado ou pendente' });
-        if (existing.rows[0].status === 'blocked') return res.status(400).json({ message: 'Não é possível adicionar este utilizador' });
+        if (existing.rows[0].status === 'pending')
+          return res.status(400).json({ message: 'Pedido já enviado ou pendente' });
+        if (existing.rows[0].status === 'blocked')
+          return res.status(400).json({ message: 'Não é possível adicionar este utilizador' });
       }
       await db.query(
         'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1::uuid, $2::uuid, $3) ON CONFLICT (user_id, friend_id) DO NOTHING',
@@ -2277,8 +2297,8 @@ async function start() {
       });
     } catch (err) {
       if (err.code === '23505') return res.status(400).json({ message: 'Pedido já existe' });
-      console.error('[LIBERTY] POST @me/relationships', err);
-      return res.status(500).json({ message: err.message || 'Erro ao adicionar amigo' });
+      logger.error('POST @me/relationships', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao adicionar amigo') });
     }
   });
 
@@ -2295,8 +2315,8 @@ async function start() {
       if (!r.rows[0]) return res.status(404).json({ message: 'Pedido não encontrado ou já processado' });
       return res.status(200).json({ id: String(r.rows[0].id), status: 'accepted' });
     } catch (err) {
-      console.error('[LIBERTY] PUT @me/relationships/:id', err);
-      return res.status(500).json({ message: err.message || 'Erro ao aceitar pedido' });
+      logger.error('PUT @me/relationships/:id', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao aceitar pedido') });
     }
   });
 
@@ -2306,14 +2326,14 @@ async function start() {
     const relId = req.params.relationshipId;
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     try {
-      await db.query(
-        'DELETE FROM friendships WHERE id = $1::uuid AND (user_id = $2::uuid OR friend_id = $2::uuid)',
-        [relId, userId]
-      );
+      await db.query('DELETE FROM friendships WHERE id = $1::uuid AND (user_id = $2::uuid OR friend_id = $2::uuid)', [
+        relId,
+        userId,
+      ]);
       return res.status(204).end();
     } catch (err) {
-      console.error('[LIBERTY] DELETE @me/relationships/:id', err);
-      return res.status(500).json({ message: err.message || 'Erro ao remover' });
+      logger.error('DELETE @me/relationships/:id', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao remover') });
     }
   });
 
@@ -2329,7 +2349,8 @@ async function start() {
 
   // Logo — serve de static ou fallback SVG (evita 404 quando static não está no deploy)
   const logoPath = path.join(STATIC_DIR, 'assets', 'logo.png');
-  const logoFallbackSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88"><rect width="88" height="88" fill="#FFD700"/><text x="44" y="52" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="#1a1a1a" text-anchor="middle">L</text></svg>';
+  const logoFallbackSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88"><rect width="88" height="88" fill="#FFD700"/><text x="44" y="52" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="#1a1a1a" text-anchor="middle">L</text></svg>';
   app.get('/assets/logo.png', (req, res) => {
     if (fs.existsSync(logoPath)) {
       res.sendFile(logoPath);
@@ -2349,12 +2370,11 @@ async function start() {
   app.get('*', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`LIBERTY listening on port ${PORT}`);
+    logger.info('LIBERTY listening on port', PORT);
   });
 }
 
-start().catch((err) => {
-  console.error('Falha ao iniciar:', err);
+start().catch(err => {
+  logger.error('startup', err);
   process.exit(1);
 });
-

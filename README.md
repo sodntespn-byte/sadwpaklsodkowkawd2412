@@ -40,6 +40,7 @@ liberty/
 ## 🚀 Features
 
 ### Backend (Rust)
+
 - **WebSocket Gateway**: Real-time bidirectional communication
 - **REST API**: Full RESTful API for all operations
 - **SQLite Database**: Persistent storage with SQLx
@@ -48,6 +49,7 @@ liberty/
 - **AES-256-GCM Encryption**: End-to-end encryption support
 
 ### Frontend
+
 - **Modern UI**: Beautiful yellow/black theme inspired by Discord
 - **Real-time Updates**: WebSocket-based live messaging
 - **Server Management**: Create, join, and manage servers
@@ -55,13 +57,15 @@ liberty/
 - **Member Management**: Roles, permissions, and moderation
 
 ### Native Components (C)
+
 - **Fast Hashing**: xxHash-inspired 64-bit hash function
 - **String Operations**: Boyer-Moore-Horspool search, glob matching
 - **Base64**: Optimized encoding/decoding
 - **Memory Pool**: Fast allocation for message processing
 - **Rate Limiting**: Token bucket implementation
 
-### Formal Verification (F*)
+### Formal Verification (F\*)
+
 - **Cryptographic Proofs**: Security properties for crypto operations
 - **Protocol Validation**: Message format and permission verification
 - **Safety Invariants**: Memory safety and authentication guarantees
@@ -71,7 +75,7 @@ liberty/
 - **Rust** 1.70+ (with Cargo)
 - **C Compiler** (GCC or Clang)
 - **SQLite** 3.x
-- **F*** (optional, for verification)
+- **F\*** (optional, for verification)
 
 ## 🔧 Building
 
@@ -135,43 +139,48 @@ The server will start on `http://localhost:8443`
 ## 📡 API Endpoints
 
 ### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/auth/register` | Register new user |
-| POST | `/api/v1/auth/login` | Login |
-| POST | `/api/v1/auth/logout` | Logout |
-| POST | `/api/v1/auth/refresh` | Refresh token |
+
+| Method | Endpoint                | Description       |
+| ------ | ----------------------- | ----------------- |
+| POST   | `/api/v1/auth/register` | Register new user |
+| POST   | `/api/v1/auth/login`    | Login             |
+| POST   | `/api/v1/auth/logout`   | Logout            |
+| POST   | `/api/v1/auth/refresh`  | Refresh token     |
 
 ### Users
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/users/@me` | Get current user |
-| PATCH | `/api/v1/users/@me` | Update current user |
-| GET | `/api/v1/users/:id` | Get user by ID |
+
+| Method | Endpoint            | Description         |
+| ------ | ------------------- | ------------------- |
+| GET    | `/api/v1/users/@me` | Get current user    |
+| PATCH  | `/api/v1/users/@me` | Update current user |
+| GET    | `/api/v1/users/:id` | Get user by ID      |
 
 ### Servers
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/servers` | List user's servers |
-| POST | `/api/v1/servers` | Create server |
-| GET | `/api/v1/servers/:id` | Get server info |
-| PATCH | `/api/v1/servers/:id` | Update server |
-| DELETE | `/api/v1/servers/:id` | Delete server |
+
+| Method | Endpoint              | Description         |
+| ------ | --------------------- | ------------------- |
+| GET    | `/api/v1/servers`     | List user's servers |
+| POST   | `/api/v1/servers`     | Create server       |
+| GET    | `/api/v1/servers/:id` | Get server info     |
+| PATCH  | `/api/v1/servers/:id` | Update server       |
+| DELETE | `/api/v1/servers/:id` | Delete server       |
 
 ### Channels
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/servers/:id/channels` | List channels |
-| POST | `/api/v1/servers/:id/channels` | Create channel |
-| GET | `/api/v1/channels/:id` | Get channel |
-| DELETE | `/api/v1/channels/:id` | Delete channel |
+
+| Method | Endpoint                       | Description    |
+| ------ | ------------------------------ | -------------- |
+| GET    | `/api/v1/servers/:id/channels` | List channels  |
+| POST   | `/api/v1/servers/:id/channels` | Create channel |
+| GET    | `/api/v1/channels/:id`         | Get channel    |
+| DELETE | `/api/v1/channels/:id`         | Delete channel |
 
 ### Messages
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/channels/:id/messages` | List messages |
-| POST | `/api/v1/channels/:id/messages` | Send message |
-| PATCH | `/api/v1/channels/:id/messages/:mid` | Edit message |
+
+| Method | Endpoint                             | Description    |
+| ------ | ------------------------------------ | -------------- |
+| GET    | `/api/v1/channels/:id/messages`      | List messages  |
+| POST   | `/api/v1/channels/:id/messages`      | Send message   |
+| PATCH  | `/api/v1/channels/:id/messages/:mid` | Edit message   |
 | DELETE | `/api/v1/channels/:id/messages/:mid` | Delete message |
 
 ## 🔌 WebSocket Protocol
@@ -179,6 +188,7 @@ The server will start on `http://localhost:8443`
 Connect to `ws://localhost:8443/ws`
 
 ### Client → Server Messages
+
 ```json
 {"op": "authenticate", "d": {"token": "jwt_token"}}
 {"op": "heartbeat", "d": {"seq": 1}}
@@ -187,6 +197,7 @@ Connect to `ws://localhost:8443/ws`
 ```
 
 ### Server → Client Messages
+
 ```json
 {"op": "hello", "d": {"heartbeat_interval": 45000, "server_version": "0.1.0"}}
 {"op": "authenticated", "d": {"user": {...}, "servers": [...], "session_id": "uuid"}}
@@ -205,17 +216,17 @@ Connect to `ws://localhost:8443/ws`
 
 ## 🎯 Permissions System
 
-| Permission | Bit |
-|------------|-----|
-| CREATE_INSTANT_INVITE | 1 << 0 |
-| KICK_MEMBERS | 1 << 1 |
-| BAN_MEMBERS | 1 << 2 |
-| ADMINISTRATOR | 1 << 3 |
-| MANAGE_CHANNELS | 1 << 4 |
-| MANAGE_SERVER | 1 << 5 |
-| SEND_MESSAGES | 1 << 11 |
-| MANAGE_MESSAGES | 1 << 13 |
-| MANAGE_ROLES | 1 << 28 |
+| Permission            | Bit     |
+| --------------------- | ------- |
+| CREATE_INSTANT_INVITE | 1 << 0  |
+| KICK_MEMBERS          | 1 << 1  |
+| BAN_MEMBERS           | 1 << 2  |
+| ADMINISTRATOR         | 1 << 3  |
+| MANAGE_CHANNELS       | 1 << 4  |
+| MANAGE_SERVER         | 1 << 5  |
+| SEND_MESSAGES         | 1 << 11 |
+| MANAGE_MESSAGES       | 1 << 13 |
+| MANAGE_ROLES          | 1 << 28 |
 
 ## 🧪 Testing
 
@@ -235,6 +246,7 @@ fstar LibertyProtocol.fst
 ## 📦 Dependencies
 
 ### Rust
+
 - `tokio` - Async runtime
 - `axum` - Web framework
 - `sqlx` - Database
@@ -244,6 +256,7 @@ fstar LibertyProtocol.fst
 - `uuid` - UUID generation
 
 ### Frontend
+
 - Vanilla JavaScript (no framework)
 - Font Awesome icons
 - Inter font family
@@ -262,4 +275,4 @@ MIT License - see LICENSE file for details.
 
 ---
 
-**LIBERTY** - *Freedom to Connect* 🟡⚫
+**LIBERTY** - _Freedom to Connect_ 🟡⚫
