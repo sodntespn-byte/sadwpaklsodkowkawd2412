@@ -9,15 +9,21 @@
 
 ## 1. Variáveis de ambiente
 
-**Obrigatório:** configura no painel da Square Cloud em **Configurações → Environment**. Sem `DATABASE_URL`, o registro e o login retornam 503.
+**Obrigatório:** configura no painel da Square Cloud em **Configurações → Environment**. Sem estas variáveis a aplicação **não inicia** ou retorna 503.
+
+| Variável       | Obrigatório | Exemplo / Notas                                                                 |
+| -------------- | ----------- | ------------------------------------------------------------------------------- |
+| `JWT_SECRET`   | **Sim**     | String com **pelo menos 32 caracteres**. Sem isto a app para logo ao iniciar.   |
+| `DATABASE_URL` | **Sim**     | `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require` |
+| `NODE_ENV`     | Não         | A Square Cloud costuma definir `production` automaticamente.                 |
+
+**Como gerar um JWT_SECRET seguro (32+ caracteres):**
+```bash
+openssl rand -base64 32
+```
+Copia o resultado e cola no valor de `JWT_SECRET` no painel.
 
 **Importante:** depois de adicionar ou alterar variáveis, é obrigatório **Redeploy** (ou Reiniciar) a aplicação — as variáveis são lidas apenas ao iniciar o processo.
-
-| Variável       | Exemplo                                                                            |
-| -------------- | ---------------------------------------------------------------------------------- |
-| `DATABASE_URL` | `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require` |
-| `JWT_SECRET`   | string longa e aleatória para produção                                             |
-| `NODE_ENV`     | `production` (opcional)                                                            |
 
 - Nome exato: `DATABASE_URL` (tudo junto, maiúsculas). Podes colar a URL do Neon com `channel_binding=require`; o servidor remove esse parâmetro automaticamente.
 - O backend usa **PostgreSQL** (Neon). Na primeira subida, o schema é aplicado automaticamente. Se as tabelas já existirem, os `CREATE` são ignorados.

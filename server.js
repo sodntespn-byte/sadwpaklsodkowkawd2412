@@ -463,7 +463,10 @@ function _getAuthSecret() {
   const secret =
     process.env.JWT_SECRET || (process.env.NODE_ENV !== 'production' ? 'dev-secret-not-for-production' : null);
   if (process.env.NODE_ENV === 'production' && (!secret || secret.length < 32)) {
-    logger.error('AUTH', 'JWT_SECRET obrigatório em produção (mín. 32 caracteres). Defina no ambiente.');
+    logger.error(
+      'AUTH',
+      'JWT_SECRET obrigatório em produção (mín. 32 caracteres). Square Cloud: Configurações → Environment → adicione JWT_SECRET com uma string longa (ex: gere com "openssl rand -base64 32"). Depois faça Redeploy.'
+    );
     process.exit(1);
   }
   return secret || '';
