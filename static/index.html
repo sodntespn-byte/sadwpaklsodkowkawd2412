@@ -190,39 +190,35 @@
             <!-- Home/DMs View (shown when Home is selected) -->
             <div id="home-sidebar-content" class="home-sidebar-content">
                 <div class="dm-search-wrapper">
-                    <input type="text" id="dm-search-input" class="dm-search" placeholder="Find or start a conversation" aria-label="Buscar conversas">
+                    <input type="text" id="dm-search-input" class="dm-search" placeholder="Q Search" aria-label="Buscar">
                 </div>
                 <nav class="home-nav" aria-label="Navegação principal">
+                    <button class="home-nav-item" data-view="rankings" aria-label="LIBERTY Rankings">
+                        <i class="fas fa-trophy" aria-hidden="true"></i>
+                        <span>LIBERTY Rankings</span>
+                    </button>
                     <button class="home-nav-item active" data-view="friends" aria-label="Amigos">
                         <i class="fas fa-user-friends" aria-hidden="true"></i>
                         <span>Friends</span>
                     </button>
-                    <button class="home-nav-item" data-view="message-requests" aria-label="Message Requests">
-                        <i class="fas fa-envelope" aria-hidden="true"></i>
-                        <span>Message Requests</span>
-                        <span class="home-nav-badge">13</span>
-                    </button>
-                    <button class="home-nav-item" data-view="nitro" aria-label="Nitro">
-                        <i class="fas fa-gem" aria-hidden="true"></i>
-                        <span>Nitro</span>
+                    <button class="home-nav-item" data-view="missions" aria-label="Missions">
+                        <i class="fas fa-bullseye" aria-hidden="true"></i>
+                        <span>Missions</span>
                     </button>
                     <button class="home-nav-item" data-view="shop" aria-label="Shop">
-                        <i class="fas fa-store" aria-hidden="true"></i>
+                        <i class="fas fa-shopping-bag" aria-hidden="true"></i>
                         <span>Shop</span>
-                    </button>
-                    <button class="home-nav-item" data-view="missions" aria-label="Missions">
-                        <i class="fas fa-crosshairs" aria-hidden="true"></i>
-                        <span>Missions</span>
+                        <span class="home-nav-badge coming-soon">Em breve</span>
                     </button>
                 </nav>
                 <div class="dm-list-header">
-                    <span>Direct Messages</span>
-                    <button class="btn-icon" id="dm-add-btn" aria-label="Criar DM ou grupo">
+                    <span>DIRECT MESSAGES</span>
+                    <button class="btn-icon" id="dm-add-btn" aria-label="Nova conversa">
                         <i class="fas fa-plus" aria-hidden="true"></i>
                     </button>
                 </div>
                 <div id="dm-list" class="dm-list" role="list" aria-label="Mensagens diretas">
-                    <!-- DM conversations injetadas via JS -->
+                    <div class="dm-list-empty" id="dm-list-empty">No conversations</div>
                 </div>
             </div>
 

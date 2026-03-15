@@ -983,6 +983,40 @@ async function start() {
     }
   });
 
+  // GET /api/v1/servers/:serverId — detalhes de um servidor (autenticado; 404 se não existir ou sem acesso)
+  app.get('/api/v1/servers/:serverId', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const serverId = req.params.serverId;
+    const userId = req.userId;
+    try {
+      const r = await db.query(
+        `SELECT s.id, s.name, s.owner_id, s.created_at
+         FROM servers s
+         LEFT JOIN chats c ON c.server_id = s.id
+         LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $2::uuid
+         WHERE s.id = $1::uuid AND (s.owner_id = $2::uuid OR cm.user_id = $2::uuid)
+         LIMIT 1`,
+        [serverId, userId]
+      );
+      if (!r.rows[0]) {
+        return res.status(404).json({ message: 'Servidor não encontrado' });
+      }
+      const row = r.rows[0];
+      return res.status(200).json({
+        id: String(row.id),
+        name: row.name,
+        owner_id: row.owner_id ? String(row.owner_id) : null,
+        created_at: row.created_at,
+      });
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Servidor não encontrado' });
+      console.error('[API] GET /api/v1/servers/:serverId:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao carregar servidor' });
+    }
+  });
+
   // POST /api/v1/servers — criar servidor (autenticado)
   app.post('/api/v1/servers', auth.requireAuth, async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {

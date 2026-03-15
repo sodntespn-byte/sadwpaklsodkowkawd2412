@@ -1749,6 +1749,46 @@
 }
 .friends-add-input-wrapper input::placeholder { color: var(--text-muted); }
 
+.friends-invites-empty {
+    text-align: center;
+    padding: 40px 24px;
+    color: var(--text-secondary);
+}
+.friends-invites-empty i {
+    font-size: 48px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    display: block;
+}
+.friends-invites-empty h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+.friends-invites-empty p {
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: 320px;
+    margin: 0 auto;
+}
+
+.dm-list-empty {
+    padding: 16px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.home-nav-badge.coming-soon {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: rgba(255,215,0,.2);
+    color: var(--primary-yellow);
+    border-radius: var(--radius-full);
+    margin-left: 4px;
+}
+
 .friends-search-wrapper {
     position: relative;
     padding: 0 20px 12px;

@@ -58,6 +58,22 @@
 .profile-card-roles{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 .profile-card-role{display:flex;align-items:center;gap:4px;padding:2px 8px;background:var(--dark-gray);border-radius:var(--radius-full);font-size:11px;color:var(--text-secondary)}
 .profile-card-role .role-dot{width:8px;height:8px;border-radius:50%}
+.profile-card-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:900;pointer-events:none}
+.profile-card-modal .profile-card-modal-inner{pointer-events:auto;width:320px;background:rgba(24,21,18,.97);backdrop-filter:blur(20px);border:1px solid rgba(255,215,0,.25);border-radius:16px;box-shadow:0 0 40px rgba(255,215,0,.15);padding:24px 20px;text-align:center}
+.profile-card-trophy{color:var(--primary-yellow);font-size:24px;margin-bottom:8px;display:block}
+.profile-card-modal .profile-card-avatar-wrap{margin-bottom:12px}
+.profile-card-modal .profile-card-avatar{width:80px;height:80px;margin:0 auto;border-radius:50%;background:var(--dark-gray);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--text-secondary);border:3px solid rgba(255,215,0,.3);position:relative}
+.profile-card-online-dot{position:absolute;bottom:4px;right:4px;width:14px;height:14px;border-radius:50%;background:var(--status-online);border:2px solid rgba(24,21,18,.97)}
+.profile-card-online-dot.offline,.profile-card-online-dot.invisible{background:var(--text-muted)}
+.profile-card-user-id{font-size:20px;font-weight:700;color:var(--primary-yellow);margin-bottom:12px}
+.profile-card-desc{width:100%;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text-primary);font-size:13px;font-family:inherit;margin-bottom:16px;box-sizing:border-box}
+.profile-card-desc:focus{outline:none;border-color:var(--primary-yellow)}
+.profile-card-actions{display:flex;justify-content:center;gap:12px;margin-bottom:16px}
+.profile-card-btn{width:44px;height:44px;border-radius:50%;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);color:var(--text-primary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
+.profile-card-btn:hover:not(:disabled){border-color:var(--primary-yellow);color:var(--primary-yellow)}
+.profile-card-btn:disabled{opacity:.6;cursor:default}
+.profile-card-close{width:100%;padding:10px 16px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text-primary);font-size:14px;cursor:pointer;font-family:inherit}
+.profile-card-close:hover{background:var(--medium-gray);border-color:var(--primary-yellow)}
 .settings-overlay{position:fixed;inset:0;background:var(--primary-black);z-index:3500;display:flex;animation:settingsFadeIn .25s var(--ease-out-expo)}
 @keyframes settingsFadeIn{from{opacity:0}to{opacity:1}}
 .settings-overlay .settings-sidebar{flex:0 0 auto;background:var(--secondary-black);display:flex;justify-content:flex-end;overflow-y:auto;min-width:218px;padding-left:max(20px,calc(50vw - 480px))}
@@ -446,7 +462,10 @@ class LibertyApp {
         // Modal close
         document.querySelectorAll('.modal-close-btn').forEach(btn => btn.addEventListener('click', () => this.hideModal()));
         document.getElementById('modal-overlay')?.addEventListener('click', e => {
-            if (e.target.id === 'modal-overlay') this.hideModal();
+            if (e.target.id === 'modal-overlay') {
+                this.hideProfileCard();
+                this.hideModal();
+            }
         });
         document.getElementById('create-server-form')?.addEventListener('submit', e => { e.preventDefault(); this.handleCreateServer(); });
         document.querySelectorAll('.modal-cancel-btn').forEach(btn => btn.addEventListener('click', () => this.hideModal()));
@@ -1266,7 +1285,7 @@ class LibertyApp {
         });
 
         if (this.dmChannels.length === 0) {
-            dmList.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">No DMs yet</div>';
+            dmList.innerHTML = '<div class="dm-list-empty" id="dm-list-empty">No conversations</div>';
         }
 
         const pathMatch = typeof location !== 'undefined' && location.pathname && location.pathname.match(/^\/channels\/@me\/([^/]+)$/);
@@ -1453,22 +1472,47 @@ class LibertyApp {
             friends.forEach(f => { bodyHtml += this._friendItemHtml(f); });
             if (friends.length === 0) bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">No friends yet. Add some!</div>';
         } else if (tab === 'pending') {
-            bodyHtml += `<div style="${headerStyle}">Pending — ${pending.length}</div>`;
+            bodyHtml += `<div style="${headerStyle}">Pendentes — ${pending.length}</div>`;
             pending.forEach(p => {
                 const u = p.user || { username: 'Unknown' };
                 const isIncoming = p.type === 3;
                 bodyHtml += `<div class="friend-item" data-user="${u.id}" data-rel-id="${p.id}">
-                    <div class="friend-item-avatar offline"><span>${u.username.charAt(0)}</span></div>
+                    <div class="friend-item-avatar offline"><span>${(u.username || 'U').charAt(0)}</span></div>
                     <div class="friend-item-info">
                         <div class="friend-item-name">${this.escapeHtml(u.username)}</div>
-                        <div class="friend-item-status">${isIncoming ? 'Incoming Friend Request' : 'Outgoing Friend Request'}</div>
+                        <div class="friend-item-status">${isIncoming ? 'Convite recebido' : 'Pedido enviado'}</div>
                     </div>
                     <div class="friend-item-actions">
                         ${isIncoming ? '<button title="Accept"><i class="fas fa-check"></i></button><button title="Deny"><i class="fas fa-times"></i></button>' : '<button title="Cancel"><i class="fas fa-times"></i></button>'}
                     </div>
                 </div>`;
             });
-            if (pending.length === 0) bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">No pending requests</div>';
+            if (pending.length === 0) bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">Nenhum pedido pendente</div>';
+        } else if (tab === 'invites') {
+            const incoming = this.relationships.filter(r => r.type === 3);
+            if (incoming.length === 0) {
+                bodyHtml += `<div class="friends-invites-empty">
+                    <i class="fas fa-envelope-open" aria-hidden="true"></i>
+                    <h3>Nenhum convite recebido</h3>
+                    <p>Quem acessar o mesmo site e enviar convite para &quot;${this.escapeHtml(this.currentUser?.username || '414123')}&quot; aparecerá aqui.</p>
+                </div>`;
+            } else {
+                bodyHtml += `<div style="${headerStyle}">Convites — ${incoming.length}</div>`;
+                incoming.forEach(p => {
+                    const u = p.user || { username: 'Unknown' };
+                    bodyHtml += `<div class="friend-item" data-user="${u.id}" data-rel-id="${p.id}">
+                        <div class="friend-item-avatar offline"><span>${(u.username || 'U').charAt(0)}</span></div>
+                        <div class="friend-item-info">
+                            <div class="friend-item-name">${this.escapeHtml(u.username)}</div>
+                            <div class="friend-item-status">Convite recebido</div>
+                        </div>
+                        <div class="friend-item-actions">
+                            <button title="Accept"><i class="fas fa-check"></i></button>
+                            <button title="Deny"><i class="fas fa-times"></i></button>
+                        </div>
+                    </div>`;
+                });
+            }
         } else if (tab === 'blocked') {
             bodyHtml += `<div style="${headerStyle}">Blocked — ${blocked.length}</div>`;
             blocked.forEach(b => {
@@ -1624,13 +1668,14 @@ class LibertyApp {
             const tab = this.currentFriendsTab || 'online';
             info.innerHTML = `
                 <i class="fas fa-user-friends channel-header-icon" aria-hidden="true"></i>
-                <h3>Friends</h3>
+                <h3>Amigos</h3>
                 <div class="channel-header-divider" aria-hidden="true"></div>
                 <div class="friends-header-tabs">
                     <button class="friends-header-tab ${tab === 'online' ? 'active' : ''}" data-htab="online">Online</button>
-                    <button class="friends-header-tab ${tab === 'all' ? 'active' : ''}" data-htab="all">All</button>
-                    <button class="friends-header-tab ${tab === 'pending' ? 'active' : ''}" data-htab="pending">Pending</button>
-                    <button class="friends-header-tab ${tab === 'blocked' ? 'active' : ''}" data-htab="blocked">Blocked</button>
+                    <button class="friends-header-tab ${tab === 'all' ? 'active' : ''}" data-htab="all">Todos</button>
+                    <button class="friends-header-tab ${tab === 'pending' ? 'active' : ''}" data-htab="pending">Pendentes</button>
+                    <button class="friends-header-tab ${tab === 'invites' ? 'active' : ''}" data-htab="invites">Convites recebidos</button>
+                    <button class="friends-header-tab ${tab === 'blocked' ? 'active' : ''}" data-htab="blocked">Bloqueados</button>
                     <button class="friends-header-tab add-friend ${tab === 'add' ? 'active' : ''}" data-htab="add">Add Friend</button>
                 </div>
             `;
@@ -2825,40 +2870,104 @@ class LibertyApp {
 
     showProfileCard(member, e) {
         this.hideProfileCard();
-        const card = document.createElement('div');
-        card.className = 'profile-card';
         const name = member.nickname || member.username || member.display_name || 'User';
+        const userId = member.user_id || member.id || '';
         const status = member.status || member.presence?.status || 'online';
         const letter = name.charAt(0).toUpperCase();
-        const statusLabel = this._statusLabel(status);
-        const customStatus = member.customStatus || member.custom_status || '';
+        const avatarText = name.length >= 2 ? name.slice(0, 2).toUpperCase() : letter;
+        const displayId = (userId && String(userId).length >= 6) ? String(userId).slice(-6) : (name.replace(/\s/g, '').slice(0, 6) || '414123');
+        const isSelf = this.currentUser && (String(this.currentUser.id) === String(userId) || this.currentUser.username === name);
+        const isFriend = this.relationships && this.relationships.some(r => r.type === 1 && (r.user?.id === userId || r.user?.username === name));
+        const pendingOut = this.relationships && this.relationships.some(r => r.type === 4 && (r.user?.id === userId || r.user?.username === name));
+
+        const overlay = document.getElementById('modal-overlay');
+        const card = document.createElement('div');
+        card.className = 'profile-card profile-card-modal';
         card.innerHTML = `
-            <div class="profile-card-banner"></div>
-            <div class="profile-card-avatar"><span>${letter}</span></div>
-            <div class="profile-card-body">
-                <div class="profile-card-name">${this.escapeHtml(name)}</div>
-                <div class="profile-card-tag">${this.escapeHtml(name)}#0001</div>
-                <div class="profile-card-status"><div class="status-dot ${status}"></div>${this.escapeHtml(customStatus || statusLabel)}</div>
-                <div class="profile-card-section"><h4>About Me</h4><p>LIBERTY user since 2025. Freedom to connect.</p></div>
-                <div class="profile-card-section"><h4>Member Since</h4><p>January 2025</p></div>
-                <div class="profile-card-section"><h4>Roles</h4>
-                    <div class="profile-card-roles">
-                        <div class="profile-card-role"><div class="role-dot" style="background:var(--primary-yellow)"></div>Member</div>
-                    </div>
+            <div class="profile-card-modal-inner">
+                <i class="fas fa-trophy profile-card-trophy" aria-hidden="true"></i>
+                <div class="profile-card-avatar-wrap">
+                    <div class="profile-card-avatar"><span>${avatarText}</span><span class="profile-card-online-dot ${status}"></span></div>
                 </div>
-                <div class="profile-card-section profile-card-note"><h4>Note</h4><textarea placeholder="Click to add a note..."></textarea></div>
+                <div class="profile-card-user-id">${this.escapeHtml(name)}</div>
+                <input type="text" class="profile-card-desc" placeholder="Sem descrição" value="" maxlength="128" aria-label="Descrição">
+                <div class="profile-card-actions">
+                    <button type="button" class="profile-card-btn" title="Mensagem" data-action="message"><i class="fas fa-comment"></i></button>
+                    <button type="button" class="profile-card-btn" title="Ligar" data-action="call"><i class="fas fa-phone"></i></button>
+                    <button type="button" class="profile-card-btn" title="Adicionar amigo" data-action="addfriend"><i class="fas fa-user-plus"></i></button>
+                </div>
+                <button type="button" class="profile-card-close">Fechar</button>
             </div>
         `;
-        const x = Math.min(e.clientX || e.pageX || 400, window.innerWidth - 320);
-        const y = Math.min(e.clientY || e.pageY || 200, window.innerHeight - 500);
-        card.style.left = x + 'px';
-        card.style.top = y + 'px';
-        document.body.appendChild(card);
+        if (!overlay) return;
+        overlay.classList.remove('hidden');
+        overlay.classList.remove('fade-out');
+        overlay.appendChild(card);
         this._profileCard = card;
+
+        const msgBtn = card.querySelector('[data-action="message"]');
+        const callBtn = card.querySelector('[data-action="call"]');
+        const addBtn = card.querySelector('[data-action="addfriend"]');
+        const closeBtn = card.querySelector('.profile-card-close');
+
+        if (isSelf) {
+            addBtn.style.display = 'none';
+            msgBtn.style.display = 'none';
+            callBtn.style.display = 'none';
+        } else {
+            if (isFriend) { addBtn.innerHTML = '<i class="fas fa-check"></i>'; addBtn.title = 'Já são amigos'; addBtn.disabled = true; }
+            else if (pendingOut) { addBtn.innerHTML = '<i class="fas fa-clock"></i>'; addBtn.title = 'Pedido enviado'; addBtn.disabled = true; }
+        }
+
+        msgBtn.addEventListener('click', () => {
+            this.hideProfileCard();
+            if (!isSelf && userId) this.openDMWithUser(userId, name);
+        });
+        callBtn.addEventListener('click', () => {
+            this.hideProfileCard();
+            if (!isSelf) this.showToast('Chamada de voz em breve.', 'info');
+        });
+        addBtn.addEventListener('click', async () => {
+            if (isFriend || pendingOut) return;
+            try {
+                await API.Friend.add(name);
+                this.showToast(`Pedido enviado a ${name}`, 'success');
+                addBtn.innerHTML = '<i class="fas fa-clock"></i>'; addBtn.disabled = true;
+            } catch (err) {
+                this.showToast(err.message || 'Erro ao adicionar', 'error');
+            }
+        });
+        closeBtn.addEventListener('click', () => this.hideProfileCard());
+    }
+
+    async openDMWithUser(userId, username) {
+        try {
+            const channel = await API.DM.create(userId);
+            this.dmChannels = this.dmChannels || [];
+            if (!this.dmChannels.find(c => c.id === channel?.id)) this.dmChannels.push(channel);
+            this.currentServer = null;
+            this.isHomeView = false;
+            this.currentChannel = channel;
+            document.getElementById('friends-view')?.classList?.add('hidden');
+            const msgCont = document.getElementById('messages-container');
+            if (msgCont) msgCont.style.display = '';
+            const inputCont = document.querySelector('.message-input-container');
+            if (inputCont) inputCont.style.display = '';
+            this._updateChannelHeaderForContext();
+            this.selectChannel(channel?.id);
+            this.renderServers();
+        } catch (e) {
+            this.showToast(e?.message || 'Não foi possível abrir a conversa.', 'error');
+        }
     }
 
     hideProfileCard() {
-        if (this._profileCard) { this._profileCard.remove(); this._profileCard = null; }
+        if (this._profileCard) {
+            this._profileCard.remove();
+            this._profileCard = null;
+            const overlay = document.getElementById('modal-overlay');
+            if (overlay && !overlay.querySelector('.modal:not(.hidden), .profile-card-modal')) overlay.classList.add('hidden');
+        }
     }
 
     // ═══════════════════════════════════════════
