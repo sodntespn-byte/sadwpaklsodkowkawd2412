@@ -39,7 +39,7 @@ export default [
     },
   },
   {
-    files: ['static/**/*.js'],
+    files: ['frontend/**/*.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script',

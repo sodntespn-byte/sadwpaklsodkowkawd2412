@@ -4,6 +4,26 @@
 
 ![LIBERTY Banner](https://via.placeholder.com/800x200/0D0D0D/FFD700?text=LIBERTY+-+Freedom+to+Connect)
 
+## 📁 Estrutura do projeto (frontend / backend separados)
+
+O repositório está organizado em duas pastas:
+
+| Pasta       | Descrição                                                                 |
+| ----------- | ------------------------------------------------------------------------- |
+| **backend/**  | API Node.js (Express), WebSocket, auth JWT, PostgreSQL. Entrada: `backend/server.js`. |
+| **frontend/** | Interface estática: HTML, CSS, JS. Servida pelo backend na mesma origem. |
+
+**Executar (na raiz):**
+
+```bash
+npm install
+npm start
+```
+
+O servidor sobe com `node backend/server.js` e serve a API em `/api/v1` e os ficheiros estáticos da pasta `frontend/`. Variáveis de ambiente (`.env` ou painel do host): `DATABASE_URL`, `JWT_SECRET`. Ver `backend/README.md` e `SQUARECLOUD.md`.
+
+---
+
 ## 🎨 Design Theme
 
 - **Primary Yellow**: `#FFD700` (Gold)
@@ -26,15 +46,15 @@ liberty/
 ├── fstar/                 # F* formal verification
 │   ├── LibertyCrypto.fst
 │   └── LibertyProtocol.fst
-└── static/               # Frontend
+├── backend/               # API Node.js (Express, WebSocket, PostgreSQL)
+│   ├── server.js
+│   ├── src/
+│   ├── message-cache.js
+│   └── db/
+└── frontend/             # Interface estática
     ├── index.html
     ├── css/
-    │   ├── main.css
-    │   └── components.css
     └── js/
-        ├── api.js
-        ├── websocket.js
-        └── app.js
 ```
 
 ## 🚀 Features

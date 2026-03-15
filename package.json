@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "main": "server.js",
+  "main": "backend/server.js",
   "scripts": {
     "dev": "node dev-server.cjs",
     "server": "cargo run -p liberty-server",
-    "start": "node server.js",
-    "start:local": "node server.js",
+    "start": "node backend/server.js",
+    "start:local": "node backend/server.js",
     "db:push": "node db-push.js",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{js,cjs,mjs,json,html,css,md}\""

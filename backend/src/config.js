@@ -8,7 +8,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = Number(process.env.PORT) || 3000;
-const STATIC_DIR = path.join(path.dirname(__dirname), 'static');
+// Frontend está na pasta frontend/ (irmã de backend/)
+const STATIC_DIR = path.join(path.dirname(__dirname), '..', 'frontend');
 
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGIN || process.env.CORS_ORIGIN || '')
   .split(',')

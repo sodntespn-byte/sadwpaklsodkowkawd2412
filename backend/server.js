@@ -1,5 +1,5 @@
 // VERSION: CACHE_V1_STABLE
-// dotenv: não sobrescreve variáveis já definidas pelo host (ex.: Square Cloud)
+// dotenv: não sobrescreve variáveis já definidas pelo host (ex.: Square Cloud). .env na raiz do repo.
 import dotenv from 'dotenv';
 dotenv.config({ override: false });
 import path from 'path';
