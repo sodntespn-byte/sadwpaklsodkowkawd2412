@@ -1,27 +1,25 @@
 {
-  "name": "liberty-node",
+  "name": "liberty-dev",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": "20.x"
-  },
   "main": "server.js",
   "scripts": {
-    "dev": "node dev-server.js",
+    "dev": "node dev-server.cjs",
+    "server": "cargo run -p liberty-server",
     "start": "node server.js",
-    "db:push": "drizzle-kit push",
-    "db:generate": "drizzle-kit generate"
+    "start:local": "node server.js",
+    "db:push": "node db-push.js"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "dotenv": "^16.4.5",
-    "drizzle-orm": "^0.36.0",
     "express": "^4.21.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.13.0",
-    "postgres": "^3.4.0",
+    "socket.io": "^4.7.2",
     "ws": "^8.19.0"
-  },
-  "devDependencies": {
-    "drizzle-kit": "^0.28.0"
   }
 }
+

@@ -5,7 +5,6 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import http from 'http';
 import express from 'express';
-import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import bcrypt from 'bcrypt';
 import { Server as SocketIOServer } from 'socket.io';
@@ -37,7 +36,24 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
 }));
 app.use(express.json());
-app.use(cookieParser());
+// Parse Cookie header into req.cookies (evita dependência cookie-parser em deploy)
+app.use((req, _res, next) => {
+  req.cookies = Object.create(null);
+  const raw = req.headers.cookie;
+  if (raw) {
+    for (const part of raw.split(';')) {
+      const [key, ...v] = part.trim().split('=');
+      if (key) {
+        try {
+          req.cookies[key] = decodeURIComponent((v.join('=') || '').trim());
+        } catch {
+          req.cookies[key] = (v.join('=') || '').trim();
+        }
+      }
+    }
+  }
+  next();
+});
 app.use(auth.middleware);
 
 const server = http.createServer(app);
