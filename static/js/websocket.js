@@ -261,9 +261,12 @@ class LibertyGateway {
             this.messageQueue.push({ op, data });
             return;
         }
-        
         const message = typeof op === 'string' ? { op, d: data } : op;
-        this.ws.send(JSON.stringify(message));
+        if (this.socket && this.socket.connected) {
+            this.socket.emit(op, data);
+        } else if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(message));
+        }
     }
     
     startHeartbeat(interval) {
