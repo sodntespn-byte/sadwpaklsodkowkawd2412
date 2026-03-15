@@ -74,7 +74,7 @@
 .profile-card-btn:disabled{opacity:.6;cursor:default}
 .profile-card-close{width:100%;padding:10px 16px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text-primary);font-size:14px;cursor:pointer;font-family:inherit}
 .profile-card-close:hover{background:var(--medium-gray);border-color:var(--primary-yellow)}
-.profile-card-full{pointer-events:auto!important;align-items:center;justify-content:center;padding:24px}
+.profile-card-full{pointer-events:auto!important;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}
 .profile-card-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:0;cursor:pointer}
 .profile-card-modal.profile-card-full{pointer-events:auto!important}
 .profile-card-full .profile-card-modal-inner{position:relative;z-index:1;display:flex;max-width:90vw;width:720px;max-height:85vh;overflow:hidden;border-radius:16px;text-align:left;padding:0}
@@ -111,9 +111,9 @@
 .profile-card-tab-content{flex:1;overflow-y:auto;min-height:0}
 .profile-card-tab-content h4{font-size:12px;font-weight:600;color:var(--text-secondary);margin:0 0 8px}
 .profile-card-activity-empty{font-size:13px;color:var(--text-muted);margin:0}
-/* Player banner — perfil modal centralizado, estilo Discord */
+/* Player banner — perfil modal: quadrado ao centro do ecrã */
 .player-banner-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:0;cursor:pointer;animation:profileBackdropIn .2s ease-out}
-.player-banner-card{position:relative;z-index:1;width:min(420px,90vw,85vh);height:min(420px,90vw,85vh);overflow:auto;border-radius:var(--radius-2xl, 1rem);background:rgba(18,16,14,.98);border:1px solid rgba(255,215,0,.15);box-shadow:0 25px 50px -12px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04),0 0 80px rgba(255,215,0,.06);display:flex;flex-direction:column;animation:profileCardIn .28s cubic-bezier(0.16,1,0.3,1) forwards;flex-shrink:0}
+.player-banner-card{position:relative;z-index:1;width:min(420px,85vmin);height:min(420px,85vmin);min-width:280px;min-height:280px;max-width:95vw;max-height:85vh;overflow:auto;border-radius:var(--radius-2xl, 1rem);background:rgba(18,16,14,.98);border:1px solid rgba(255,215,0,.15);box-shadow:0 25px 50px -12px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04),0 0 80px rgba(255,215,0,.06);display:flex;flex-direction:column;animation:profileCardIn .28s cubic-bezier(0.16,1,0.3,1) forwards;flex-shrink:0;aspect-ratio:1/1;box-sizing:border-box}
 @keyframes profileBackdropIn{from{opacity:0}to{opacity:1}}
 @keyframes profileCardIn{from{opacity:0;transform:scale(0.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
 .player-banner-banner{height:120px;background:linear-gradient(135deg,var(--primary-yellow) 0%,var(--dark-yellow) 50%,#b8860b 100%);background-size:cover;background-position:center;position:relative}
@@ -5751,6 +5751,14 @@ class LibertyApp {
                     </div>
                 </div>
                 <div class="settings-section-block">
+                    <h3>BANNER DO PERFIL (CAPA)</h3>
+                    <p>URL da imagem de capa que aparece no seu perfil (ex.: ao abrir o seu perfil no centro do ecrã).</p>
+                    <div class="input-row" style="align-items:center;gap:12px;flex-wrap:wrap">
+                        <input type="url" id="settings-banner-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-capa.jpg" value="${this.escapeHtml(this.currentUser?.banner_url || '')}" style="flex:1;min-width:200px" />
+                        <button type="button" class="btn-save" id="settings-save-banner-btn">Salvar banner</button>
+                    </div>
+                </div>
+                <div class="settings-section-block">
                     <h3>LANGUAGE</h3>
                     <select id="settings-language"><option value="en">English</option><option value="pt">Português</option><option value="es">Español</option><option value="fr">Français</option></select>
                 </div>
@@ -6136,6 +6144,35 @@ class LibertyApp {
             } catch (_) {}
             applyUrl(url);
             this.showToast('Foto guardada localmente. Faça login para sincronizar.', 'success');
+          }
+        });
+      }
+      const saveBannerBtn = content.querySelector('#settings-save-banner-btn');
+      const bannerUrlInput = content.querySelector('#settings-banner-url');
+      if (saveBannerBtn && bannerUrlInput) {
+        saveBannerBtn.addEventListener('click', () => {
+          const url = (bannerUrlInput.value || '').trim();
+          if (!url) {
+            this.showToast('Cole uma URL de imagem para o banner.', 'info');
+            return;
+          }
+          if (!/^https?:\/\//i.test(url) && !/^\/uploads?\//.test(url)) {
+            this.showToast('URL deve começar por http://, https:// ou /uploads/', 'error');
+            return;
+          }
+          if (this.currentUser) {
+            this.currentUser.banner_url = url;
+          }
+          if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
+            API.User.updateCurrentUser({ banner_url: url })
+              .then(() => {
+                this.showToast('Banner do perfil atualizado!', 'success');
+              })
+              .catch(e => {
+                this.showToast(e.message || 'Erro ao guardar banner.', 'error');
+              });
+          } else {
+            this.showToast('Faça login para guardar o banner no servidor.', 'info');
           }
         });
       }
