@@ -409,11 +409,11 @@ class LibertyApp {
     }
 
     showApp() {
-        document.getElementById('loading-screen').classList.add('fade-out');
-        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('loading-screen')?.classList?.add('fade-out');
+        document.getElementById('auth-screen')?.classList?.add('hidden');
         setTimeout(() => {
-            document.getElementById('loading-screen').classList.add('hidden');
-            document.getElementById('app').classList.remove('hidden');
+            document.getElementById('loading-screen')?.classList?.add('hidden');
+            document.getElementById('app')?.classList?.remove('hidden');
         }, 350);
     }
 
@@ -426,8 +426,8 @@ class LibertyApp {
         document.querySelectorAll('.auth-tab').forEach(tab => {
             tab.addEventListener('click', () => this.switchAuthTab(tab.dataset.tab));
         });
-        document.getElementById('login-form').addEventListener('submit', e => { e.preventDefault(); this.handleLogin(); });
-        document.getElementById('register-form').addEventListener('submit', e => { e.preventDefault(); this.handleRegister(); });
+        document.getElementById('login-form')?.addEventListener('submit', e => { e.preventDefault(); this.handleLogin(); });
+        document.getElementById('register-form')?.addEventListener('submit', e => { e.preventDefault(); this.handleRegister(); });
         const pw = document.getElementById('register-password');
         if (pw) pw.addEventListener('input', () => this.updatePasswordStrength(pw.value));
 
@@ -436,33 +436,35 @@ class LibertyApp {
         if (homeBtn) homeBtn.addEventListener('click', () => this.selectHome());
 
         // Add server
-        document.getElementById('add-server-btn').addEventListener('click', () => this.showModal('create-server-modal'));
+        document.getElementById('add-server-btn')?.addEventListener('click', () => this.showModal('create-server-modal'));
 
         // Modal close
         document.querySelectorAll('.modal-close-btn').forEach(btn => btn.addEventListener('click', () => this.hideModal()));
-        document.getElementById('modal-overlay').addEventListener('click', e => {
+        document.getElementById('modal-overlay')?.addEventListener('click', e => {
             if (e.target.id === 'modal-overlay') this.hideModal();
         });
-        document.getElementById('create-server-form').addEventListener('submit', e => { e.preventDefault(); this.handleCreateServer(); });
+        document.getElementById('create-server-form')?.addEventListener('submit', e => { e.preventDefault(); this.handleCreateServer(); });
         document.querySelectorAll('.modal-cancel-btn').forEach(btn => btn.addEventListener('click', () => this.hideModal()));
 
         // Message input
         const msgInput = document.getElementById('message-input');
-        msgInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.handleSendMessage(); }
-        });
-        msgInput.addEventListener('input', () => {
-            this.autoResizeTextarea(msgInput);
-            if (!this._typingDebounce) this.handleTyping();
-            clearTimeout(this._typingDebounce);
-            this._typingDebounce = setTimeout(() => { this._typingDebounce = null; }, 2000);
-        });
+        if (msgInput) {
+            msgInput.addEventListener('keydown', e => {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.handleSendMessage(); }
+            });
+            msgInput.addEventListener('input', () => {
+                this.autoResizeTextarea(msgInput);
+                if (!this._typingDebounce) this.handleTyping();
+                clearTimeout(this._typingDebounce);
+                this._typingDebounce = setTimeout(() => { this._typingDebounce = null; }, 2000);
+            });
+        }
 
         // Members toggle
-        document.getElementById('toggle-members-btn').addEventListener('click', () => this.toggleMembers());
+        document.getElementById('toggle-members-btn')?.addEventListener('click', () => this.toggleMembers());
 
         // Server header dropdown
-        document.querySelector('.server-header').addEventListener('click', e => {
+        document.querySelector('.server-header')?.addEventListener('click', e => {
             if (!this.isHomeView) this.toggleServerDropdown(e);
         });
 
@@ -724,7 +726,9 @@ class LibertyApp {
                 el.id = 'voice-call-remote-stream';
                 el.className = 'voice-call-remote-stream-live';
                 el.innerHTML = '<span class="voice-call-live-badge"><i class="fas fa-circle"></i> LIVE</span><div class="voice-call-remote-video"></div>';
-                participants.insertBefore(el, participants.firstChild);
+                const ref = participants.firstChild;
+                if (ref && participants.contains(ref)) participants.insertBefore(el, ref);
+                else participants.appendChild(el);
             }
             el.classList.remove('hidden');
         });
@@ -965,20 +969,20 @@ class LibertyApp {
 
     showSecurityWarningThenConnect(loginResult) {
         this._pendingLoginResult = loginResult;
-        document.getElementById('modal-overlay').classList.remove('hidden');
-        document.getElementById('security-warning-modal').classList.remove('hidden');
+        document.getElementById('modal-overlay')?.classList?.remove('hidden');
+        document.getElementById('security-warning-modal')?.classList?.remove('hidden');
     }
 
     _onSecurityWarningIgnore() {
-        document.getElementById('security-warning-modal').classList.add('hidden');
-        document.getElementById('modal-overlay').classList.add('hidden');
+        document.getElementById('security-warning-modal')?.classList?.add('hidden');
+        document.getElementById('modal-overlay')?.classList?.add('hidden');
         this._pendingLoginResult = null;
         this.connect();
     }
 
     _onSecurityWarningPrivacy() {
-        document.getElementById('security-warning-modal').classList.add('hidden');
-        document.getElementById('modal-overlay').classList.add('hidden');
+        document.getElementById('security-warning-modal')?.classList?.add('hidden');
+        document.getElementById('modal-overlay')?.classList?.add('hidden');
         this._pendingLoginResult = null;
         this.connect().then(() => {
             this.showModal('privacy-settings-modal');
@@ -1262,9 +1266,11 @@ class LibertyApp {
                 const item = dmList.querySelector(`[data-dm-id="${channelId}"]`);
                 if (item) item.classList.add('active');
                 if (navArea) navArea.querySelectorAll('.home-nav-item').forEach(b => b.classList.remove('active'));
-                document.getElementById('friends-view').classList.add('hidden');
-                document.getElementById('messages-container').style.display = '';
-                document.querySelector('.message-input-container').style.display = '';
+                document.getElementById('friends-view')?.classList?.add('hidden');
+                const msgCont = document.getElementById('messages-container');
+                if (msgCont) msgCont.style.display = '';
+                const inputCont = document.querySelector('.message-input-container');
+                if (inputCont) inputCont.style.display = '';
                 const recipient = dm.recipients?.[0] || {};
                 const channelNameEl = document.getElementById('channel-name');
                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
@@ -1282,9 +1288,11 @@ class LibertyApp {
         const isGroup = dm.type === 'group_dm';
         const displayName = isGroup ? (dm.name || (dm.recipients || []).map((r) => r.username).join(', ')) : (dm.recipients?.[0]?.username || 'Unknown');
         const recipient = dm.recipients?.[0] || { username: displayName };
-        document.getElementById('friends-view').classList.add('hidden');
-        document.getElementById('messages-container').style.display = '';
-        document.querySelector('.message-input-container').style.display = '';
+        document.getElementById('friends-view')?.classList?.add('hidden');
+        const msgCont = document.getElementById('messages-container');
+        if (msgCont) msgCont.style.display = '';
+        const inputCont = document.querySelector('.message-input-container');
+        if (inputCont) inputCont.style.display = '';
 
         if (this.currentChannel?.id && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
         this.currentChannel = dm;
@@ -1503,9 +1511,11 @@ class LibertyApp {
                             try {
                                 this.showToast('Abrindo conversa...', 'info');
                                 const channel = await API.DM.create(user);
-                                document.getElementById('friends-view').classList.add('hidden');
-                                document.getElementById('messages-container').style.display = '';
-                                document.querySelector('.message-input-container').style.display = '';
+                                document.getElementById('friends-view')?.classList?.add('hidden');
+                                const msgCont = document.getElementById('messages-container');
+                                if (msgCont) msgCont.style.display = '';
+                                const inputCont = document.querySelector('.message-input-container');
+                                if (inputCont) inputCont.style.display = '';
                                 const channelNameEl = document.getElementById('channel-name');
                                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
                                 if (channelNameEl) channelNameEl.textContent = channel.recipients?.[0]?.username || 'DM';
@@ -2075,7 +2085,9 @@ class LibertyApp {
             panel = document.createElement('div');
             panel.className = 'voice-panel';
             const userPanel = document.querySelector('.user-panel');
-            userPanel.parentNode.insertBefore(panel, userPanel);
+            const parent = userPanel?.parentNode;
+            if (parent && userPanel && parent.contains(userPanel)) parent.insertBefore(panel, userPanel);
+            else if (parent) parent.appendChild(panel);
         }
         panel.innerHTML = `
             <div class="voice-panel-header">
@@ -2193,8 +2205,8 @@ class LibertyApp {
 
     toggleMembers() {
         this.membersSidebarVisible = !this.membersSidebarVisible;
-        document.getElementById('members-sidebar').classList.toggle('collapsed', !this.membersSidebarVisible);
-        document.getElementById('toggle-members-btn').classList.toggle('active', this.membersSidebarVisible);
+        document.getElementById('members-sidebar')?.classList?.toggle('collapsed', !this.membersSidebarVisible);
+        document.getElementById('toggle-members-btn')?.classList?.toggle('active', this.membersSidebarVisible);
     }
 
     toggleSearchPanel() {
@@ -2526,8 +2538,10 @@ class LibertyApp {
         replyBar.innerHTML = `<i class="fas fa-reply" style="color:var(--primary-yellow);font-size:12px"></i><span>Replying to <strong>${this.escapeHtml(authorName)}</strong> — ${this.escapeHtml(short)}${content && content.length > 80 ? '...' : ''}</span><button title="Cancel"><i class="fas fa-times"></i></button>`;
         replyBar.querySelector('button').addEventListener('click', () => this.cancelReply());
         const inputWrapper = document.querySelector('.message-input-wrapper');
-        inputWrapper.parentNode.insertBefore(replyBar, inputWrapper);
-        document.getElementById('message-input').focus();
+        const parent = inputWrapper?.parentNode;
+        if (parent && inputWrapper && parent.contains(inputWrapper)) parent.insertBefore(replyBar, inputWrapper);
+        else if (parent) parent.appendChild(replyBar);
+        document.getElementById('message-input')?.focus();
     }
 
     cancelReply() {
