@@ -3,6 +3,7 @@
 class LibertyGateway {
     constructor() {
         this.ws = null;
+        this.socket = null; // Socket.io
         this.connected = false;
         this.authenticated = false;
         this.sessionId = null;
@@ -26,23 +27,59 @@ class LibertyGateway {
         });
     }
 
+    _resolveConnect(data) {
+        if (this._connectResolve) {
+            this._connectResolve(data || {});
+            this._connectResolve = null;
+            this._connectReject = null;
+        }
+    }
+
     _doConnect() {
+        const token = typeof API !== 'undefined' && API.Token ? API.Token.getAccessToken() : (localStorage.getItem('access_token') || localStorage.getItem('token') || '');
+        if (typeof io !== 'undefined') {
+            try {
+                this.socket = io({ auth: { token }, transports: ['websocket', 'polling'], withCredentials: true });
+                this.socket.on('connect', () => {
+                    this.connected = true;
+                    this.authenticated = !!token;
+                    this.reconnectAttempts = 0;
+                    this.emit('ready', {});
+                    this._resolveConnect({});
+                });
+                this.socket.on('message', (payload) => {
+                    const msg = (payload && payload.data) || (payload && payload.message) || payload;
+                    if (msg) this.emit('message', msg);
+                });
+                this.socket.on('disconnect', () => {
+                    this.connected = false;
+                    this.authenticated = false;
+                    this._scheduleReconnect();
+                });
+                this.socket.on('connect_error', (err) => {
+                    if (this._connectReject) this._connectReject(err);
+                    this._connectResolve = null;
+                    this._connectReject = null;
+                });
+                return;
+            } catch (e) {
+                this.socket = null;
+            }
+        }
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const token = typeof API !== 'undefined' && API.Token ? API.Token.getAccessToken() : (localStorage.getItem('access_token') || '');
         const wsUrl = token ? `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}` : `${protocol}//${window.location.host}/ws`;
-        
         try {
             this.ws = new WebSocket(wsUrl);
         } catch (e) {
             this._scheduleReconnect();
             return;
         }
-        
         this.ws.onopen = () => {
             this.connected = true;
             this.reconnectAttempts = 0;
+            this.emit('ready', {});
+            this._resolveConnect({});
         };
-        
         this.ws.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
@@ -51,17 +88,13 @@ class LibertyGateway {
                 console.error('[Gateway] Parse error:', error);
             }
         };
-        
         this.ws.onclose = () => {
             this.connected = false;
             this.authenticated = false;
             this.stopHeartbeat();
             this._scheduleReconnect();
         };
-        
-        this.ws.onerror = () => {
-            // Silencioso: reconexão será feita em onclose
-        };
+        this.ws.onerror = () => {}
     }
 
     _scheduleReconnect() {
@@ -340,19 +373,36 @@ class LibertyGateway {
     }
     
     subscribeChannel(channelId) {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-        this.ws.send(JSON.stringify({ type: 'subscribe', chat_id: channelId }));
+        if (!channelId) return;
+        if (this.socket && this.socket.connected) {
+            this.socket.emit('subscribe', { chat_id: channelId, chatId: channelId });
+            return;
+        }
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'subscribe', chat_id: channelId }));
+        }
     }
     
     unsubscribeChannel(channelId) {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-        this.ws.send(JSON.stringify({ type: 'unsubscribe', chat_id: channelId }));
+        if (!channelId) return;
+        if (this.socket && this.socket.connected) {
+            this.socket.emit('unsubscribe', { chat_id: channelId, chatId: channelId });
+            return;
+        }
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ type: 'unsubscribe', chat_id: channelId }));
+        }
     }
     
     disconnect() {
         this.stopHeartbeat();
+        if (this.socket) {
+            this.socket.disconnect();
+            this.socket = null;
+        }
         if (this.ws) {
             this.ws.close(1000, 'Client disconnect');
+            this.ws = null;
         }
         this.connected = false;
         this.authenticated = false;

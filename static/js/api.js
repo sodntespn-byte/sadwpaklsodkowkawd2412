@@ -250,22 +250,35 @@ const ChannelAPI = {
     }
 };
 
-// Message API
+// Room: "channel:serverId:channelId" ou "dm:id" — extrai channelId para /channels/:channelId/messages
+function parseRoom(roomOrChannelId) {
+    const r = String(roomOrChannelId || '');
+    if (r.startsWith('channel:')) {
+        const parts = r.slice(8).split(':');
+        return parts.length >= 2 ? parts[1] : (parts[0] || r);
+    }
+    if (r.startsWith('dm:')) return r.slice(3) || r;
+    return r;
+}
+
+// Message API — aceita room (channel:serverId:channelId ou dm:id) ou channelId direto
 const MessageAPI = {
-    async list(channelId, options = {}) {
+    async list(roomOrChannelId, options = {}) {
+        const channelId = parseRoom(roomOrChannelId);
         const params = new URLSearchParams();
         if (options.before) params.append('before', options.before);
         if (options.after) params.append('after', options.after);
-        if (options.limit) params.append('limit', options.limit);
+        if (options.limit) params.append('limit', options.limit || 50);
         
         const query = params.toString();
         return apiRequest(`/channels/${channelId}/messages${query ? '?' + query : ''}`);
     },
     
-    async create(channelId, content, tts = false, embeds = []) {
+    async create(roomOrChannelId, content, tts = false, embeds = []) {
+        const channelId = parseRoom(roomOrChannelId);
         return apiRequest(`/channels/${channelId}/messages`, {
             method: 'POST',
-            body: { content, tts, embeds }
+            body: { content: content || '', tts, embeds }
         });
     },
     
@@ -364,16 +377,21 @@ const DMAPI = {
     }
 };
 
-// Friends/Relationships API
+// Friends/Relationships API — backend já retorna type 1=friend, 3=pending in, 4=pending out
 const FriendAPI = {
     async list() {
-        return apiRequest('/users/@me/relationships');
+        return apiRequest('/users/@me/relationships').catch(() => []);
+    },
+
+    async listPending() {
+        const list = await apiRequest('/users/@me/relationships').catch(() => []);
+        return Array.isArray(list) ? list.filter((r) => r.type === 3 || r.type === 4) : [];
     },
 
     async add(username, discriminator) {
         return apiRequest('/users/@me/relationships', {
             method: 'POST',
-            body: { username, discriminator }
+            body: { username: username || undefined, discriminator: discriminator || undefined }
         });
     },
 
