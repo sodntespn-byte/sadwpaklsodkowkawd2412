@@ -339,6 +339,16 @@ class LibertyGateway {
         this.send('leave_server', { server_id: serverId });
     }
     
+    subscribeChannel(channelId) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        this.ws.send(JSON.stringify({ type: 'subscribe', chat_id: channelId }));
+    }
+    
+    unsubscribeChannel(channelId) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        this.ws.send(JSON.stringify({ type: 'unsubscribe', chat_id: channelId }));
+    }
+    
     disconnect() {
         this.stopHeartbeat();
         if (this.ws) {

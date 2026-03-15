@@ -893,15 +893,21 @@ async function start() {
       let username = 'User';
       const u = await db.query('SELECT username FROM users WHERE id = $1 LIMIT 1', [userId]);
       if (u.rows[0]) username = u.rows[0].username || username;
+      const createdAt = row.created_at || new Date();
       const saved = {
         id: String(row.id),
         content: row.content,
         author: username,
+        author_username: username,
+        author_id: String(userId),
         channelId,
-        timestamp: row.created_at || new Date(),
+        channel_id: chatId,
+        chat_id: chatId,
+        timestamp: createdAt,
+        created_at: createdAt,
       };
       const emit = req.app.locals.emitMessage;
-      if (emit && chatId) emit({ ...saved, chat_id: chatId });
+      if (emit && chatId) emit({ ...saved });
       return res.status(201).json({ success: true, message: saved });
     } catch (err) {
       console.error('[API] POST /api/v1/channels/:id/messages', err.message);
@@ -919,7 +925,7 @@ async function start() {
       const chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
       if (!chatId) return res.status(200).json([]);
       const result = await db.query(
-        `SELECT m.id, m.content, m.created_at, u.username AS author_username
+        `SELECT m.id, m.content, m.created_at, m.user_id AS author_id, u.username AS author_username
          FROM messages m LEFT JOIN users u ON u.id = m.user_id
          WHERE m.chat_id = $1 ORDER BY m.created_at ASC LIMIT 100`,
         [chatId]
@@ -928,6 +934,7 @@ async function start() {
         id: row.id ? String(row.id) : String(i),
         channel_id: channelId,
         content: String(row.content || ''),
+        author_id: row.author_id ? String(row.author_id) : null,
         author_username: row.author_username || 'User',
         created_at: new Date(row.created_at).toISOString(),
       }));

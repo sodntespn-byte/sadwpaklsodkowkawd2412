@@ -630,11 +630,18 @@ class LibertyApp {
         if (!this.gateway) return;
         const g = this.gateway;
         g.on('message', msg => {
-            if (msg.channel_id === this.currentChannel?.id) {
-                this.addMessage(msg);
+            const chId = msg.channel_id || msg.channelId;
+            const normalized = {
+                ...msg,
+                author_username: msg.author_username || msg.author,
+                created_at: msg.created_at || msg.timestamp,
+            };
+            if (chId === this.currentChannel?.id) {
+                this.addMessage(normalized, true);
+                this.scrollToBottom();
             } else {
-                this.unreadChannels.add(msg.channel_id);
-                this._updateChannelUnread(msg.channel_id, true);
+                this.unreadChannels.add(chId);
+                this._updateChannelUnread(chId, true);
             }
         });
         g.on('message_update', data => this.updateMessage(data));
@@ -2755,15 +2762,29 @@ class LibertyApp {
         }
 
         const channelId = this.currentChannel.id;
+        input.value = '';
+        input.style.height = 'auto';
+        this.cancelReply();
         try {
-            await API.Message.create(channelId, content);
+            const res = await API.Message.create(channelId, content);
+            const msg = res?.message;
+            if (msg) {
+                const normalized = {
+                    id: msg.id,
+                    content: msg.content,
+                    author_username: msg.author_username || msg.author,
+                    author_id: msg.author_id,
+                    created_at: msg.created_at || msg.timestamp,
+                };
+                this.addMessage(normalized, true);
+                this.scrollToBottom();
+            } else {
+                await this.loadMessages(channelId);
+                this.scrollToBottom();
+            }
         } catch (err) {
             console.error('Erro ao enviar mensagem no front-end:', err);
             this.showToast(err.message || 'Failed to send message', 'error');
-        } finally {
-            input.value = '';
-            input.style.height = 'auto';
-            this.cancelReply();
         }
     }
 
