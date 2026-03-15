@@ -140,30 +140,45 @@
 .player-banner-more{display:block;padding:12px 0 0;border-top:1px solid rgba(255,215,0,.06);text-align:left}
 .player-banner-more .profile-card-section{margin-top:12px;padding-top:12px}
 .player-banner-more .profile-card-section h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary);margin:0 0 8px}
-.settings-overlay{position:fixed;inset:0;background:var(--primary-black);z-index:3500;display:flex;animation:settingsFadeIn .25s var(--ease-out-expo)}
+.settings-overlay{position:fixed;inset:0;background:#1a1a1a;z-index:3500;display:flex;animation:settingsFadeIn .25s var(--ease-out-expo)}
 @keyframes settingsFadeIn{from{opacity:0}to{opacity:1}}
-.settings-overlay .settings-sidebar{flex:0 0 auto;background:var(--secondary-black);display:flex;justify-content:flex-end;overflow-y:auto;min-width:218px;padding-left:max(20px,calc(50vw - 480px))}
-.settings-overlay .settings-sidebar-inner{width:218px;padding:60px 6px 20px 20px;flex-shrink:0}
-.settings-overlay .settings-sidebar-profile{display:flex;align-items:center;gap:10px;padding:8px 10px;margin-bottom:4px;border-radius:var(--radius-md);background:rgba(255,255,255,.03)}
-.settings-overlay .settings-sidebar-profile-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--primary-black);flex-shrink:0}
-.settings-overlay .settings-sidebar-profile-info{min-width:0}
-.settings-overlay .settings-sidebar-profile-name{font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.settings-overlay .settings-sidebar-profile-link{font-size:11px;color:var(--primary-yellow);cursor:pointer}
-.settings-overlay .settings-sidebar-profile-link:hover{text-decoration:underline}
-.settings-overlay .settings-sidebar-search{width:100%;padding:6px 8px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px;font-family:inherit;margin-bottom:8px}
-.settings-overlay .settings-sidebar-search:focus{outline:none;border-color:var(--primary-yellow)}
-.settings-overlay .settings-sidebar-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary);padding:6px 10px;margin-top:8px}
-.settings-overlay .settings-sidebar-item{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:14px;color:var(--text-secondary);transition:background .15s,color .15s;margin-bottom:1px;white-space:nowrap}
-.settings-overlay .settings-sidebar-item i{width:18px;text-align:center;font-size:14px;flex-shrink:0}
-.settings-overlay .settings-sidebar-item:hover{background:rgba(255,255,255,.04);color:var(--text-primary)}
-.settings-overlay .settings-sidebar-item.active{background:var(--medium-gray);color:var(--text-primary);font-weight:500}
-.settings-overlay .settings-content h2.settings-page-title{font-size:24px;font-weight:700;color:var(--primary-yellow);margin-bottom:24px;display:block}
-.settings-overlay .settings-account-hero{display:flex;align-items:center;gap:16px;padding:20px 24px;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow));border-radius:var(--radius-lg);margin-bottom:24px}
-.settings-overlay .settings-account-hero-avatar{width:64px;height:64px;border-radius:50%;background:var(--secondary-black);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
-.settings-overlay .settings-account-hero-avatar img{width:100%;height:100%;object-fit:cover}
-.settings-overlay .settings-account-hero-name{font-size:18px;font-weight:700;color:var(--primary-black);flex:1}
-.settings-overlay .settings-account-hero .btn-change-photo{background:var(--primary-black);color:var(--primary-yellow);border:none;padding:8px 14px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-.settings-overlay .settings-account-hero .btn-change-photo:hover{background:rgba(0,0,0,.8)}
+.settings-overlay .settings-sidebar{flex:0 0 240px;width:240px;background:#0a0a0a;border-right:1px solid rgba(255,255,255,.06);overflow-y:auto;flex-shrink:0}
+.settings-overlay .settings-sidebar-inner{padding:24px 12px 20px;min-height:100%}
+.settings-overlay .settings-sidebar-profile{display:none}
+.settings-overlay .settings-sidebar-search{display:none}
+.settings-overlay .settings-sidebar-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-secondary);padding:8px 14px 6px;margin-top:12px}
+.settings-overlay .settings-sidebar-title:first-child{margin-top:0}
+.settings-overlay .settings-sidebar-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;cursor:pointer;font-size:14px;color:var(--lighter-gray);transition:background .15s,color .15s;margin-bottom:2px;white-space:nowrap}
+.settings-overlay .settings-sidebar-item i{width:20px;text-align:center;font-size:15px;flex-shrink:0;color:inherit}
+.settings-overlay .settings-sidebar-item:hover{background:rgba(255,255,255,.06);color:var(--text-primary)}
+.settings-overlay .settings-sidebar-item.active{background:var(--primary-yellow);color:var(--primary-black);font-weight:600}
+.settings-overlay .settings-sidebar-item.active i{color:var(--primary-black)}
+.settings-overlay .settings-sidebar-item.danger{color:var(--error)}
+.settings-overlay .settings-sidebar-item.danger:hover{background:rgba(229,57,53,.12)}
+.settings-overlay .settings-sidebar-item.danger.active{background:var(--error);color:#fff}
+.settings-overlay .settings-sidebar-divider{height:1px;background:rgba(255,255,255,.06);margin:8px 14px}
+.settings-overlay .settings-content{flex:1;display:flex;flex-direction:column;background:#1a1a1a;position:relative;overflow-y:auto;padding:32px 40px 80px}
+.settings-overlay .settings-content-inner{max-width:720px;width:100%}
+.settings-overlay .settings-content h2.settings-page-title{font-size:28px;font-weight:700;color:var(--text-primary);margin:0 0 28px;display:block}
+.settings-overlay .settings-close{position:absolute;top:24px;right:32px;z-index:10}
+.settings-overlay .settings-close button{width:36px;height:36px;border-radius:50%;background:transparent;border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:18px;transition:color .15s}
+.settings-overlay .settings-close button:hover{color:var(--text-primary)}
+.settings-overlay .settings-close-hint{display:none}
+.settings-overlay .settings-subscription-card{background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:20px 24px;margin-bottom:24px}
+.settings-overlay .settings-subscription-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.settings-overlay .settings-subscription-label{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;color:var(--text-primary)}
+.settings-overlay .settings-subscription-label i{color:var(--primary-yellow);font-size:18px}
+.settings-overlay .settings-subscription-desc{font-size:13px;color:var(--text-secondary);margin:8px 0 0;line-height:1.45}
+.settings-overlay .settings-plan-select{padding:10px 36px 10px 14px;background:var(--secondary-black);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text-primary);font-size:14px;font-family:inherit;min-width:220px;appearance:auto;cursor:pointer}
+.settings-overlay .settings-account-hero{display:flex;align-items:center;gap:20px;padding:24px 28px;background:var(--primary-yellow);border-radius:12px;margin-bottom:24px;flex-wrap:wrap}
+.settings-overlay .settings-account-hero-avatar{position:relative;width:64px;height:64px;border-radius:50%;background:var(--dark-gray);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:var(--text-primary);flex-shrink:0;overflow:hidden}
+.settings-overlay .settings-account-hero-avatar .settings-avatar-file-input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer;z-index:2}
+.settings-overlay .settings-account-hero-avatar .settings-avatar-preview{position:relative;z-index:1;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.settings-overlay .settings-account-hero-avatar .settings-avatar-preview img{width:100%;height:100%;object-fit:cover}
+.settings-overlay .settings-account-hero-body{flex:1;min-width:0}
+.settings-overlay .settings-account-hero-name{font-size:16px;font-weight:600;color:var(--primary-black);display:block;margin-bottom:8px}
+.settings-overlay .settings-account-hero .btn-change-photo{background:var(--dark-gray);color:var(--text-primary);border:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
+.settings-overlay .settings-account-hero .btn-change-photo:hover{background:rgba(0,0,0,.25)}
 .settings-overlay .settings-avatar-card{background:var(--secondary-black);border:1px solid rgba(255,215,0,.1);border-radius:var(--radius-lg);padding:24px;margin-bottom:24px}
 .settings-overlay .settings-avatar-preview-wrap{position:relative;width:160px;height:160px;margin:0 auto 20px;border-radius:50%;overflow:hidden;border:3px solid rgba(255,215,0,.25);background:var(--dark-gray);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .2s,box-shadow .2s}
 .settings-overlay .settings-avatar-preview-wrap:hover{border-color:var(--primary-yellow);box-shadow:0 0 24px rgba(255,215,0,.2)}
@@ -201,27 +216,17 @@
 .settings-overlay .settings-section-block input:focus{outline:none;border-color:var(--primary-yellow)}
 .settings-overlay .settings-section-block .btn-save{background:var(--primary-yellow);color:var(--primary-black);border:none;padding:10px 18px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 .settings-overlay .settings-section-block .btn-save:hover{background:var(--dark-yellow);color:var(--primary-black)}
-.settings-overlay .settings-section-block .btn-clear-db{background:var(--error);color:#fff;border:none;padding:10px 18px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px}
+.settings-overlay .settings-section-block .btn-clear-db{display:inline-flex;align-items:center;gap:8px;background:var(--error);color:#fff;border:none;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px}
 .settings-overlay .settings-section-block .btn-clear-db:hover{background:#c62828}
 .settings-overlay .settings-section-block select{padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit;min-width:200px}
 .settings-overlay .settings-section-block select:focus{outline:none;border-color:var(--primary-yellow)}
-.settings-overlay .settings-sidebar-item.danger{color:var(--error)}
-.settings-overlay .settings-sidebar-item.danger:hover{background:rgba(229,57,53,.12)}
-.settings-overlay .settings-sidebar-divider{height:1px;background:rgba(255,255,255,.06);margin:8px 10px}
-.settings-overlay .settings-content{flex:1;display:flex;justify-content:flex-start;background:var(--primary-black);position:relative;overflow-y:auto;padding:60px 40px 80px}
-.settings-overlay .settings-content-inner{max-width:740px;width:100%}
-.settings-overlay .settings-content h2{font-size:20px;font-weight:700;color:var(--text-primary);margin-bottom:20px;display:block}
-.settings-overlay .settings-content h3{font-size:12px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.7px;margin:24px 0 8px;display:block}
-.settings-overlay .settings-content p{font-size:14px;color:var(--text-secondary);line-height:1.6;margin-bottom:12px;display:block}
-.settings-overlay .settings-card{background:var(--secondary-black);border:1px solid rgba(255,215,0,.06);border-radius:var(--radius-lg);padding:16px;margin-bottom:16px;display:block}
+.settings-overlay .settings-content h3{font-size:11px;font-weight:700;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em;margin:24px 0 8px;display:block}
+.settings-overlay .settings-content p{font-size:13px;color:var(--text-secondary);line-height:1.55;margin-bottom:12px;display:block}
+.settings-overlay .settings-card{background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px 20px;margin-bottom:16px}
 .settings-overlay .settings-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04)}
 .settings-overlay .settings-row:last-child{border-bottom:none}
 .settings-overlay .settings-row-label{font-size:14px;color:var(--text-primary);font-weight:500}
 .settings-overlay .settings-row-desc{font-size:12px;color:var(--text-muted);margin-top:2px}
-.settings-overlay .settings-close{position:fixed;top:60px;right:max(20px,calc(50vw - 480px));z-index:3501;display:flex;flex-direction:column;align-items:center}
-.settings-overlay .settings-close button{width:36px;height:36px;border-radius:50%;background:transparent;border:2px solid var(--medium-gray);color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .15s}
-.settings-overlay .settings-close button:hover{border-color:var(--light-gray);color:var(--text-primary)}
-.settings-overlay .settings-close-hint{font-size:10px;color:var(--text-muted);text-align:center;margin-top:4px;font-weight:600}
 .settings-overlay .settings-profile-card{background:var(--secondary-black);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;border:1px solid rgba(255,215,0,.06)}
 .settings-overlay .settings-profile-banner{height:100px;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow))}
 .settings-overlay .settings-profile-info{padding:0 16px 16px;position:relative}
@@ -4246,28 +4251,31 @@ class LibertyApp {
                 const uname = this.escapeHtml(this.currentUser?.username || 'User');
                 const avatarUrl = this._getAvatarUrl() ? this.escapeHtml(this._getAvatarUrl()) : '';
                 const avatarHtml = avatarUrl ? `<img src="${avatarUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${initial}</span>` : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:var(--text-secondary)">${initial}</span>`;
+                const userIdDisplay = this.escapeHtml(this.currentUser?.id?.slice(0, 11) || this.currentUser?.username || '');
                 return `<h2 class="settings-page-title">Minha Conta</h2>
-                <div class="settings-subscription-row">
-                    <div class="settings-subscription-label"><i class="fas fa-crown"></i> Subscription Plan</div>
-                    <div><select class="settings-plan-select" disabled><option>Free - 5.000 chars / 100 MB</option></select></div>
+                <div class="settings-subscription-card">
+                    <div class="settings-subscription-row">
+                        <div class="settings-subscription-label"><i class="fas fa-crown"></i> Subscription Plan</div>
+                        <select class="settings-plan-select" disabled><option>Free - 5.000 chars / 100 MB</option></select>
+                    </div>
+                    <p class="settings-subscription-desc">Choose your plan to increase character and file size limits.</p>
                 </div>
-                <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px">Choose your plan to increase character and file size limits.</p>
-                <div class="settings-avatar-card settings-avatar-card-improved">
-                    <h3 class="settings-avatar-card-title"><i class="fas fa-user-circle"></i> Foto de perfil</h3>
-                    <p class="settings-avatar-card-desc">Envie uma imagem do seu computador ou use um link. JPEG, PNG, GIF ou WebP (máx. 4 MB).</p>
-                    <div class="settings-avatar-preview-wrap" id="settings-avatar-drop-zone">
+                <div class="settings-account-hero">
+                    <div class="settings-account-hero-avatar" id="settings-avatar-drop-zone">
                         <input type="file" id="settings-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" class="settings-avatar-file-input" />
                         <div class="settings-avatar-preview" id="settings-avatar-preview">${avatarHtml}</div>
-                        <div class="settings-avatar-overlay"><i class="fas fa-camera"></i><span>Clique ou arraste uma foto aqui</span></div>
                     </div>
-                    <div class="settings-avatar-actions">
-                        <label for="settings-avatar-file" class="btn btn-primary settings-avatar-btn-file"><i class="fas fa-upload"></i> Enviar arquivo</label>
-                        <span class="settings-avatar-divider">ou</span>
-                        <div class="settings-avatar-url-row">
-                            <input type="url" id="settings-avatar-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-foto.jpg ou .png" value="${avatarUrl}" />
-                            <button type="button" class="btn-save" id="settings-save-avatar-btn"><i class="fas fa-link"></i> Usar URL</button>
-                        </div>
-                        <button type="button" class="settings-avatar-remove-btn" id="settings-avatar-remove-btn"><i class="fas fa-trash-can"></i> Remover foto</button>
+                    <div class="settings-account-hero-body">
+                        <span class="settings-account-hero-name">${userIdDisplay || uname}</span>
+                        <button type="button" class="btn-change-photo" id="settings-hero-change-photo"><i class="fas fa-camera"></i> Alterar foto</button>
+                    </div>
+                </div>
+                <div class="settings-section-block">
+                    <h3>AVATAR POR URL OU ARQUIVO</h3>
+                    <p>Use a URL abaixo ou clique em "Alterar foto" / na foto para enviar um arquivo de imagem.</p>
+                    <div class="input-row" style="align-items:center;gap:12px;flex-wrap:wrap">
+                        <input type="url" id="settings-avatar-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-foto.jpg" value="${avatarUrl}" style="flex:1;min-width:200px" />
+                        <button type="button" class="btn-save" id="settings-save-avatar-btn">Salvar avatar</button>
                     </div>
                 </div>
                 <div class="settings-section-block">
@@ -4276,15 +4284,15 @@ class LibertyApp {
                 </div>
                 <div class="settings-section-block">
                     <h3>NAME</h3>
-                    <div class="input-row">
-                        <input type="text" id="settings-display-name" value="${uname}" placeholder="Seu nome" />
+                    <div class="input-row" style="align-items:center;gap:12px;flex-wrap:wrap">
+                        <input type="text" id="settings-display-name" value="${uname}" placeholder="Seu nome" style="flex:1;min-width:200px" />
                         <button type="button" class="btn-save" id="settings-save-name-btn">Save</button>
                     </div>
                 </div>
                 <div class="settings-section-block">
                     <h3>DADOS LOCAIS</h3>
                     <p>Remove todos os dados salvos neste navegador (contas, servidores, mensagens, fotos). Você precisará criar conta e entrar de novo.</p>
-                    <button type="button" class="btn-clear-db" id="settings-clear-db-btn">Limpar banco de dados</button>
+                    <button type="button" class="btn-clear-db" id="settings-clear-db-btn"><i class="fas fa-trash-can"></i> Limpar banco de dados</button>
                 </div>`;
             },
             'auth-security': () => {
@@ -4541,6 +4549,8 @@ class LibertyApp {
                 };
                 reader.readAsDataURL(file);
             };
+            const heroChangeBtn = content.querySelector('#settings-hero-change-photo');
+            if (heroChangeBtn && avatarFileInput) heroChangeBtn.addEventListener('click', () => avatarFileInput.click());
             if (avatarFileInput) {
                 avatarFileInput.addEventListener('change', () => {
                     const file = avatarFileInput.files && avatarFileInput.files[0];
