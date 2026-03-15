@@ -723,6 +723,8 @@ class LibertyApp {
         layer.style.backgroundImage = '';
         layer.style.backgroundColor = '';
         layer.style.visibility = 'hidden';
+        const img = layer.querySelector('.app-bg-layer-img');
+        if (img) img.remove();
       }
       return;
     }
@@ -735,17 +737,21 @@ class LibertyApp {
       appEl.insertBefore(layer, appEl.firstChild);
     }
     layer.style.visibility = '';
-    layer.style.backgroundRepeat = 'no-repeat';
-    layer.style.backgroundPosition = 'center';
-    layer.style.backgroundAttachment = 'fixed';
+    layer.classList.remove('app-bg-layer--image');
+    const existingImg = layer.querySelector('.app-bg-layer-img');
+    if (existingImg) existingImg.remove();
 
     if (type === 'solid') {
+      layer.style.backgroundRepeat = 'no-repeat';
+      layer.style.backgroundPosition = 'center';
       const color = localStorage.getItem('liberty-bg-solid') || '#000000';
       layer.style.background = color;
       layer.style.backgroundColor = color;
       layer.style.backgroundImage = '';
       layer.style.backgroundSize = '';
     } else if (type === 'gradient') {
+      layer.style.backgroundRepeat = 'no-repeat';
+      layer.style.backgroundPosition = 'center';
       try {
         const g = JSON.parse(localStorage.getItem('liberty-bg-gradient') || '{}');
         const angle = g.angle ?? 135;
@@ -761,11 +767,19 @@ class LibertyApp {
       }
     } else if (type === 'image') {
       const url = (localStorage.getItem('liberty-bg-image') || '').trim();
-      layer.style.backgroundColor = '#000';
       if (url) {
-        layer.style.backgroundImage = `url("${String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\22')}")`;
-        layer.style.backgroundSize = 'cover';
+        layer.classList.add('app-bg-layer--image');
+        layer.style.background = '';
+        layer.style.backgroundImage = '';
+        layer.style.backgroundColor = 'transparent';
+        const img = document.createElement('img');
+        img.className = 'app-bg-layer-img';
+        img.alt = '';
+        img.src = url;
+        img.setAttribute('loading', 'eager');
+        layer.appendChild(img);
       } else {
+        layer.style.backgroundColor = '#000';
         layer.style.backgroundImage = '';
         layer.style.backgroundSize = '';
       }

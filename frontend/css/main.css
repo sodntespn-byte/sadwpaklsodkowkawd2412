@@ -715,31 +715,73 @@ a:hover {
   min-width: 0;
   position: relative;
 }
+.app > .server-sidebar,
+.app > .channel-sidebar,
+.app > .main-content,
+.app > .members-sidebar {
+  position: relative;
+  z-index: 1;
+}
 
-/* Camada de fundo (imagem/gradiente/cor) atrás do conteúdo */
+/* Camada de fundo (imagem/gradiente/cor) — cobre todo o viewport atrás do app */
+.app .app-bg-layer,
 .app-bg-layer {
-  position: absolute;
-  inset: 0;
+  position: fixed !important;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 0;
   pointer-events: none;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  background-attachment: fixed;
 }
 
-/* Com fundo personalizado, barras ficam semi-transparentes para o fundo aparecer */
+/* GIF/imagem: <img> para cobrir todo o fundo e preservar cores/animação */
+.app-bg-layer.app-bg-layer--image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+}
+.app-bg-layer-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Com fundo personalizado, todos os painéis ficam semi-transparentes para o GIF aparecer */
 .app-has-custom-bg .server-sidebar {
-  background: rgba(10, 10, 10, 0.92);
+  background: rgba(8, 8, 8, 0.88);
 }
 .app-has-custom-bg .channel-sidebar {
-  background: rgba(17, 17, 17, 0.92);
+  background: rgba(12, 12, 12, 0.88);
 }
 .app-has-custom-bg .main-content {
-  background-color: rgba(0, 0, 0, 0.85);
+  background: rgba(0, 0, 0, 0.4);
 }
 .app-has-custom-bg .members-sidebar {
-  background: rgba(17, 17, 17, 0.92);
+  background: rgba(12, 12, 12, 0.88);
+}
+.app-has-custom-bg .messages-container {
+  background: transparent;
+}
+.app-has-custom-bg .channel-header {
+  background: rgba(10, 10, 10, 0.9);
+}
+.app-has-custom-bg .messages-list {
+  background: transparent;
+}
+.app-has-custom-bg .friends-view {
+  background: transparent;
+}
+.app-has-custom-bg #friends-list {
+  background: transparent;
 }
 
 /* ── Server Sidebar ── */
