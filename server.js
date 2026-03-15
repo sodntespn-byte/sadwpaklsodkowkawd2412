@@ -17,9 +17,12 @@ import WebSocket, { WebSocketServer } from 'ws';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- db (inline para deploy sem pasta db/)
-// Suporta DATABASE_URL, BANCO_DADOS (Square Cloud) ou DB_URL
+// Usa env (DATABASE_URL, BANCO_DADOS, DB_URL) ou, se não definida, esta URL embutida (Neon).
+// O parâmetro channel_binding=require é removido na conexão.
+const EMBEDDED_DATABASE_URL = 'postgresql://neondb_owner:npg_z2MNWjJgXSB7@ep-icy-art-ameh1o7b-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+
 function _dbGetUrl() {
-  const url = process.env.DATABASE_URL || process.env.BANCO_DADOS || process.env.DB_URL || '';
+  const url = process.env.DATABASE_URL || process.env.BANCO_DADOS || process.env.DB_URL || EMBEDDED_DATABASE_URL || '';
   return typeof url === 'string' ? url.trim() : '';
 }
 function _dbLoadMtlsOptions() {
