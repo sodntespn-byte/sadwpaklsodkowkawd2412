@@ -492,12 +492,17 @@ function _wsSendToUser(userId, payload) {
   const str = typeof payload === 'string' ? payload : JSON.stringify(payload);
   set.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(str); });
 }
+function _wsEmitToRoom(roomId, payload) {
+  if (!roomId) return;
+  const str = typeof payload === 'string' ? payload : JSON.stringify(payload);
+  const set = _wsSubscriptions.get(roomId);
+  if (set) set.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(str); });
+}
 const ws = {
   emitMessage(message) {
-    const set = _wsSubscriptions.get(message.chat_id);
-    if (!set) return;
     const payload = JSON.stringify({ type: 'message', data: message });
-    set.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(payload); });
+    _wsEmitToRoom(message.chat_id, payload);
+    if (message.channel_id && message.channel_id !== message.chat_id) _wsEmitToRoom(message.channel_id, payload);
   },
   attach(server) {
     const wss = new WebSocketServer({ server, path: '/ws' });
@@ -669,8 +674,10 @@ async function start() {
   app.locals.io = io;
   app.locals.emitMessage = function (message) {
     ws.emitMessage(message);
-    if (message && message.chat_id) {
-      io.to(message.chat_id).emit('message', { type: 'message', data: message });
+    if (message) {
+      const payload = { type: 'message', data: message };
+      if (message.chat_id) io.to(message.chat_id).emit('message', payload);
+      if (message.channel_id && message.channel_id !== message.chat_id) io.to(message.channel_id).emit('message', payload);
     }
   };
 

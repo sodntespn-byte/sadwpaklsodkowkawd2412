@@ -49,7 +49,7 @@
                 });
         }, [channelId, app]);
 
-        // WebSocket: nova mensagem em tempo real
+        // WebSocket: nova mensagem em tempo real — listener que adiciona ao estado e atualiza a UI
         useEffect(function () {
             if (!gateway) return;
             var handler = function (msg) {
@@ -76,7 +76,14 @@
                         var tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
                         return tA - tB;
                     });
-                    if (appRef.current) appRef.current.setMessagesFromList(next);
+                    if (appRef.current) {
+                        appRef.current.setMessagesFromList(next);
+                        var cur = appRef.current.currentChannel;
+                        if (cur && typeof MessageCache !== 'undefined' && MessageCache.add) {
+                            var cacheKey = (cur.room && cur.room.indexOf('dm:') === 0) ? cur.id : (cur.room || cur.id);
+                            if (cacheKey) MessageCache.add(cacheKey, normalized);
+                        }
+                    }
                     return next;
                 });
             };

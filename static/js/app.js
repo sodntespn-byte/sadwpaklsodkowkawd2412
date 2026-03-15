@@ -964,13 +964,15 @@ class LibertyApp {
             };
             const isCurrentChannel = chId && this.currentChannel?.id && (String(chId) === String(this.currentChannel.id));
             if (isCurrentChannel) {
-                const fromSelf = normalized.author_id && this.currentUser && String(normalized.author_id) === String(this.currentUser.id);
-                if (fromSelf) {
-                    const pending = [...this.messages.entries()].find(([id, m]) => id.startsWith('pending-') && (m.content === normalized.content || m.content === msg.content));
-                    if (pending) this.removeMessage(pending[0]);
+                if (!(window.LibertyChatRoot && window.LibertyChatRoot.render)) {
+                    const fromSelf = normalized.author_id && this.currentUser && String(normalized.author_id) === String(this.currentUser.id);
+                    if (fromSelf) {
+                        const pending = [...this.messages.entries()].find(([id, m]) => id.startsWith('pending-') && (m.content === normalized.content || m.content === msg.content));
+                        if (pending) this.removeMessage(pending[0]);
+                    }
+                    this.addMessage(normalized, true);
+                    this.scrollToBottom();
                 }
-                this.addMessage(normalized, true);
-                this.scrollToBottom();
             } else if (chId) {
                 this.unreadChannels.add(chId);
                 const isDM = this.dmChannels && this.dmChannels.some((d) => d.id && String(d.id) === String(chId));
@@ -1972,10 +1974,10 @@ class LibertyApp {
                 document.getElementById('friends-view')?.classList?.add('hidden');
                 document.getElementById('messages-container').style.display = '';
                 document.querySelector('.message-input-container').style.display = '';
-                if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.currentChannel.id !== channel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
+                if (this.currentChannel?.id && this.currentChannel.id !== channel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
                 this.currentChannel = channel;
                 this.currentChannel.room = 'dm:' + (channel.id || '');
-                if ((this.currentChannel?.room || channel?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || channel.id);
+                if (this.currentChannel.id && this.gateway) this.gateway.subscribeChannel(this.currentChannel.id);
                 this._renderDMChat(channel);
                 this._updateUserControlsVoiceVisibility();
                 if (channel.id) try { history.replaceState({}, '', `/channels/@me/${channel.id}`); } catch (_) {}
@@ -2007,7 +2009,7 @@ class LibertyApp {
                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
                 if (channelNameEl) channelNameEl.textContent = recipient.username || 'DM';
                 if (channelIconEl) channelIconEl.className = 'fas fa-envelope channel-header-icon';
-                if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
+                if (this.currentChannel?.id && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
                 this.currentChannel = dm;
                 this.currentChannel.room = 'dm:' + (dm.id || '');
                 if (dm.id) {
@@ -2015,7 +2017,7 @@ class LibertyApp {
                     if (typeof LibertyDMUnreadStore !== 'undefined') LibertyDMUnreadStore.clear(dm.id);
                     this._updateChannelUnread(dm.id, false);
                 }
-                if ((this.currentChannel?.room || dm?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || dm.id);
+                if (this.currentChannel.id && this.gateway) this.gateway.subscribeChannel(this.currentChannel.id);
                 this._renderDMChat(dm);
             }
         }
@@ -2031,10 +2033,10 @@ class LibertyApp {
         const inputCont = document.querySelector('.message-input-container');
         if (inputCont) inputCont.style.display = '';
 
-        if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
+        if (this.currentChannel?.id && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
         this.currentChannel = dm;
         this.currentChannel.room = 'dm:' + (dm.id || '');
-        if ((this.currentChannel?.room || dm?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || dm.id);
+        if (this.currentChannel.id && this.gateway) this.gateway.subscribeChannel(this.currentChannel.id);
 
         if (window.LibertyChatRoot && window.LibertyChatRoot.render) {
             window.LibertyChatRoot.render();
@@ -2322,10 +2324,10 @@ class LibertyApp {
                                 const channelIconEl = document.querySelector('.channel-header .channel-info i');
                                 if (channelNameEl) channelNameEl.textContent = channel.recipients?.[0]?.username || 'DM';
                                 if (channelIconEl) channelIconEl.className = 'fas fa-envelope channel-header-icon';
-                                if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.currentChannel.id !== channel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
+                                if (this.currentChannel?.id && this.currentChannel.id !== channel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
                                 this.currentChannel = channel;
                                 this.currentChannel.room = 'dm:' + (channel.id || '');
-                                if ((this.currentChannel?.room || channel?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || channel.id);
+                                if (this.currentChannel.id && this.gateway) this.gateway.subscribeChannel(this.currentChannel.id);
                                 this._renderDMChat(channel);
                                 if (channel.id) try { history.replaceState({}, '', `/channels/@me/${channel.id}`); } catch (_) {}
                                 this._refreshDMListSidebar();
@@ -2890,10 +2892,11 @@ class LibertyApp {
         if (this.currentServer && this.currentServer.id && channel.id) this.currentChannel.room = 'channel:' + this.currentServer.id + ':' + channel.id;
         else this.currentChannel.room = channel.id;
         const room = this.currentChannel.room || channelId;
-        if (prevRoom && prevRoom !== room && this.gateway) this.gateway.unsubscribeChannel(prevRoom);
+        const prevChannelId = this.currentChannel?.id;
+        if (prevChannelId && prevChannelId !== channelId && this.gateway) this.gateway.unsubscribeChannel(prevChannelId);
         this.unreadChannels.delete(channelId);
         document.querySelectorAll('.channel-item').forEach(item => item.classList.toggle('active', item.dataset.channel === channelId));
-        if (room && this.gateway) this.gateway.subscribeChannel(room);
+        if (channelId && this.gateway) this.gateway.subscribeChannel(channelId);
 
         const friendsView = document.getElementById('friends-view');
         const messagesContainer = document.getElementById('messages-container');
@@ -3055,12 +3058,11 @@ class LibertyApp {
 
         const ch = this.channels.find(c => c.channel_type === 'text');
         if (ch) {
-            if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
+            if (this.currentChannel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
             this.currentChannel = ch;
             if (this.currentServer && this.currentServer.id && ch.id) this.currentChannel.room = 'channel:' + this.currentServer.id + ':' + ch.id;
             else this.currentChannel.room = ch.id;
-            const room = this.currentChannel.room || ch.id;
-            if (room && this.gateway) this.gateway.subscribeChannel(room);
+            if (ch.id && this.gateway) this.gateway.subscribeChannel(ch.id);
             const nameEl = document.getElementById('channel-name');
             const topicEl = document.getElementById('channel-topic');
             if (nameEl) nameEl.textContent = ch.name;
@@ -3890,13 +3892,13 @@ class LibertyApp {
             const channel = await API.DM.create(userId);
             this.showToast(`Abrir conversa com ${username} para chamada.`, 'info');
             if (this.currentChannel?.id !== channel?.id) {
-                if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
+                if (this.currentChannel?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.id);
                 document.getElementById('friends-view')?.classList?.add('hidden');
                 document.getElementById('messages-container').style.display = '';
                 document.querySelector('.message-input-container').style.display = '';
                 this.currentChannel = channel;
                 this.currentChannel.room = 'dm:' + (channel.id || '');
-                if ((this.currentChannel?.room || channel?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || channel.id);
+                if (this.currentChannel.id && this.gateway) this.gateway.subscribeChannel(this.currentChannel.id);
                 this._renderDMChat(channel);
                 this._updateChannelHeaderForContext();
                 this._refreshDMListSidebar();
