@@ -194,6 +194,7 @@
                 </nav>
                 <div class="dm-list-header">
                     <span>DIRECT MESSAGES</span>
+                    <span id="dm-unread-total-badge" class="dm-unread-total-badge hidden" aria-label="Total de mensagens não lidas"></span>
                     <button class="btn-icon" id="dm-add-btn" aria-label="Nova conversa">
                         <i class="fas fa-plus" aria-hidden="true"></i>
                     </button>
@@ -326,9 +327,13 @@
                         </div>
                         <span id="webrtc-screen-badge" class="webrtc-screen-badge hidden"><i class="fas fa-display"></i> Compartilhando tela</span>
                         <div class="webrtc-remote-placeholder" id="webrtc-remote-placeholder">
-                            <i class="fas fa-people-group webrtc-placeholder-icon"></i>
-                            <span class="webrtc-placeholder-text">Aguardando a outra pessoa...</span>
+                            <div class="webrtc-remote-avatar-wrap" id="webrtc-remote-avatar-wrap">
+                                <i class="fas fa-people-group webrtc-placeholder-icon" id="webrtc-placeholder-icon"></i>
+                                <img class="webrtc-remote-avatar hidden" id="webrtc-remote-avatar" alt="" />
+                            </div>
+                            <span class="webrtc-placeholder-text" id="webrtc-placeholder-text">Aguardando a outra pessoa...</span>
                         </div>
+                        <button type="button" class="webrtc-mute-remote-btn hidden" id="voice-call-mute-remote" title="Desativar som dele"><i class="fas fa-volume-xmark"></i><span>Silenciar</span></button>
                     </div>
                     <div class="webrtc-local-pip-wrap">
                         <video id="webrtc-local-video" class="webrtc-video" autoplay playsinline muted></video>
@@ -810,10 +815,16 @@
     <div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true" role="status"></div>
 
     <!-- Scripts: Gateway usa WebSocket /ws (sem Socket.io para evitar bloqueios CSP e conexão recusada) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="/js/dm-unread-store.js"></script>
     <script src="/js/api.js"></script>
     <script src="/js/websocket.js"></script>
     <script src="/js/logo-fallback.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/mentions-popover.js"></script>
+    <script src="/js/dm-unread-react.js"></script>
+    <script src="/js/chat-messages-react.js"></script>
     <script>
         // Fallback: se o app não esconder o loading em 2s, forçar tela de login
         (function() {

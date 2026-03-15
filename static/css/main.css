@@ -1688,7 +1688,7 @@ a:hover {
     background: rgba(255, 255, 255, 0.08);
 }
 
-/* Bolinha vermelha de não lida na lista de DMs (aba esquerda) */
+/* Badge de não lidas na lista de DMs (estilo Discord / Tailwind-like) */
 .dm-unread-dot {
     width: 10px;
     height: 10px;
@@ -1698,9 +1698,37 @@ a:hover {
     flex-shrink: 0;
     margin-left: auto;
 }
+.dm-unread-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: auto;
+    line-height: 1;
+    box-shadow: 0 0 0 2px var(--secondary-black, #131210);
+}
 .dm-list-item-unread .dm-list-item-name {
     color: var(--text-primary);
     font-weight: 600;
+}
+/* Animação ping no avatar quando chega a primeira mensagem não lida */
+.dm-avatar-ping {
+    animation: dm-ping 1.5s cubic-bezier(0, 0, 0.2, 1) 2;
+}
+@keyframes dm-ping {
+    0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.6); }
+    70%, 100% { box-shadow: 0 0 0 12px rgba(231, 76, 60, 0); }
+}
+.dm-list-item-avatar {
+    position: relative;
 }
 
 .member-category {

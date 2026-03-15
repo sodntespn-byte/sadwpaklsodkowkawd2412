@@ -1664,6 +1664,99 @@ body {
     border: none;
 }
 
+/* Cartão de pré-visualização de link YouTube (clicável, tema Liberty) */
+.message-embed-youtube-card {
+    display: block;
+    max-width: 400px;
+    margin-top: 10px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: rgba(18, 16, 14, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    text-decoration: none;
+    color: inherit;
+    border-left: 4px solid #f00;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.message-embed-youtube-card:hover {
+    border-left-color: #ff4444;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+.message-embed-youtube-source {
+    display: block;
+    padding: 8px 12px 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.message-embed-youtube-title {
+    display: block;
+    padding: 0 12px 4px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+.message-embed-youtube-author {
+    display: block;
+    padding: 0 12px 10px;
+    font-size: 13px;
+    color: var(--primary-yellow);
+    line-height: 1.3;
+}
+.message-embed-youtube-author.message-embed-youtube-loading {
+    color: var(--text-muted);
+}
+.message-embed-youtube-thumb-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    overflow: hidden;
+}
+.message-embed-youtube-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.message-embed-youtube-play,
+.message-embed-youtube-external {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 50%;
+    transition: background 0.2s, transform 0.2s;
+}
+.message-embed-youtube-play {
+    top: 50%;
+    left: 50%;
+    width: 56px;
+    height: 56px;
+    margin: -28px 0 0 -28px;
+    font-size: 22px;
+}
+.message-embed-youtube-card:hover .message-embed-youtube-play {
+    background: rgba(255, 0, 0, 0.85);
+    transform: scale(1.08);
+}
+.message-embed-youtube-external {
+    top: 10px;
+    right: 10px;
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+}
+.message-embed-youtube-card:hover .message-embed-youtube-external {
+    background: rgba(0, 0, 0, 0.75);
+}
+
 .message-embed-invite {
     max-width: 420px;
     background: var(--black-light);

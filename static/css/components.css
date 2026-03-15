@@ -786,10 +786,12 @@
 /* ══════════════════════════════════════════
    MENTION
    ══════════════════════════════════════════ */
-.message.mentioned {
-    background: rgba(255, 215, 0, 0.04);
-    border-left: 2px solid var(--primary-yellow);
+.message.mentioned,
+.message-content.message-mentioned {
+    background: rgba(255, 193, 7, 0.08);
+    border-left: 2px solid rgba(255, 215, 0, 0.5);
     margin-left: -2px;
+    padding-left: 6px;
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 .mention {
@@ -804,6 +806,85 @@
 .mention:hover {
     background: var(--primary-yellow);
     color: var(--primary-black);
+}
+/* Badge azulado para menções @[userId] — clicável para abrir perfil */
+.mention-badge {
+    background: rgba(30, 136, 229, 0.25);
+    color: #64b5f6;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-weight: 500;
+    transition: background var(--transition-fast), color var(--transition-fast);
+}
+.mention-badge:hover {
+    background: rgba(30, 136, 229, 0.4);
+    color: #90caf9;
+}
+
+/* ══════════════════════════════════════════
+   MENTIONS POPOVER (@ no input)
+   ══════════════════════════════════════════ */
+.mentions-popover {
+    position: fixed;
+    z-index: 10000;
+    min-width: 200px;
+    max-width: 280px;
+    max-height: 240px;
+    overflow: auto;
+    background: var(--secondary-black, #0f0f0f);
+    border: 1px solid var(--glass-border, rgba(255, 215, 0, 0.12));
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 4px 0;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+}
+.mentions-popover.mentions-popover-visible {
+    opacity: 1;
+    visibility: visible;
+}
+.mentions-popover-list { padding: 0; margin: 0; list-style: none; }
+.mentions-popover-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary, #e0e0e0);
+    font-size: 14px;
+    transition: background 0.1s ease;
+}
+.mentions-popover-item:hover,
+.mentions-popover-item-selected {
+    background: var(--dark-gray, rgba(255, 255, 255, 0.06));
+}
+.mentions-popover-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--medium-gray, #333);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    overflow: hidden;
+    flex-shrink: 0;
+}
+.mentions-popover-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.mentions-popover-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* ══════════════════════════════════════════
@@ -1181,6 +1262,11 @@
     margin: 12px;
     border: 1px solid rgba(255, 215, 0, 0.06);
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.webrtc-remote-wrap.webrtc-remote-speaking {
+    box-shadow: 0 0 0 4px var(--primary-yellow), 0 4px 24px rgba(0, 0, 0, 0.3), 0 0 28px rgba(255, 215, 0, 0.25);
+    border-color: rgba(255, 215, 0, 0.4);
 }
 
 .webrtc-remote-wrap .webrtc-video {
@@ -1209,10 +1295,37 @@
     background: radial-gradient(ellipse at center, rgba(255, 215, 0, 0.04) 0%, transparent 70%);
 }
 .webrtc-remote-placeholder.hidden { display: none; }
+.webrtc-remote-avatar-wrap {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: var(--dark-gray);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 4px solid rgba(255, 215, 0, 0.15);
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.webrtc-remote-avatar-wrap.speaking {
+    box-shadow: 0 0 0 4px var(--primary-yellow), 0 0 24px rgba(255, 215, 0, 0.4);
+    border-color: var(--primary-yellow);
+}
+.webrtc-remote-avatar-wrap .webrtc-remote-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.webrtc-remote-avatar-wrap .webrtc-remote-avatar.hidden { display: none; }
 .webrtc-placeholder-icon {
     font-size: 48px;
     opacity: 0.5;
+    color: var(--text-muted);
 }
+.webrtc-remote-avatar-wrap .webrtc-placeholder-icon { display: block; }
+.webrtc-remote-avatar-wrap .webrtc-remote-avatar:not(.hidden) + .webrtc-placeholder-icon,
+.webrtc-remote-avatar-wrap .webrtc-remote-avatar:not(.hidden) ~ .webrtc-placeholder-icon { display: none; }
 .webrtc-placeholder-text { font-size: 15px; font-weight: 500; }
 .webrtc-placeholder-connecting .webrtc-placeholder-icon {
     animation: webrtc-connecting-pulse 1.5s ease-in-out infinite;
@@ -1221,6 +1334,27 @@
     0%, 100% { opacity: 0.5; transform: scale(1); }
     50% { opacity: 0.85; transform: scale(1.05); }
 }
+.webrtc-mute-remote-btn {
+    position: absolute;
+    bottom: 80px;
+    right: 24px;
+    z-index: 10;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: rgba(24, 21, 18, 0.9);
+    border: 1px solid rgba(255, 215, 0, 0.25);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.webrtc-mute-remote-btn:hover { background: rgba(255, 215, 0, 0.1); border-color: var(--primary-yellow); }
+.webrtc-mute-remote-btn.muted { border-color: var(--error, #e53935); color: var(--error, #e53935); }
+.webrtc-mute-remote-btn.hidden { display: none !important; }
 
 .webrtc-screen-wrap {
     position: absolute;
@@ -1774,6 +1908,25 @@
     align-items: center;
     padding: 18px 10px 4px 18px;
     font-size: 11px;
+    position: relative;
+}
+.dm-unread-total-badge {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    margin-right: 6px;
+}
+.dm-unread-total-badge.hidden {
+    display: none !important;
     text-transform: uppercase;
     font-weight: 600;
     color: var(--text-secondary);

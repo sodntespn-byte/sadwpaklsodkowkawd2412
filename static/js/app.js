@@ -414,6 +414,16 @@ const MessageCache = {
         const id = message.id || message.message_id;
         const without = id ? list.filter((m) => (m.id || m.message_id) !== id) : list;
         this.set(channelId, [...without, message]);
+    },
+    clearAll() {
+        try {
+            const keys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('liberty_msg_')) keys.push(k);
+            }
+            keys.forEach((k) => localStorage.removeItem(k));
+        } catch (_) {}
     }
 };
 
@@ -586,6 +596,10 @@ class LibertyApp {
             this.loadFriends().catch(() => {});
             this._startActivityPing();
             this._refreshUIAfterConnect();
+            if (typeof window.LibertyChatReactInit === 'function' && !window.LibertyChatRoot) {
+                window.LibertyChatReactInit(this);
+            }
+            if (window.LibertyChatRoot && window.LibertyChatRoot.render) window.LibertyChatRoot.render();
         } catch (e) {
             console.warn('connect UI:', e);
             this._refreshUIAfterConnect();
@@ -895,13 +909,33 @@ class LibertyApp {
         document.getElementById('security-warning-ignore-btn')?.addEventListener('click', () => this._onSecurityWarningIgnore());
         document.getElementById('security-warning-privacy-btn')?.addEventListener('click', () => this._onSecurityWarningPrivacy());
 
-        // Create server modal: server icon upload
+        // Create server modal: server icon upload (preview + base64 para envio)
         const serverIconUpload = document.querySelector('.server-icon-upload');
         const serverIconInput = document.getElementById('server-icon-input');
         if (serverIconUpload && serverIconInput) {
             serverIconUpload.addEventListener('click', () => serverIconInput.click());
             serverIconInput.addEventListener('change', () => {
-                if (serverIconInput.files?.length) this.showToast(`Icon selected: ${serverIconInput.files[0].name}`, 'success');
+                const file = serverIconInput.files?.[0];
+                if (!file || !file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const circle = serverIconUpload?.querySelector('.icon-upload-circle');
+                    if (circle) {
+                        const prev = circle.querySelector('.server-icon-preview');
+                        if (prev) prev.remove();
+                        circle.querySelectorAll('i, span').forEach(el => el.style.setProperty('display', 'none'));
+                        const img = document.createElement('img');
+                        img.className = 'server-icon-preview';
+                        img.src = reader.result;
+                        img.alt = '';
+                        img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%;position:absolute;inset:0;';
+                        circle.style.position = 'relative';
+                        circle.style.overflow = 'hidden';
+                        circle.appendChild(img);
+                    }
+                    serverIconUpload.dataset.iconDataUrl = reader.result;
+                };
+                reader.readAsDataURL(file);
             });
         }
     }
@@ -930,10 +964,20 @@ class LibertyApp {
             };
             const isCurrentChannel = chId && this.currentChannel?.id && (String(chId) === String(this.currentChannel.id));
             if (isCurrentChannel) {
+                const fromSelf = normalized.author_id && this.currentUser && String(normalized.author_id) === String(this.currentUser.id);
+                if (fromSelf) {
+                    const pending = [...this.messages.entries()].find(([id, m]) => id.startsWith('pending-') && (m.content === normalized.content || m.content === msg.content));
+                    if (pending) this.removeMessage(pending[0]);
+                }
                 this.addMessage(normalized, true);
                 this.scrollToBottom();
             } else if (chId) {
                 this.unreadChannels.add(chId);
+                const isDM = this.dmChannels && this.dmChannels.some((d) => d.id && String(d.id) === String(chId));
+                if (isDM && typeof LibertyDMUnreadStore !== 'undefined') {
+                    LibertyDMUnreadStore.increment(chId);
+                    this._updateDMUnreadTotal();
+                }
                 this._updateChannelUnread(chId, true);
             }
         });
@@ -1005,34 +1049,151 @@ class LibertyApp {
         this._setupVoiceCallButton();
     }
 
-    _voiceCallState = { pc: null, stream: null, targetUserId: null, pendingOffer: null, incomingFromUserId: null, displayStream: null, videoEnabled: true, callId: null };
+    _voiceCallState = { pc: null, stream: null, targetUserId: null, pendingOffer: null, incomingFromUserId: null, displayStream: null, videoEnabled: true, callId: null, remoteAudioStream: null, remoteAudioElements: [], audioLevelRAF: null, muteRemote: false };
 
     _webrtcClearRemote() {
+        this._webrtcStopAudioLevel();
+        this._voiceCallState.remoteAudioStream = null;
+        this._voiceCallState.remoteAudioElements = [];
         const wrap = document.getElementById('webrtc-remote-wrap');
-        if (wrap) wrap.querySelectorAll('audio.webrtc-remote-audio').forEach((a) => { a.srcObject = null; a.remove(); });
+        if (wrap) {
+            wrap.classList.remove('webrtc-remote-speaking');
+            wrap.querySelectorAll('audio.webrtc-remote-audio').forEach((a) => { a.srcObject = null; a.remove(); });
+        }
+        const avatarWrap = document.getElementById('webrtc-remote-avatar-wrap');
+        if (avatarWrap) avatarWrap.classList.remove('speaking');
         const remoteV = document.getElementById('webrtc-remote-video');
         const remoteS = document.getElementById('webrtc-remote-screen');
         const screenWrap = document.getElementById('webrtc-remote-screen-wrap');
         const placeholder = document.getElementById('webrtc-remote-placeholder');
         const badge = document.getElementById('webrtc-screen-badge');
+        const avatarEl = document.getElementById('webrtc-remote-avatar');
+        const placeholderIcon = document.getElementById('webrtc-placeholder-icon');
+        const placeholderText = document.getElementById('webrtc-placeholder-text');
         if (remoteV) { remoteV.srcObject = null; remoteV.classList.add('hidden'); }
         if (remoteS) { remoteS.srcObject = null; }
         if (screenWrap) screenWrap.classList.add('hidden');
         if (badge) badge.classList.add('hidden');
         if (placeholder) { placeholder.classList.remove('hidden'); placeholder.classList.remove('webrtc-placeholder-connecting'); }
+        if (avatarEl) { avatarEl.classList.add('hidden'); avatarEl.src = ''; }
+        if (placeholderIcon) { placeholderIcon.classList.remove('hidden'); }
+        if (placeholderText) placeholderText.textContent = 'Aguardando a outra pessoa...';
+        const muteRemoteBtn = document.getElementById('voice-call-mute-remote');
+        if (muteRemoteBtn) muteRemoteBtn.classList.add('hidden');
+    }
+
+    _webrtcStopAudioLevel() {
+        if (this._voiceCallState.audioLevelRAF) {
+            cancelAnimationFrame(this._voiceCallState.audioLevelRAF);
+            this._voiceCallState.audioLevelRAF = null;
+        }
+    }
+
+    _webrtcRunRemoteAudioLevel(stream) {
+        if (!stream || !stream.getAudioTracks().length) return;
+        this._webrtcStopAudioLevel();
+        this._voiceCallState.remoteAudioStream = stream;
+        let audioContext = null;
+        let analyser = null;
+        try {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.6;
+            source.connect(analyser);
+        } catch (e) {
+            return;
+        }
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const threshold = 25;
+        const wrap = document.getElementById('webrtc-remote-wrap');
+        const avatarWrap = document.getElementById('webrtc-remote-avatar-wrap');
+        const loop = () => {
+            if (!analyser || !wrap) return;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+            const avg = sum / dataArray.length;
+            const speaking = avg > threshold;
+            wrap.classList.toggle('webrtc-remote-speaking', speaking);
+            if (avatarWrap) avatarWrap.classList.toggle('speaking', speaking);
+            this._voiceCallState.audioLevelRAF = requestAnimationFrame(loop);
+        };
+        loop();
+    }
+
+    async _updateRemotePlaceholderProfile(userId) {
+        const avatarEl = document.getElementById('webrtc-remote-avatar');
+        const placeholderIcon = document.getElementById('webrtc-placeholder-icon');
+        const placeholderText = document.getElementById('webrtc-placeholder-text');
+        if (!userId || (!avatarEl && !placeholderText)) return;
+        let name = 'Participante';
+        let avatarUrl = '';
+        const other = (this.currentChannel?.recipients || []).find((r) => r.id === userId) || this.dmChannels.find(c => c.recipients?.[0]?.id === userId)?.recipients?.[0];
+        if (other) {
+            name = other.username || name;
+            avatarUrl = other.avatar_url || other.avatar || '';
+        }
+        try {
+            const profile = await API.User.getUser(userId);
+            if (profile) {
+                name = profile.username || name;
+                avatarUrl = profile.avatar_url || avatarUrl;
+            }
+        } catch (_) {}
+        if (placeholderText) placeholderText.textContent = name;
+        if (placeholderIcon) placeholderIcon.classList.add('hidden');
+        if (avatarEl) {
+            if (avatarUrl) {
+                avatarEl.src = avatarUrl;
+                avatarEl.alt = name;
+                avatarEl.classList.remove('hidden');
+            } else {
+                avatarEl.classList.add('hidden');
+                if (placeholderIcon) placeholderIcon.classList.remove('hidden');
+            }
+        }
+    }
+
+    _playCallSound(type) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+            const freq = type === 'join' ? 520 : type === 'screen_share' ? 660 : type === 'mute' || type === 'mute_remote' ? 320 : type === 'unmute' ? 440 : 400;
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.15);
+            if (type === 'join' || type === 'screen_share') {
+                osc.frequency.setValueAtTime(freq + 80, ctx.currentTime + 0.08);
+            }
+        } catch (_) {}
     }
 
     _attachRemoteTrack(e) {
         const stream = e.streams && e.streams[0];
         if (!stream) return;
         const track = e.track;
+        const wrap = document.getElementById('webrtc-remote-wrap');
         if (track.kind === 'audio') {
             const audio = document.createElement('audio');
             audio.className = 'webrtc-remote-audio';
             audio.autoplay = true;
             audio.playsInline = true;
             audio.srcObject = stream;
-            document.getElementById('webrtc-remote-wrap')?.appendChild(audio);
+            if (this._voiceCallState.muteRemote) audio.muted = true;
+            wrap?.appendChild(audio);
+            this._voiceCallState.remoteAudioElements = wrap ? [...wrap.querySelectorAll('audio.webrtc-remote-audio')] : [];
+            this._updateRemotePlaceholderProfile(this._voiceCallState.targetUserId);
+            this._webrtcRunRemoteAudioLevel(stream);
+            this._playCallSound('join');
+            const muteRemoteBtn = document.getElementById('voice-call-mute-remote');
+            if (muteRemoteBtn) muteRemoteBtn.classList.remove('hidden');
             return;
         }
         if (track.kind === 'video') {
@@ -1040,27 +1201,31 @@ class LibertyApp {
             const placeholder = document.getElementById('webrtc-remote-placeholder');
             if (placeholder) placeholder.classList.add('hidden');
             if (isScreen) {
-                const wrap = document.getElementById('webrtc-remote-screen-wrap');
+                const screenWrap = document.getElementById('webrtc-remote-screen-wrap');
                 const vid = document.getElementById('webrtc-remote-screen');
                 const badge = document.getElementById('webrtc-screen-badge');
                 if (vid) { vid.srcObject = stream; vid.classList.remove('hidden'); }
-                if (wrap) wrap.classList.remove('hidden');
+                if (screenWrap) screenWrap.classList.remove('hidden');
                 if (badge) badge.classList.remove('hidden');
+                this._playCallSound('screen_share');
             } else {
                 const vid = document.getElementById('webrtc-remote-video');
                 if (vid) { vid.srcObject = stream; vid.classList.remove('hidden'); }
+                this._playCallSound('camera_on');
             }
             track.onended = () => {
                 if (isScreen) {
-                    const wrap = document.getElementById('webrtc-remote-screen-wrap');
+                    const screenWrap = document.getElementById('webrtc-remote-screen-wrap');
                     const vid = document.getElementById('webrtc-remote-screen');
                     const badge = document.getElementById('webrtc-screen-badge');
                     if (vid) vid.srcObject = null;
-                    if (wrap) wrap.classList.add('hidden');
+                    if (screenWrap) screenWrap.classList.add('hidden');
                     if (badge) badge.classList.add('hidden');
                 } else {
                     const vid = document.getElementById('webrtc-remote-video');
                     if (vid) { vid.srcObject = null; vid.classList.add('hidden'); }
+                    const pl = document.getElementById('webrtc-remote-placeholder');
+                    if (pl) pl.classList.remove('hidden');
                 }
             };
         }
@@ -1073,7 +1238,16 @@ class LibertyApp {
             const from = d.from_user_id;
             const payload = d.payload;
             if (!payload || !from) return;
-            if (this._voiceCallState.pc) return;
+            const pc = this._voiceCallState.pc;
+            if (pc && pc.signalingState !== 'closed' && this._voiceCallState.targetUserId === from) {
+                pc.setRemoteDescription(new RTCSessionDescription(payload))
+                    .then(() => pc.createAnswer())
+                    .then((answer) => pc.setLocalDescription(answer))
+                    .then(() => { if (this.gateway) this.gateway.send('webrtc_answer', { target_user_id: from, payload: pc.localDescription }); })
+                    .catch((err) => console.error('WebRTC renegotiation error', err));
+                return;
+            }
+            if (pc) return;
             this._voiceCallState.pendingOffer = { from, payload };
             this._voiceCallState.incomingFromUserId = from;
             this._showIncomingCallAlert(from);
@@ -1315,7 +1489,9 @@ class LibertyApp {
                 await this._requestCallMedia();
                 return;
             }
+            const enabled = this._voiceCallState.stream.getAudioTracks().some((t) => t.enabled);
             this._voiceCallState.stream.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
+            this._playCallSound(enabled ? 'mute' : 'unmute');
             this._updateWebrtcControlButtons();
         });
         const videoBtn = document.getElementById('voice-call-video');
@@ -1332,8 +1508,21 @@ class LibertyApp {
             track.enabled = this._voiceCallState.videoEnabled;
             const localV = document.getElementById('webrtc-local-video');
             if (localV) localV.style.opacity = this._voiceCallState.videoEnabled ? '1' : '0.3';
+            this._playCallSound(this._voiceCallState.videoEnabled ? 'camera_on' : 'camera_off');
             this._updateWebrtcControlButtons();
         });
+        const muteRemoteBtn = document.getElementById('voice-call-mute-remote');
+        if (muteRemoteBtn) {
+            muteRemoteBtn.addEventListener('click', () => {
+                this._voiceCallState.muteRemote = !this._voiceCallState.muteRemote;
+                const wrap = document.getElementById('webrtc-remote-wrap');
+                if (wrap) wrap.querySelectorAll('audio.webrtc-remote-audio').forEach((a) => { a.muted = this._voiceCallState.muteRemote; });
+                muteRemoteBtn.classList.toggle('muted', this._voiceCallState.muteRemote);
+                muteRemoteBtn.querySelector('i').className = this._voiceCallState.muteRemote ? 'fas fa-volume-off' : 'fas fa-volume-xmark';
+                muteRemoteBtn.querySelector('span').textContent = this._voiceCallState.muteRemote ? 'Ativar som' : 'Silenciar';
+                this._playCallSound(this._voiceCallState.muteRemote ? 'mute_remote' : 'unmute');
+            });
+        }
         const screenshareBtn = document.getElementById('voice-call-screenshare');
         if (screenshareBtn) {
             screenshareBtn.addEventListener('click', async () => {
@@ -1360,6 +1549,9 @@ class LibertyApp {
                     const videoSender = senders.find((s) => s.track && s.track.kind === 'video');
                     if (videoSender) {
                         await videoSender.replaceTrack(videoTrack);
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        if (this._voiceCallState.targetUserId && this.gateway) this.gateway.send('webrtc_offer', { target_user_id: this._voiceCallState.targetUserId, payload: pc.localDescription });
                     } else {
                         pc.addTrack(videoTrack, displayStream);
                         const offer = await pc.createOffer();
@@ -1367,6 +1559,7 @@ class LibertyApp {
                         if (this._voiceCallState.targetUserId && this.gateway) this.gateway.send('webrtc_offer', { target_user_id: this._voiceCallState.targetUserId, payload: pc.localDescription });
                     }
                     if (this._voiceCallState.targetUserId && this.gateway) this.gateway.send('stream_started', { target_user_id: this._voiceCallState.targetUserId });
+                    this._playCallSound('screen_share');
                     displayStream.getVideoTracks()[0].onended = () => {
                         if (this._voiceCallState.displayStream === displayStream) {
                             this._voiceCallState.displayStream = null;
@@ -1558,9 +1751,10 @@ class LibertyApp {
             item.className = 'server-item';
             item.dataset.server = server.id;
             const initial = (server.name || '?').charAt(0).toUpperCase();
+            const iconSrc = server.icon_url || server.icon;
             item.innerHTML = `
                 <div class="server-icon" title="${this.escapeHtml(server.name)}">
-                    ${server.icon ? `<img src="${this.escapeHtml(server.icon)}" alt="${this.escapeHtml(server.name)}">` : `<span>${initial}</span>`}
+                    ${iconSrc ? `<img src="${this.escapeHtml(iconSrc)}" alt="${this.escapeHtml(server.name)}">` : `<span>${initial}</span>`}
                 </div>
                 <span class="server-name">${this.escapeHtml(server.name)}</span>
                 <div class="server-indicator"></div>
@@ -1732,18 +1926,22 @@ class LibertyApp {
             const letter = displayName.charAt(0).toUpperCase();
             const bgColor = avatarColors[idx % avatarColors.length];
             const avatarSrc = recipient.avatar_url || recipient.avatar || null;
-            const hasUnread = dm.id && this.unreadChannels.has(dm.id);
+            const unreadCount = (dm.id && typeof LibertyDMUnreadStore !== 'undefined' && LibertyDMUnreadStore.getCount(dm.id)) || (this.unreadChannels.has(dm.id) ? 1 : 0);
+            const hasUnread = unreadCount > 0;
             if (hasUnread) item.classList.add('dm-list-item-unread');
             const avatarHtml = avatarSrc
                 ? `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;color:#fff">${letter}</span>`
                 : `<span style="color:#fff">${letter}</span>`;
+            const badgeHtml = hasUnread
+                ? `<span class="dm-unread-badge" aria-label="Mensagens não lidas">${unreadCount > 99 ? '99+' : String(unreadCount)}</span>`
+                : '';
             item.innerHTML = `
                 <div class="dm-list-item-avatar ${recipient.status || 'offline'}" style="background:${avatarSrc ? 'var(--dark-gray)' : bgColor}">${avatarHtml}</div>
                 <div class="dm-list-item-info">
                     <div class="dm-list-item-name">${this.escapeHtml(displayName)}</div>
                     <div class="dm-list-item-msg"></div>
                 </div>
-                ${hasUnread ? '<span class="dm-unread-dot" aria-label="Não lida"></span>' : ''}
+                ${badgeHtml}
             `;
             item.addEventListener('click', async () => {
                 dmList.querySelectorAll('.dm-list-item').forEach(d => d.classList.remove('active'));
@@ -1768,6 +1966,7 @@ class LibertyApp {
                 }
                 if (channel.id) {
                     this.unreadChannels.delete(channel.id);
+                    if (typeof LibertyDMUnreadStore !== 'undefined') LibertyDMUnreadStore.clear(channel.id);
                     this._updateChannelUnread(channel.id, false);
                 }
                 document.getElementById('friends-view')?.classList?.add('hidden');
@@ -1787,6 +1986,7 @@ class LibertyApp {
         if (this.dmChannels.length === 0) {
             dmList.innerHTML = '<div class="dm-list-empty" id="dm-list-empty">No conversations</div>';
         }
+        this._updateDMUnreadTotal();
 
         const pathMatch = typeof location !== 'undefined' && location.pathname && location.pathname.match(/^\/channels\/@me\/([^/]+)$/);
         if (pathMatch) {
@@ -1810,6 +2010,11 @@ class LibertyApp {
                 if (this.currentChannel && (this.currentChannel.room || this.currentChannel.id) && this.currentChannel.id !== dm?.id && this.gateway) this.gateway.unsubscribeChannel(this.currentChannel.room || this.currentChannel.id);
                 this.currentChannel = dm;
                 this.currentChannel.room = 'dm:' + (dm.id || '');
+                if (dm.id) {
+                    this.unreadChannels.delete(dm.id);
+                    if (typeof LibertyDMUnreadStore !== 'undefined') LibertyDMUnreadStore.clear(dm.id);
+                    this._updateChannelUnread(dm.id, false);
+                }
                 if ((this.currentChannel?.room || dm?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || dm.id);
                 this._renderDMChat(dm);
             }
@@ -1830,6 +2035,14 @@ class LibertyApp {
         this.currentChannel = dm;
         this.currentChannel.room = 'dm:' + (dm.id || '');
         if ((this.currentChannel?.room || dm?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || dm.id);
+
+        if (window.LibertyChatRoot && window.LibertyChatRoot.render) {
+            window.LibertyChatRoot.render();
+            document.getElementById('message-input').placeholder = isGroup ? `Message ${this.escapeHtml(displayName)}` : `Message @${recipient.username}`;
+            this._updateVoiceCallButtonVisibility();
+            this._updateChannelHeaderForContext();
+            return;
+        }
 
         const container = document.getElementById('messages-list');
         container.innerHTML = `
@@ -2489,11 +2702,13 @@ class LibertyApp {
     async handleCreateServer() {
         const name = document.getElementById('server-name-input').value.trim();
         const region = document.getElementById('server-region').value;
+        const serverIconUpload = document.querySelector('.server-icon-upload');
+        const iconDataUrl = serverIconUpload?.dataset?.iconDataUrl || null;
         const btn = document.querySelector('#create-server-form .btn-primary');
         if (!name) return;
         try {
             this._setButtonLoading(btn, true);
-            const data = await API.Server.create(name, region);
+            const data = await API.Server.create(name, region, iconDataUrl);
             if (data.server) {
                 if (!this.servers.some(s => s.id === data.server.id)) {
                     this.servers.push(data.server);
@@ -2502,12 +2717,29 @@ class LibertyApp {
                 this.selectServer(data.server.id);
             }
             this.hideModal();
+            const serverIconInput = document.getElementById('server-icon-input');
+            if (serverIconInput) serverIconInput.value = '';
+            if (serverIconUpload) {
+                delete serverIconUpload.dataset.iconDataUrl;
+                const circle = serverIconUpload.querySelector('.icon-upload-circle');
+                if (circle) {
+                    circle.querySelectorAll('.server-icon-preview').forEach(p => p.remove());
+                    circle.querySelectorAll('i, span').forEach(el => el.style.removeProperty('display'));
+                    circle.style.removeProperty('overflow');
+                }
+            }
             this.showToast(`Server "${name}" created!`, 'success');
         } catch (error) {
             this.showToast(error.message || 'Failed to create server', 'error');
         } finally {
             this._setButtonLoading(btn, false);
         }
+    }
+
+    _isOfficialLibertyServer(server) {
+        if (!server) return false;
+        const name = (server.name || '').trim().toLowerCase();
+        return name === 'liberty' && (server.owner_id == null || server.owner_id === '');
     }
 
     // ═══════════════════════════════════════════
@@ -2519,7 +2751,8 @@ class LibertyApp {
         const header = document.querySelector('.server-header');
         const dd = document.createElement('div');
         dd.className = 'server-dropdown';
-        const items = [
+        const isOfficial = this._isOfficialLibertyServer(this.currentServer);
+        const allItems = [
             { icon: 'fa-bolt', label: 'Server Boost', action: () => this.showToast('Server Boost — Coming Soon!', 'info') },
             { icon: 'fa-handshake', label: 'Invite People', action: () => this.showInviteModal() },
             { icon: 'fa-sliders', label: 'Server Settings', action: () => this.showSettingsPanel('server') },
@@ -2534,6 +2767,13 @@ class LibertyApp {
             { divider: true },
             { icon: 'fa-right-from-bracket', label: 'Leave Server', danger: true, action: () => { if (this.gateway) this.gateway.leaveServer(this.currentServer?.id); this.showToast('Left the server', 'info'); this.selectHome(); } },
         ];
+        const items = isOfficial
+            ? allItems.filter(i => {
+                if (i.divider) return true;
+                const noEdit = ['Server Settings', 'Create Channel', 'Create Category', 'Edit Server Profile', 'Leave Server'].includes(i.label);
+                return !noEdit;
+            })
+            : allItems;
         dd.innerHTML = items.map(item => {
             if (item.divider) return '<div class="dropdown-divider"></div>';
             return `<div class="dropdown-item ${item.danger ? 'danger' : ''}"><i class="fas ${item.icon}" style="width:20px;text-align:center"></i>${this.escapeHtml(item.label)}</div>`;
@@ -2555,6 +2795,10 @@ class LibertyApp {
     }
 
     _createCategory() {
+        if (this._isOfficialLibertyServer(this.currentServer)) {
+            this.showToast('O servidor LIBERTY oficial não pode ser alterado.', 'info');
+            return;
+        }
         const name = prompt('Category name:');
         if (name) {
             if (this.gateway) this.gateway.createChannel(this.currentServer?.id, name, 'category');
@@ -2663,7 +2907,11 @@ class LibertyApp {
         this.typing.clear();
         this.renderTypingIndicator();
         this.cancelReply();
-        await this.loadMessages(room);
+        if (window.LibertyChatRoot && window.LibertyChatRoot.render) {
+            window.LibertyChatRoot.render();
+        } else {
+            await this.loadMessages(room);
+        }
     }
 
     // ═══════════════════════════════════════════
@@ -2818,7 +3066,8 @@ class LibertyApp {
             if (nameEl) nameEl.textContent = ch.name;
             if (topicEl) topicEl.textContent = ch.topic || '';
             this._updateChannelHeaderForContext();
-            this.loadMessages(room);
+            if (window.LibertyChatRoot && window.LibertyChatRoot.render) window.LibertyChatRoot.render();
+            else this.loadMessages(room);
         }
         this.showToast('Saiu da chamada de voz', 'info');
     }
@@ -3152,6 +3401,11 @@ class LibertyApp {
         const sameAuthorByName = lastGroup && lastGroup.dataset.author === authorName;
         const isContinuation = lastGroup && (sameAuthorById || sameAuthorByName);
 
+        const isMentioned = this.currentUser && (
+            (message.content && message.content.includes('@[' + this.currentUser.id + ']')) ||
+            (message.mentions && Array.isArray(message.mentions) && message.mentions.includes(this.currentUser.id))
+        );
+
         const messageEl = document.createElement('div');
         messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
         messageEl.dataset.message = message.id;
@@ -3162,7 +3416,7 @@ class LibertyApp {
             <div class="message-avatar">
                 ${authorAvatar ? `<img src="${this.escapeHtml(authorAvatar)}" alt="${this.escapeHtml(authorName)}">` : `<span>${avatarLetter}</span>`}
             </div>
-            <div class="message-content">
+            <div class="message-content${isMentioned ? ' message-mentioned' : ''}">
                 ${message.replyTo ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;display:flex;align-items:center;gap:4px"><i class="fas fa-arrow-turn-up" style="font-size:10px"></i> Replying to <strong style="color:var(--primary-yellow)">${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
                 ${!isContinuation ? `<div class="message-header">
                     <span class="message-author ${isSelf ? 'self' : ''}">${this.escapeHtml(authorName)}</span>
@@ -3219,6 +3473,7 @@ class LibertyApp {
         this.renderReactions(messageEl, message.id);
 
         container.appendChild(messageEl);
+        this._injectYouTubeEmbeds(messageEl, message.content);
         if (scroll) this.scrollToBottom();
     }
 
@@ -3254,7 +3509,9 @@ class LibertyApp {
         const msgEl = document.querySelector(`[data-message="${messageId}"]`);
         if (!msgEl) return;
         const textEl = msgEl.querySelector('.message-text');
-        textEl.innerHTML = this._parseMessageContent(newContent) + '<span class="message-edited">(edited)</span>';
+        textEl.innerHTML = this._parseMessageContent(newContent);
+        this._injectYouTubeEmbeds(msgEl, newContent);
+        textEl.insertAdjacentHTML('beforeend', '<span class="message-edited">(edited)</span>');
         const stored = this.messages.get(messageId);
         if (stored) stored.content = newContent;
         if (this.currentChannel && this.gateway) this.gateway.editMessage(this.currentChannel.id, messageId, newContent);
@@ -3384,6 +3641,21 @@ class LibertyApp {
         }
     }
 
+    getMembersForMentions() {
+        const ch = this.currentChannel;
+        if (!ch) return [];
+        if (ch.recipients && ch.recipients.length) return ch.recipients.map(r => ({ id: r.id, username: r.username || r.display_name || 'User' }));
+        return (this.members || []).map(m => ({ id: m.user_id || m.id, username: m.username || 'User' }));
+    }
+
+    contentWithMentions(content) {
+        const members = this.getMembersForMentions();
+        return content.replace(/@(\w+)/g, (_, username) => {
+            const m = members.find(mem => (mem.username || '').toLowerCase() === username.toLowerCase());
+            return m ? '@[' + m.id + ']' : '@' + username;
+        });
+    }
+
     async handleSendMessage() {
         const input = document.getElementById('message-input');
         if (!input) return;
@@ -3395,12 +3667,37 @@ class LibertyApp {
             return;
         }
 
+        const contentToSend = this.contentWithMentions(content);
+
+        if (typeof window.LibertyChatSendMessage === 'function') {
+            input.value = '';
+            input.style.height = 'auto';
+            this.cancelReply();
+            window.LibertyChatSendMessage(contentToSend).catch((err) => {
+                this.showToast(err.message || 'Falha ao enviar mensagem', 'error');
+            });
+            return;
+        }
+
         const roomOrId = this.currentChannel?.room || this.currentChannel?.id;
+        const tempId = 'pending-' + Date.now();
+        const optimistic = {
+            id: tempId,
+            content: contentToSend,
+            author_username: this.currentUser?.username,
+            author_id: this.currentUser?.id,
+            author: this.currentUser?.username,
+            created_at: new Date().toISOString(),
+            avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar || null,
+            _optimistic: true,
+        };
         input.value = '';
         input.style.height = 'auto';
         this.cancelReply();
+        this.addMessage(optimistic, true);
+        this.scrollToBottom();
         try {
-            const res = await API.Message.create(roomOrId, content);
+            const res = await API.Message.create(roomOrId, contentToSend);
             const msg = res?.message || res?.data?.message || (res && res.id ? res : null);
             if (msg) {
                 const normalized = {
@@ -3411,15 +3708,18 @@ class LibertyApp {
                     created_at: msg.created_at || msg.timestamp || new Date().toISOString(),
                     avatar_url: msg.avatar_url || null,
                 };
+                this.removeMessage(tempId);
                 this.addMessage(normalized, true);
                 this.scrollToBottom();
             } else {
+                this.removeMessage(tempId);
                 await this.loadMessages(roomOrId);
                 this.scrollToBottom();
             }
         } catch (err) {
             console.error('Erro ao enviar mensagem no front-end:', err);
-            this.showToast(err.message || 'Failed to send message', 'error');
+            this.removeMessage(tempId);
+            this.showToast(err.message || 'Falha ao enviar mensagem', 'error');
         }
     }
 
@@ -3633,19 +3933,30 @@ class LibertyApp {
         } catch (_) {}
     }
 
-    showProfileCard(member, e) {
+    async showProfileCard(member, e) {
         this.hideProfileCard();
         const user = member.user || member;
-        const name = member.nickname || member.username || user.username || member.display_name || 'User';
+        let name = member.nickname || member.username || user.username || member.display_name || 'User';
         const userId = member.user_id || member.id || user.id || '';
         const status = member.status || user.status || member.presence?.status || 'online';
+        let avatarUrl = member.avatar_url || user.avatar_url || member.avatar || user.avatar || '';
+        let bannerUrl = member.banner_url || user.banner_url || member.banner || user.banner || '';
+        let description = member.description || user.description || member.bio || user.bio || '';
+        const isSelf = this.currentUser && (String(this.currentUser.id) === String(userId) || this.currentUser.username === (member.username || user.username || name));
+        if (!isSelf && userId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId))) {
+            try {
+                const profile = await API.User.getUser(userId);
+                if (profile) {
+                    name = profile.username || name;
+                    avatarUrl = profile.avatar_url || avatarUrl;
+                    bannerUrl = profile.banner_url || bannerUrl;
+                    description = profile.description || description;
+                }
+            } catch (_) {}
+        }
         const letter = name.charAt(0).toUpperCase();
         const avatarText = name.length >= 2 ? name.slice(0, 2).toUpperCase() : letter;
         const tag = (member.username || user.username || name).replace(/\s/g, '');
-        const avatarUrl = member.avatar_url || user.avatar_url || member.avatar || user.avatar || '';
-        const bannerUrl = member.banner_url || user.banner_url || member.banner || user.banner || '';
-        const description = member.description || user.description || member.bio || user.bio || '';
-        const isSelf = this.currentUser && (String(this.currentUser.id) === String(userId) || this.currentUser.username === name);
         const isFriend = this.relationships && this.relationships.some(r => r.type === 1 && (r.user?.id === userId || r.user?.username === name));
         const pendingOut = this.relationships && this.relationships.some(r => r.type === 4 && (r.user?.id === userId || r.user?.username === name));
         const profileLinks = this._getProfileLinks(userId);
@@ -3654,7 +3965,7 @@ class LibertyApp {
             ? profileLinks.map((link) => `<a href="${this.escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="profile-link-item"><i class="fab ${link.type === 'github' ? 'fa-github' : 'fa-link'}"></i> ${this.escapeHtml(link.label || link.url)}</a>`).join('')
             : (isSelf ? '<p class="profile-links-empty">Nenhum link ainda. Adicione GitHub ou outros.</p>' : '<p class="profile-links-empty">Esta pessoa ainda não adicionou links.</p>');
 
-        const bannerStyle = bannerUrl ? `style="background-image:url(${this.escapeHtml(bannerUrl)})"` : '';
+        const bannerStyle = bannerUrl ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"` : '';
         const avatarImg = avatarUrl ? `<img src="${this.escapeHtml(avatarUrl)}" alt="">` : '';
         const descHtml = description ? this.escapeHtml(description) : 'Sem descrição';
         const descClass = description ? '' : ' empty';
@@ -3697,6 +4008,7 @@ class LibertyApp {
                             <button type="button" class="profile-card-tab active" data-tab="activity">Atividade</button>
                             <button type="button" class="profile-card-tab" data-tab="mutual">Amigos mútuos</button>
                             <button type="button" class="profile-card-tab" data-tab="servers">Servidores</button>
+                            ${!isSelf && this.currentUser?.id ? '<button type="button" class="profile-card-tab" data-tab="roles">Cargos</button>' : ''}
                         </div>
                         <div class="profile-card-tab-content" data-tab-content="activity">
                             <p class="profile-card-activity-empty">Nenhuma atividade no momento.</p>
@@ -3707,6 +4019,7 @@ class LibertyApp {
                         <div class="profile-card-tab-content hidden" data-tab-content="servers">
                             <p class="profile-card-activity-empty">Nenhum servidor mútuo.</p>
                         </div>
+                        ${!isSelf && this.currentUser?.id ? '<div class="profile-card-tab-content hidden" data-tab-content="roles"><p class="profile-card-activity-empty">A carregar...</p></div>' : ''}
                     </div>
                 </div>
             </div>
@@ -3763,12 +4076,15 @@ class LibertyApp {
         moreBtn.addEventListener('click', () => this.showToast('Mais opções em breve.', 'info'));
 
         card.querySelectorAll('.profile-card-tab').forEach((tab) => {
-            tab.addEventListener('click', () => {
+            tab.addEventListener('click', async () => {
                 card.querySelectorAll('.profile-card-tab').forEach(t => t.classList.remove('active'));
                 card.querySelectorAll('.profile-card-tab-content').forEach(c => c.classList.add('hidden'));
                 tab.classList.add('active');
                 const content = card.querySelector(`[data-tab-content="${tab.dataset.tab}"]`);
                 if (content) content.classList.remove('hidden');
+                if (tab.dataset.tab === 'roles' && !isSelf && userId && this.currentUser?.id) {
+                    await this._loadProfileRolesTab(content, userId);
+                }
             });
         });
 
@@ -3778,6 +4094,84 @@ class LibertyApp {
             if (addLinkBtn) addLinkBtn.addEventListener('click', () => this._profileAddLink(userId, 'github', 'GitHub', card));
             if (addLinkGenericBtn) addLinkGenericBtn.addEventListener('click', () => this._profileAddLink(userId, 'link', 'Link', card));
         }
+    }
+
+    async _loadAdminDbStats(container) {
+        const el = container.querySelector('#admin-db-stats');
+        if (!el) return;
+        try {
+            const data = await API.Admin.getDb();
+            el.innerHTML = `
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:16px">
+                    <div class="settings-row" style="flex-direction:column;align-items:flex-start;padding:16px;background:var(--primary-black);border-radius:var(--radius-md)">
+                        <span style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Utilizadores</span>
+                        <span style="font-size:24px;font-weight:700;color:var(--primary-yellow)">${Number(data.users || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="settings-row" style="flex-direction:column;align-items:flex-start;padding:16px;background:var(--primary-black);border-radius:var(--radius-md)">
+                        <span style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Servidores</span>
+                        <span style="font-size:24px;font-weight:700;color:var(--primary-yellow)">${Number(data.servers || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="settings-row" style="flex-direction:column;align-items:flex-start;padding:16px;background:var(--primary-black);border-radius:var(--radius-md)">
+                        <span style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Canais</span>
+                        <span style="font-size:24px;font-weight:700;color:var(--primary-yellow)">${Number(data.channels || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="settings-row" style="flex-direction:column;align-items:flex-start;padding:16px;background:var(--primary-black);border-radius:var(--radius-md)">
+                        <span style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Mensagens</span>
+                        <span style="font-size:24px;font-weight:700;color:var(--primary-yellow)">${Number(data.messages || 0).toLocaleString()}</span>
+                    </div>
+                    <div class="settings-row" style="flex-direction:column;align-items:flex-start;padding:16px;background:var(--primary-black);border-radius:var(--radius-md)">
+                        <span style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted)">Pins</span>
+                        <span style="font-size:24px;font-weight:700;color:var(--primary-yellow)">${Number(data.pinned_messages || 0).toLocaleString()}</span>
+                    </div>
+                </div>`;
+        } catch (err) {
+            el.innerHTML = `<div style="color:var(--error);font-size:13px"><i class="fas fa-exclamation-triangle"></i> ${this.escapeHtml(err.message || 'Erro ao carregar estatísticas')}</div>`;
+        }
+    }
+
+    async _loadProfileRolesTab(container, targetUserId) {
+        container.innerHTML = '<p class="profile-card-activity-empty">A carregar...</p>';
+        const myId = this.currentUser?.id;
+        if (!myId || !this.servers?.length) {
+            container.innerHTML = '<p class="profile-card-activity-empty">Nenhum servidor onde possa alterar cargos.</p>';
+            return;
+        }
+        const owned = this.servers.filter(s => s.owner_id && String(s.owner_id) === String(myId));
+        if (!owned.length) {
+            container.innerHTML = '<p class="profile-card-activity-empty">Só pode alterar cargos em servidores de que é dono.</p>';
+            return;
+        }
+        const roles = [{ value: 'member', label: 'Membro' }, { value: 'moderator', label: 'Moderador' }, { value: 'admin', label: 'Admin' }];
+        let html = '<p style="margin-bottom:12px;font-size:13px;color:var(--text-secondary)">Altere o cargo desta pessoa nos servidores de que é dono.</p>';
+        for (const server of owned) {
+            let currentRole = 'member';
+            try {
+                const members = await API.Server.getMembers(server.id);
+                const m = (members || []).find(x => String(x.user_id || x.id) === String(targetUserId));
+                if (m && m.role) currentRole = m.role.toLowerCase();
+            } catch (_) {}
+            html += `<div class="profile-card-role-row" style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06);gap:12px">
+                <span style="font-size:13px;color:var(--text-primary)">${this.escapeHtml(server.name || server.id)}</span>
+                <select class="profile-card-role-select" data-server-id="${this.escapeHtml(server.id)}" data-user-id="${this.escapeHtml(targetUserId)}" data-current="${this.escapeHtml(currentRole)}" style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.12);border-radius:var(--radius-md);padding:6px 10px;color:var(--text-primary);font-size:13px;min-width:120px">
+                    ${roles.map(r => `<option value="${r.value}" ${r.value === currentRole ? 'selected' : ''}>${r.label}</option>`).join('')}
+                </select>
+            </div>`;
+        }
+        container.innerHTML = html;
+        container.querySelectorAll('.profile-card-role-select').forEach((sel) => {
+            sel.addEventListener('change', async () => {
+                const serverId = sel.dataset.serverId;
+                const newRole = sel.value;
+                try {
+                    await API.Server.updateMemberRole(serverId, targetUserId, newRole);
+                    sel.dataset.current = newRole;
+                    this.showToast('Cargo atualizado.', 'success');
+                } catch (err) {
+                    this.showToast(err.message || 'Erro ao atualizar cargo', 'error');
+                    sel.value = sel.dataset.current || 'member';
+                }
+            });
+        });
     }
 
     _profileAddLink(userId, type, label, card) {
@@ -3923,14 +4317,16 @@ class LibertyApp {
         if (isSelf) {
             items.push({ _idx: 2, icon: 'fa-pen', label: 'Edit Message', action: () => this.startEditMessage(messageId, msgData?.content) });
         }
-        items.push({ _idx: 3, icon: 'fa-bookmark', label: 'Pin Message', action: async () => {
-            try {
-                await API.Pin.pin(this.currentChannel?.id || this.currentChannel, messageId);
-                this.showToast('Message pinned!', 'success');
-            } catch (err) {
-                this.showToast(err.message || 'Failed to pin message', 'error');
-            }
-        }});
+        if (this.currentUser?.admin) {
+            items.push({ _idx: 3, icon: 'fa-bookmark', label: 'Pin Message', action: async () => {
+                try {
+                    await API.Pin.pin(this.currentChannel?.id || this.currentChannel, messageId);
+                    this.showToast('Message pinned!', 'success');
+                } catch (err) {
+                    this.showToast(err.message || 'Failed to pin message', 'error');
+                }
+            }});
+        }
         if (isSelf) {
             items.push({ divider: true });
             items.push({ _idx: 4, icon: 'fa-trash-can', label: 'Delete Message', danger: true, action: () => this.confirmDeleteMessage(messageId) });
@@ -3950,9 +4346,11 @@ class LibertyApp {
         const userId = memberItem.dataset.userId;
         const member = this.members.find(m => (m.user_id || m.id) === userId);
         const name = member?.nickname || member?.username || 'User';
+        const serverId = this.currentServer?.id || null;
+        const isAdmin = this.currentUser?.admin === true;
         const items = [
             { _idx: 0, icon: 'fa-address-card', label: 'Profile', action: () => this.showProfileCard(member || { username: name, status: 'online' }, e) },
-            { _idx: 1, icon: 'fa-message', label: 'Message', action: () => this.showToast(`Opening DM with ${name}...`, 'info') },
+            { _idx: 1, icon: 'fa-message', label: 'Message', action: () => this.openDMWithUser(userId, name) },
             { _idx: 2, icon: 'fa-phone', label: 'Call', action: () => this.showToast(`Calling ${name}...`, 'info') },
             { divider: true },
             { _idx: 3, icon: 'fa-sticky-note', label: 'Add Note', action: () => this.showToast('Note editor opened', 'info') },
@@ -3961,9 +4359,23 @@ class LibertyApp {
             { _idx: 6, icon: 'fa-pen', label: 'Change Nickname', action: () => { const nn = prompt('New nickname:', name); if (nn) this.showToast(`Nickname changed to ${nn}`, 'success'); } },
             { divider: true },
             { _idx: 7, icon: 'fa-user-slash', label: 'Kick', danger: true, action: () => this.showToast(`${name} kicked`, 'warning') },
-            { _idx: 8, icon: 'fa-ban', label: 'Ban', danger: true, action: () => this.showToast(`${name} banned`, 'warning') },
         ];
+        if (isAdmin && serverId) {
+            items.push({ _idx: 8, icon: 'fa-ban', label: 'Ban', danger: true, action: () => this._confirmBanMember(serverId, userId, name) });
+        }
         this.showContextMenu(items, e.clientX, e.clientY);
+    }
+
+    async _confirmBanMember(serverId, userId, name) {
+        const reason = prompt(`Banir ${name}? (opcional) Motivo:`, '');
+        if (reason === null) return;
+        try {
+            await API.Ban.create(serverId, userId, reason || '');
+            this.showToast(`${name} foi banido.`, 'success');
+            this.loadMembers();
+        } catch (err) {
+            this.showToast(err.message || 'Erro ao banir', 'error');
+        }
     }
 
     // ═══════════════════════════════════════════
@@ -4014,6 +4426,10 @@ class LibertyApp {
     }
 
     async showCreateChannelModal(categoryId) {
+        if (this._isOfficialLibertyServer(this.currentServer)) {
+            this.showToast('O servidor LIBERTY oficial não pode ser alterado.', 'info');
+            return;
+        }
         const modal = document.getElementById('create-channel-modal');
         if (!modal) return;
         const serverId = this.currentServer?.id;
@@ -4191,6 +4607,10 @@ class LibertyApp {
     // ═══════════════════════════════════════════
 
     showSettingsPanel(type) {
+        if (type === 'server' && this._isOfficialLibertyServer(this.currentServer)) {
+            this.showToast('O servidor LIBERTY oficial não pode ser alterado.', 'info');
+            return;
+        }
         this.hideSettingsPanel();
         const overlay = document.createElement('div');
         overlay.className = 'settings-overlay';
@@ -4206,6 +4626,7 @@ class LibertyApp {
             { id: 'appearance', label: 'Aparência', icon: 'fa-eye' },
             { id: 'voice', label: 'Voz', icon: 'fa-microphone' },
             { id: 'notifications', label: 'Notificações', icon: 'fa-bell' },
+            ...(this.currentUser?.admin ? [{ divider: true }, { group: 'ADMIN' }, { id: 'admin-db', label: 'Ver base de dados', icon: 'fa-database' }] : []),
             { divider: true },
             { id: 'logout', label: 'Sair', danger: true, icon: 'fa-right-from-bracket' },
         ] : [
@@ -4490,6 +4911,11 @@ class LibertyApp {
                 <div class="settings-row"><div><div class="settings-row-label">Noise Suppression</div><div class="settings-row-desc">Automatically remove background noise</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
                 <div class="settings-row"><div><div class="settings-row-label">Echo Cancellation</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
                 </div>`,
+            'admin-db': () => {
+                return `<h2 class="settings-page-title">Base de dados</h2>
+                <p class="settings-row-desc" style="margin-bottom:16px">Estatísticas gerais (apenas administradores Zerk e noeb).</p>
+                <div id="admin-db-stats" class="settings-card" style="padding:24px"><div style="text-align:center;color:var(--text-muted)"><i class="fas fa-spinner fa-spin"></i> A carregar...</div></div>`;
+            },
             notifications: () => `<h2>Notifications</h2><div class="settings-card">
                 <div class="settings-row"><div><div class="settings-row-label">Enable Desktop Notifications</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
                 <div class="settings-row"><div><div class="settings-row-label">Enable Unread Badge</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
@@ -4587,6 +5013,9 @@ class LibertyApp {
 
         const renderer = sectionRenderers[section];
         content.innerHTML = renderer ? renderer() : `<h2>${section}</h2><div class="settings-card"><p>Settings content for ${section} will be displayed here.</p></div>`;
+        if (section === 'admin-db' && type === 'user') {
+            this._loadAdminDbStats(content);
+        }
         if (section === 'account' && type === 'user') {
             const saveAvatarBtn = content.querySelector('#settings-save-avatar-btn');
             const avatarUrlInput = content.querySelector('#settings-avatar-url');
@@ -4822,6 +5251,8 @@ class LibertyApp {
         }
         if (this.gateway && typeof this.gateway.disconnect === 'function') this.gateway.disconnect();
         this.gateway = null;
+        MessageCache.clearAll();
+        if (typeof LibertyDMUnreadStore !== 'undefined') LibertyDMUnreadStore.clearAll();
         try {
             await API.Auth.logout();
         } catch (_) {
@@ -4931,7 +5362,30 @@ class LibertyApp {
 
     scrollToBottom() {
         const container = document.getElementById('messages-container');
-        if (container) container.scrollTop = container.scrollHeight;
+        if (!container) return;
+        requestAnimationFrame(() => {
+            container.scrollTop = container.scrollHeight;
+        });
+    }
+
+    removeMessage(messageId) {
+        const el = document.querySelector(`[data-message="${messageId}"]`);
+        if (el) el.remove();
+        this.messages.delete(messageId);
+        const cid = this.currentChannel?.id || this.currentChannel?.channelId;
+        if (cid) {
+            const list = MessageCache.get(cid).filter((m) => (m.id || m.message_id) !== messageId);
+            MessageCache.set(cid, list);
+        }
+    }
+
+    setMessagesFromList(list) {
+        const container = document.getElementById('messages-list');
+        if (!container) return;
+        container.innerHTML = '';
+        this.messages.clear();
+        (list || []).forEach((msg) => this.addMessage(msg, false));
+        this.scrollToBottom();
     }
 
     autoResizeTextarea(el) {
@@ -4950,9 +5404,24 @@ class LibertyApp {
         return date.toLocaleDateString();
     }
 
+    getMentionDisplayName(userId) {
+        if (!userId) return 'User';
+        const m = (this.members || []).find(m => (m.user_id || m.id) === userId);
+        if (m) return m.username || 'User';
+        const r = (this.currentChannel?.recipients || []).find(r => r.id === userId);
+        if (r) return r.username || r.display_name || 'User';
+        return 'User';
+    }
+
     _parseMessageContent(content) {
         if (!content) return '';
         let escaped = this.escapeHtml(content);
+        // Menções no formato @[userId] → badge azul clicável
+        escaped = escaped.replace(/@\[([^\]]+)\]/g, (_, id) => {
+            const uid = id.trim();
+            const name = this.getMentionDisplayName(uid);
+            return '<span class="mention mention-badge" data-user-id="' + this.escapeHtml(uid) + '" role="button" tabindex="0">@' + this.escapeHtml(name) + '</span>';
+        });
         // Code blocks first (before inline code)
         escaped = escaped.replace(/```\n?([\s\S]*?)\n?```/g, '<pre class="message-code-block"><code>$1</code></pre>');
         escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
@@ -4962,6 +5431,78 @@ class LibertyApp {
         escaped = escaped.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
         escaped = escaped.replace(/\n/g, '<br>');
         return escaped;
+    }
+
+    _youtubeVideoId(url) {
+        if (!url || typeof url !== 'string') return null;
+        const u = url.trim();
+        const m = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/);
+        return m ? m[1] : null;
+    }
+
+    _extractYouTubeUrls(content) {
+        if (!content) return [];
+        const urlRe = /https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?[^\s<>]+|youtu\.be\/[a-zA-Z0-9_-]+|youtube\.com\/embed\/[a-zA-Z0-9_-]+)/gi;
+        const seen = new Set();
+        const out = [];
+        let m;
+        const str = content;
+        const re = new RegExp(urlRe.source, 'gi');
+        while ((m = re.exec(str)) !== null) {
+            const url = m[0];
+            const id = this._youtubeVideoId(url);
+            if (id && !seen.has(id)) {
+                seen.add(id);
+                out.push({ url: url.split('&')[0].replace(/\?$/, ''), videoId: id });
+            }
+        }
+        return out;
+    }
+
+    _injectYouTubeEmbeds(messageEl, content) {
+        const textEl = messageEl.querySelector('.message-text');
+        if (!textEl) return;
+        const items = this._extractYouTubeUrls(content);
+        items.forEach(({ url, videoId }) => {
+            const thumbUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+            const card = document.createElement('a');
+            card.href = url;
+            card.target = '_blank';
+            card.rel = 'noopener noreferrer';
+            card.className = 'message-embed-youtube-card';
+            card.innerHTML = `
+                <span class="message-embed-youtube-source">YouTube</span>
+                <span class="message-embed-youtube-title" data-video-id="${this.escapeHtml(videoId)}">Vídeo do YouTube</span>
+                <span class="message-embed-youtube-author message-embed-youtube-loading" data-video-id="${this.escapeHtml(videoId)}"></span>
+                <div class="message-embed-youtube-thumb-wrap">
+                    <img class="message-embed-youtube-thumb" src="${this.escapeHtml(thumbUrl)}" alt="" loading="lazy"/>
+                    <span class="message-embed-youtube-play"><i class="fas fa-play"></i></span>
+                    <span class="message-embed-youtube-external" title="Abrir em nova janela"><i class="fas fa-external-link"></i></span>
+                </div>
+            `;
+            textEl.appendChild(card);
+            this._fetchYouTubeOEmbed(videoId, card);
+        });
+    }
+
+    async _fetchYouTubeOEmbed(videoId, cardEl) {
+        if (!cardEl || !videoId) return;
+        const url = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+        try {
+            const res = await fetch(url);
+            if (!res.ok) return;
+            const data = await res.json();
+            const titleEl = cardEl.querySelector('.message-embed-youtube-title');
+            const authorEl = cardEl.querySelector('.message-embed-youtube-author');
+            if (titleEl && data.title) titleEl.textContent = data.title;
+            if (authorEl && data.author_name) {
+                authorEl.textContent = data.author_name;
+                authorEl.classList.remove('message-embed-youtube-loading');
+            }
+        } catch (_) {
+            const authorEl = cardEl.querySelector('.message-embed-youtube-author');
+            if (authorEl) authorEl.classList.remove('message-embed-youtube-loading');
+        }
     }
 
     _updateChannelUnread(channelId, hasUnread) {
@@ -4976,14 +5517,46 @@ class LibertyApp {
         }
         const dmItem = document.querySelector(`.dm-list-item[data-dm-id="${channelId}"]`);
         if (dmItem) {
-            dmItem.classList.toggle('dm-list-item-unread', !!hasUnread);
-            let redDot = dmItem.querySelector('.dm-unread-dot');
-            if (hasUnread && !redDot) {
-                redDot = document.createElement('span');
-                redDot.className = 'dm-unread-dot';
-                redDot.setAttribute('aria-label', 'Não lida');
-                dmItem.appendChild(redDot);
-            } else if (!hasUnread && redDot) redDot.remove();
+            const count = typeof LibertyDMUnreadStore !== 'undefined' ? LibertyDMUnreadStore.getCount(channelId) : (hasUnread ? 1 : 0);
+            const hasAny = count > 0;
+            dmItem.classList.toggle('dm-list-item-unread', !!hasAny);
+            const avatarWrap = dmItem.querySelector('.dm-list-item-avatar');
+            if (avatarWrap) {
+                if (hasAny && !avatarWrap.classList.contains('dm-avatar-had-ping')) avatarWrap.classList.add('dm-avatar-ping');
+                if (hasAny) avatarWrap.classList.add('dm-avatar-had-ping');
+            }
+            let badge = dmItem.querySelector('.dm-unread-badge');
+            if (hasAny) {
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'dm-unread-badge';
+                    badge.setAttribute('aria-label', 'Mensagens não lidas');
+                    dmItem.appendChild(badge);
+                }
+                badge.textContent = count > 99 ? '99+' : String(count);
+            } else if (badge) {
+                badge.remove();
+                if (avatarWrap) avatarWrap.classList.remove('dm-avatar-ping', 'dm-avatar-had-ping');
+            }
+            this._updateDMUnreadTotal();
+        }
+    }
+
+    _updateDMUnreadTotal() {
+        const el = document.getElementById('dm-unread-total-badge');
+        if (!el) return;
+        if (typeof LibertyDMUnreadStore === 'undefined') {
+            el.classList.add('hidden');
+            return;
+        }
+        const counts = LibertyDMUnreadStore.getCounts();
+        const total = Object.keys(counts).reduce((s, k) => s + (counts[k] || 0), 0);
+        if (total <= 0) {
+            el.classList.add('hidden');
+            el.textContent = '';
+        } else {
+            el.classList.remove('hidden');
+            el.textContent = total > 99 ? '99+' : String(total);
         }
     }
 
@@ -5001,6 +5574,16 @@ class LibertyApp {
 
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new LibertyApp();
+    if (window.LibertyMentions && typeof window.LibertyMentions.init === 'function') {
+        window.LibertyMentions.init(window.app);
+    }
+    document.getElementById('messages-container')?.addEventListener('click', (e) => {
+        const badge = e.target.closest('.mention-badge');
+        if (!badge || !window.app) return;
+        e.preventDefault();
+        const userId = badge.dataset.userId;
+        if (userId) window.app.showProfileCard({ user_id: userId, username: (badge.textContent || '').replace(/^@/, '').trim() }, e);
+    });
 });
 
 

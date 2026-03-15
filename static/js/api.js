@@ -216,6 +216,17 @@ const ServerAPI = {
         return apiRequest(`/servers/${serverId}`, {
             method: 'DELETE'
         });
+    },
+
+    async getMembers(serverId) {
+        return apiRequest(`/servers/${serverId}/members`);
+    },
+
+    async updateMemberRole(serverId, userId, role) {
+        return apiRequest(`/servers/${serverId}/members/${userId}`, {
+            method: 'PATCH',
+            body: { role }
+        });
     }
 };
 
@@ -462,16 +473,16 @@ const CallAPI = {
     }
 };
 
-// Ban API
+// Ban API (apenas admins Zerk/noeb no backend)
 const BanAPI = {
     async list(serverId) {
         return apiRequest(`/servers/${serverId}/bans`);
     },
 
-    async create(serverId, userId, reason, deleteMessageDays) {
-        return apiRequest(`/servers/${serverId}/bans/${userId}`, {
-            method: 'PUT',
-            body: { reason, delete_message_days: deleteMessageDays }
+    async create(serverId, userId, reason) {
+        return apiRequest(`/servers/${serverId}/bans`, {
+            method: 'POST',
+            body: { user_id: userId, reason: reason || '' }
         });
     },
 
@@ -479,6 +490,13 @@ const BanAPI = {
         return apiRequest(`/servers/${serverId}/bans/${userId}`, {
             method: 'DELETE'
         });
+    }
+};
+
+// Admin API (apenas Zerk/noeb)
+const AdminAPI = {
+    async getDb() {
+        return apiRequest('/admin/db');
     }
 };
 
@@ -542,5 +560,6 @@ window.API = {
     Reaction: ReactionAPI,
     Pin: PinAPI,
     Ban: BanAPI,
+    Admin: AdminAPI,
     Call: CallAPI
 };

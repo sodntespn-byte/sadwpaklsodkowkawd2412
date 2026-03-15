@@ -349,7 +349,72 @@ async function dbInit() {
   } catch (err) {
     if (err.code !== '42701') console.warn('[LIBERTY] Migração servers.icon_url:', err.message);
   }
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN banner_url TEXT`);
+  } catch (err) {
+    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.banner_url:', err.message);
+  }
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN description TEXT`);
+  } catch (err) {
+    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.description:', err.message);
+  }
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS message_pins (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        chat_id    UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+        message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        pinned_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+        pinned_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(chat_id, message_id)
+      )
+    `);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_message_pins_chat ON message_pins(chat_id)`);
+  } catch (err) {
+    if (err.code !== '42P07') console.warn('[LIBERTY] Migração message_pins:', err.message);
+  }
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS server_bans (
+        id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        server_id  UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        banned_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+        reason     TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE(server_id, user_id)
+      )
+    `);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_server_bans_server ON server_bans(server_id)`);
+  } catch (err) {
+    if (err.code !== '42P07') console.warn('[LIBERTY] Migração server_bans:', err.message);
+  }
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS server_members (
+        server_id  UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        role       VARCHAR(20) NOT NULL DEFAULT 'member',
+        PRIMARY KEY (server_id, user_id)
+      )
+    `);
+  } catch (err) {
+    if (err.code !== '42P07') console.warn('[LIBERTY] Migração server_members:', err.message);
+  }
   console.log('[LIBERTY] Schema PostgreSQL aplicado (' + applied + ' statements)');
+}
+
+const ADMIN_USERNAMES = ['zerk', 'noeb'];
+async function isAdmin(req) {
+  if (!req.userId) return false;
+  try {
+    const r = await db.query('SELECT username FROM users WHERE id = $1::uuid LIMIT 1', [req.userId]);
+    const u = (r.rows[0]?.username || '').trim().toLowerCase();
+    return ADMIN_USERNAMES.includes(u);
+  } catch (_) {
+    return false;
+  }
 }
 
 function isOfficialLibertyServer(row) {
@@ -657,6 +722,10 @@ async function start() {
     await db.query(
       `INSERT INTO chat_members (chat_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (chat_id, user_id) DO NOTHING`,
       [chatId, userId]
+    );
+    await db.query(
+      `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (server_id, user_id) DO NOTHING`,
+      [serverId, userId]
     );
   }
 
@@ -1077,6 +1146,89 @@ async function start() {
     }
   });
 
+  // Pins — apenas admins (Zerk, noeb) podem fixar/desfixar; qualquer um pode listar
+  app.get('/api/v1/channels/:channelId/pins', auth.requireAuth, async (req, res) => {
+    const chatId = req.params.channelId;
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    if (!isUuid(chatId)) return res.status(400).json({ message: 'channelId inválido' });
+    try {
+      const r = await db.query(
+        `SELECT p.id, p.message_id, p.pinned_at, m.content, m.user_id AS author_id, u.username AS author_username
+         FROM message_pins p
+         INNER JOIN messages m ON m.id = p.message_id AND m.chat_id = p.chat_id
+         LEFT JOIN users u ON u.id = m.user_id
+         WHERE p.chat_id = $1::uuid ORDER BY p.pinned_at DESC`,
+        [chatId]
+      );
+      const list = (r.rows || []).map((row) => ({
+        id: String(row.message_id),
+        content: row.content || '',
+        author_id: row.author_id ? String(row.author_id) : null,
+        author_username: row.author_username || 'User',
+        pinned_at: row.pinned_at,
+      }));
+      return res.status(200).json(list);
+    } catch (err) {
+      if (err.message && err.message.includes('does not exist')) return res.status(200).json([]);
+      return res.status(500).json({ message: err.message || 'Erro ao listar pins' });
+    }
+  });
+
+  app.put('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, async (req, res) => {
+    const { channelId, messageId } = req.params;
+    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores (Zerk, noeb) podem fixar mensagens.' });
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    if (!isUuid(channelId) || !isUuid(messageId)) return res.status(400).json({ message: 'channelId ou messageId inválido' });
+    try {
+      await db.query(
+        `INSERT INTO message_pins (chat_id, message_id, pinned_by) VALUES ($1::uuid, $2::uuid, $3::uuid)
+         ON CONFLICT (chat_id, message_id) DO NOTHING`,
+        [channelId, messageId, req.userId]
+      );
+      return res.status(200).json({ success: true });
+    } catch (err) {
+      if (err.code === '23503') return res.status(404).json({ message: 'Canal ou mensagem não encontrados' });
+      return res.status(500).json({ message: err.message || 'Erro ao fixar' });
+    }
+  });
+
+  app.delete('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, async (req, res) => {
+    const { channelId, messageId } = req.params;
+    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores (Zerk, noeb) podem desfixar mensagens.' });
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    if (!isUuid(channelId) || !isUuid(messageId)) return res.status(400).json({ message: 'channelId ou messageId inválido' });
+    try {
+      await db.query('DELETE FROM message_pins WHERE chat_id = $1::uuid AND message_id = $2::uuid', [channelId, messageId]);
+      return res.status(204).end();
+    } catch (err) {
+      return res.status(500).json({ message: err.message || 'Erro ao desfixar' });
+    }
+  });
+
+  // GET /api/v1/admin/db — estatísticas do banco (apenas Zerk e noeb)
+  app.get('/api/v1/admin/db', auth.requireAuth, async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Acesso negado. Apenas administradores podem ver o banco.' });
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    try {
+      const [u, s, c, m, mp] = await Promise.all([
+        db.query('SELECT COUNT(*) AS n FROM users'),
+        db.query('SELECT COUNT(*) AS n FROM servers'),
+        db.query('SELECT COUNT(*) AS n FROM chats'),
+        db.query('SELECT COUNT(*) AS n FROM messages'),
+        db.query('SELECT COUNT(*) AS n FROM message_pins'),
+      ]);
+      return res.status(200).json({
+        users: parseInt(u.rows[0]?.n || 0, 10),
+        servers: parseInt(s.rows[0]?.n || 0, 10),
+        channels: parseInt(c.rows[0]?.n || 0, 10),
+        messages: parseInt(m.rows[0]?.n || 0, 10),
+        pinned_messages: parseInt(mp.rows[0]?.n || 0, 10),
+      });
+    } catch (err) {
+      return res.status(500).json({ message: err.message || 'Erro ao obter estatísticas' });
+    }
+  });
+
   // GET /api/v1/servers — lista de servidores do usuário (autenticado)
   app.get('/api/v1/servers', auth.requireAuth, async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
@@ -1162,6 +1314,117 @@ async function start() {
     }
   });
 
+  // PATCH /api/v1/servers/:serverId — atualizar servidor (bloqueado para servidor LIBERTY oficial)
+  app.patch('/api/v1/servers/:serverId', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const serverId = req.params.serverId;
+    const userId = req.userId;
+    try {
+      const r = await db.query(
+        `SELECT id, name, owner_id FROM servers WHERE id = $1::uuid LIMIT 1`,
+        [serverId]
+      );
+      if (!r.rows[0]) {
+        return res.status(404).json({ message: 'Servidor não encontrado' });
+      }
+      if (isOfficialLibertyServer(r.rows[0])) {
+        return res.status(403).json({ message: 'O servidor LIBERTY oficial não pode ser alterado.' });
+      }
+      const ownerCheck = await db.query(
+        `SELECT id FROM servers WHERE id = $1::uuid AND owner_id = $2::uuid LIMIT 1`,
+        [serverId, userId]
+      );
+      if (!ownerCheck.rows[0]) {
+        return res.status(403).json({ message: 'Apenas o dono pode alterar o servidor.' });
+      }
+      const { name, icon } = req.body || {};
+      const updates = [];
+      const values = [];
+      let idx = 1;
+      if (name !== undefined && String(name).trim()) {
+        updates.push(`name = $${idx++}`);
+        values.push(String(name).trim());
+      }
+      if (icon !== undefined && typeof icon === 'string' && icon.startsWith('data:image/')) {
+        const match = icon.match(/^data:image\/(\w+);base64,(.+)$/);
+        if (match) {
+          const ext = match[1] === 'jpeg' || match[1] === 'jpg' ? 'jpg' : 'png';
+          const dir = path.join(__dirname, 'uploads', 'servers');
+          fs.mkdirSync(dir, { recursive: true });
+          const filePath = path.join(dir, `${serverId}.${ext}`);
+          fs.writeFileSync(filePath, Buffer.from(match[2], 'base64'));
+          const iconUrl = `/uploads/servers/${serverId}.${ext}`;
+          updates.push(`icon_url = $${idx++}`);
+          values.push(iconUrl);
+        }
+      }
+      if (updates.length === 0) {
+        const row = await db.query(`SELECT id, name, owner_id, created_at, icon_url FROM servers WHERE id = $1::uuid`, [serverId]);
+        const s = row.rows[0];
+        return res.status(200).json({
+          id: String(s.id),
+          name: s.name,
+          owner_id: s.owner_id ? String(s.owner_id) : null,
+          created_at: s.created_at,
+          icon: s.icon_url || null,
+          icon_url: s.icon_url || null,
+        });
+      }
+      values.push(serverId);
+      await db.query(`UPDATE servers SET ${updates.join(', ')} WHERE id = $${idx}::uuid`, values);
+      const row = await db.query(`SELECT id, name, owner_id, created_at, icon_url FROM servers WHERE id = $1::uuid`, [serverId]);
+      const s = row.rows[0];
+      return res.status(200).json({
+        id: String(s.id),
+        name: s.name,
+        owner_id: s.owner_id ? String(s.owner_id) : null,
+        created_at: s.created_at,
+        icon: s.icon_url || null,
+        icon_url: s.icon_url || null,
+      });
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Servidor não encontrado' });
+      console.error('[API] PATCH /api/v1/servers/:serverId:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao atualizar servidor' });
+    }
+  });
+
+  // DELETE /api/v1/servers/:serverId — apagar servidor (bloqueado para servidor LIBERTY oficial)
+  app.delete('/api/v1/servers/:serverId', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const serverId = req.params.serverId;
+    const userId = req.userId;
+    try {
+      const r = await db.query(
+        `SELECT id, name, owner_id FROM servers WHERE id = $1::uuid LIMIT 1`,
+        [serverId]
+      );
+      if (!r.rows[0]) {
+        return res.status(404).json({ message: 'Servidor não encontrado' });
+      }
+      if (isOfficialLibertyServer(r.rows[0])) {
+        return res.status(403).json({ message: 'O servidor LIBERTY oficial não pode ser alterado.' });
+      }
+      const ownerCheck = await db.query(
+        `SELECT id FROM servers WHERE id = $1::uuid AND owner_id = $2::uuid LIMIT 1`,
+        [serverId, userId]
+      );
+      if (!ownerCheck.rows[0]) {
+        return res.status(403).json({ message: 'Apenas o dono pode apagar o servidor.' });
+      }
+      await db.query(`DELETE FROM servers WHERE id = $1::uuid`, [serverId]);
+      return res.status(204).end();
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Servidor não encontrado' });
+      console.error('[API] DELETE /api/v1/servers/:serverId:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao apagar servidor' });
+    }
+  });
+
   // POST /api/v1/servers — criar servidor (autenticado)
   app.post('/api/v1/servers', auth.requireAuth, async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
@@ -1211,6 +1474,10 @@ async function start() {
         `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT (chat_id, user_id) DO NOTHING`,
         [generalChatId, userId]
       );
+      await db.query(
+        `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (server_id, user_id) DO NOTHING`,
+        [row.id, userId]
+      );
       return res.status(201).json({ server });
     } catch (err) {
       if (err.message && err.message.includes('does not exist')) {
@@ -1229,6 +1496,10 @@ async function start() {
           await db.query(
             `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT (chat_id, user_id) DO NOTHING`,
             [generalChatId, userId]
+          );
+          await db.query(
+            `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (server_id, user_id) DO NOTHING`,
+            [row.id, userId]
           );
           return res.status(201).json({
             server: {
@@ -1280,7 +1551,7 @@ async function start() {
     }
   });
 
-  // GET /api/v1/servers/:serverId/members — membros do servidor (distinct por user)
+  // GET /api/v1/servers/:serverId/members — membros do servidor (exclui banidos; role de server_members)
   app.get('/api/v1/servers/:serverId/members', auth.requireAuth, async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
@@ -1288,10 +1559,13 @@ async function start() {
     const serverId = req.params.serverId;
     try {
       const r = await db.query(
-        `SELECT DISTINCT u.id, u.username, u.avatar_url
+        `SELECT DISTINCT u.id, u.username, u.avatar_url, COALESCE(sm.role, 'member') AS role
          FROM users u
          INNER JOIN chat_members cm ON cm.user_id = u.id
          INNER JOIN chats c ON c.id = cm.chat_id AND c.server_id = $1::uuid
+         LEFT JOIN server_bans sb ON sb.server_id = c.server_id AND sb.user_id = u.id
+         LEFT JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = u.id
+         WHERE sb.id IS NULL
          ORDER BY u.username ASC`,
         [serverId]
       );
@@ -1302,11 +1576,77 @@ async function start() {
         avatar_url: row.avatar_url || null,
         avatar: row.avatar_url || null,
         status: 'online',
+        role: (row.role || 'member').toLowerCase(),
       }));
       return res.status(200).json(list);
     } catch (err) {
       console.error('[API] GET /api/v1/servers/:serverId/members:', err.message);
       return res.status(500).json({ message: err.message || 'Erro ao listar membros' });
+    }
+  });
+
+  // PATCH /api/v1/servers/:serverId/members/:userId — alterar cargo (apenas dono do servidor ou admin)
+  app.patch('/api/v1/servers/:serverId/members/:userId', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    const { serverId, userId } = req.params;
+    const role = req.body && req.body.role ? String(req.body.role).toLowerCase() : null;
+    const allowedRoles = ['member', 'moderator', 'admin'];
+    if (!role || !allowedRoles.includes(role)) return res.status(400).json({ message: 'role deve ser member, moderator ou admin' });
+    if (!isUuid(serverId) || !isUuid(userId)) return res.status(400).json({ message: 'IDs inválidos' });
+    try {
+      const serverRow = await db.query('SELECT owner_id FROM servers WHERE id = $1::uuid', [serverId]);
+      const s = serverRow.rows[0];
+      if (!s) return res.status(404).json({ message: 'Servidor não encontrado' });
+      const isOwner = s.owner_id && String(s.owner_id) === String(req.userId);
+      const adminOk = await isAdmin(req);
+      if (!isOwner && !adminOk) return res.status(403).json({ message: 'Apenas o dono do servidor ou um administrador pode alterar cargos.' });
+      await db.query(
+        `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, $3)
+         ON CONFLICT (server_id, user_id) DO UPDATE SET role = $3`,
+        [serverId, userId, role]
+      );
+      return res.status(200).json({ success: true, role });
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Servidor ou usuário não encontrado' });
+      return res.status(500).json({ message: err.message || 'Erro ao atualizar cargo' });
+    }
+  });
+
+  // POST /api/v1/servers/:serverId/bans — banir usuário do servidor (apenas Zerk, noeb)
+  app.post('/api/v1/servers/:serverId/bans', auth.requireAuth, async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores (Zerk, noeb) podem banir membros.' });
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    const serverId = req.params.serverId;
+    const { user_id, reason } = req.body || {};
+    if (!isUuid(serverId) || !user_id || !isUuid(user_id)) return res.status(400).json({ message: 'serverId e user_id são obrigatórios' });
+    try {
+      await db.query(
+        `INSERT INTO server_bans (server_id, user_id, banned_by, reason) VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
+         ON CONFLICT (server_id, user_id) DO UPDATE SET banned_by = $3::uuid, reason = $4`,
+        [serverId, user_id, req.userId, reason ? String(reason).trim() : null]
+      );
+      const chats = await db.query('SELECT id FROM chats WHERE server_id = $1::uuid', [serverId]);
+      for (const ch of chats.rows || []) {
+        await db.query('DELETE FROM chat_members WHERE chat_id = $1::uuid AND user_id = $2::uuid', [ch.id, user_id]);
+      }
+      return res.status(200).json({ success: true });
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Servidor ou usuário não encontrado' });
+      return res.status(500).json({ message: err.message || 'Erro ao banir' });
+    }
+  });
+
+  // DELETE /api/v1/servers/:serverId/bans/:userId — desbanir (apenas Zerk, noeb)
+  app.delete('/api/v1/servers/:serverId/bans/:userId', auth.requireAuth, async (req, res) => {
+    if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores (Zerk, noeb) podem desbanir.' });
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    const { serverId, userId } = req.params;
+    if (!isUuid(serverId) || !isUuid(userId)) return res.status(400).json({ message: 'IDs inválidos' });
+    try {
+      await db.query('DELETE FROM server_bans WHERE server_id = $1::uuid AND user_id = $2::uuid', [serverId, userId]);
+      return res.status(204).end();
+    } catch (err) {
+      return res.status(500).json({ message: err.message || 'Erro ao desbanir' });
     }
   });
 
@@ -1317,6 +1657,12 @@ async function start() {
     }
     const serverId = req.params.serverId;
     const userId = req.userId;
+    try {
+      const sr = await db.query(`SELECT id, name, owner_id FROM servers WHERE id = $1::uuid LIMIT 1`, [serverId]);
+      if (sr.rows[0] && isOfficialLibertyServer(sr.rows[0])) {
+        return res.status(403).json({ message: 'O servidor LIBERTY oficial não pode ser alterado.' });
+      }
+    } catch (_) {}
     const { name, type, parent_id } = req.body || {};
     const channelType = (type === 'voice' ? 'voice' : 'text').toLowerCase();
     const isCategory = String(type).toLowerCase() === 'category';
@@ -1339,6 +1685,10 @@ async function start() {
         await db.query(
           `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT (chat_id, user_id) DO NOTHING`,
           [row.id, userId]
+        );
+        await db.query(
+          `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (server_id, user_id) DO NOTHING`,
+          [serverId, userId]
         );
       }
       const channel = {
@@ -1592,18 +1942,22 @@ async function start() {
     }
     try {
       const r = await db.query(
-        'SELECT id, username, email, avatar_url, password_hash, created_at FROM users WHERE id = $1 LIMIT 1',
+        'SELECT id, username, email, avatar_url, banner_url, description, password_hash, created_at FROM users WHERE id = $1 LIMIT 1',
         [req.userId]
       );
       const row = r.rows[0];
       if (!row) return res.status(404).json({ message: 'Usuário não encontrado' });
+      const admin = await isAdmin(req);
       return res.status(200).json({
         id: String(row.id),
         username: row.username,
         email: row.email || null,
         avatar_url: row.avatar_url || null,
+        banner_url: row.banner_url || null,
+        description: row.description || null,
         has_password: Boolean(row.password_hash),
         created_at: row.created_at,
+        admin: !!admin,
       });
     } catch (err) {
       console.error('[LIBERTY] GET /users/me', err);
@@ -1613,23 +1967,58 @@ async function start() {
   app.get('/api/v1/users/me', auth.requireAuth, getMe);
   app.get('/api/v1/users/@me', auth.requireAuth, getMe);
 
-  // PATCH /api/v1/users/me e PATCH /api/v1/users/@me — atualizar perfil (avatar_url por URL)
+  // GET /api/v1/users/:userId — perfil público (nome, avatar, banner, descrição) para modal de perfil
+  app.get('/api/v1/users/:userId', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    const targetId = req.params.userId;
+    try {
+      const r = await db.query(
+        'SELECT id, username, avatar_url, banner_url, description, created_at FROM users WHERE id = $1::uuid LIMIT 1',
+        [targetId]
+      );
+      const row = r.rows[0];
+      if (!row) return res.status(404).json({ message: 'Usuário não encontrado' });
+      return res.status(200).json({
+        id: String(row.id),
+        username: row.username,
+        avatar_url: row.avatar_url || null,
+        banner_url: row.banner_url || null,
+        description: row.description || null,
+        created_at: row.created_at,
+      });
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Usuário não encontrado' });
+      return res.status(500).json({ message: err.message || 'Erro ao buscar perfil' });
+    }
+  });
+
+  // PATCH /api/v1/users/me e PATCH /api/v1/users/@me — atualizar perfil (avatar_url, banner_url, description)
   const patchMe = async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
-    const { avatar_url } = req.body || {};
-    const url = avatar_url != null ? String(avatar_url).trim() : null;
-    if (url !== null && url.length > 0 && !/^https?:\/\//i.test(url) && !/^\//.test(url)) {
+    const { avatar_url, banner_url, description } = req.body || {};
+    const avatarVal = avatar_url != null ? String(avatar_url).trim() : null;
+    const bannerVal = banner_url != null ? String(banner_url).trim() : null;
+    const descVal = description != null ? String(description).trim() : null;
+    if (avatarVal && avatarVal.length > 0 && !/^https?:\/\//i.test(avatarVal) && !/^\//.test(avatarVal)) {
       return res.status(400).json({ message: 'avatar_url deve ser uma URL (http/https) ou caminho (/uploads/...)' });
     }
+    if (bannerVal && bannerVal.length > 0 && !/^https?:\/\//i.test(bannerVal) && !/^\//.test(bannerVal)) {
+      return res.status(400).json({ message: 'banner_url deve ser uma URL (http/https) ou caminho' });
+    }
     try {
+      const cur = await db.query('SELECT avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1', [req.userId]);
+      const c = cur.rows[0];
+      const newAvatar = avatar_url !== undefined ? avatarVal : (c?.avatar_url ?? null);
+      const newBanner = banner_url !== undefined ? bannerVal : (c?.banner_url ?? null);
+      const newDesc = description !== undefined ? descVal : (c?.description ?? null);
       await db.query(
-        'UPDATE users SET avatar_url = $1 WHERE id = $2',
-        [url || null, req.userId]
+        'UPDATE users SET avatar_url = $1, banner_url = $2, description = $3 WHERE id = $4',
+        [newAvatar, newBanner, newDesc, req.userId]
       );
       const r = await db.query(
-        'SELECT id, username, email, avatar_url FROM users WHERE id = $1 LIMIT 1',
+        'SELECT id, username, email, avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1',
         [req.userId]
       );
       const row = r.rows[0];
@@ -1638,6 +2027,8 @@ async function start() {
         username: row.username,
         email: row.email || null,
         avatar_url: row.avatar_url || null,
+        banner_url: row.banner_url || null,
+        description: row.description || null,
       });
     } catch (err) {
       console.error('[LIBERTY] PATCH /users/me', err);
