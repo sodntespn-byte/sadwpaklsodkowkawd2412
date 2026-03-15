@@ -13,8 +13,64 @@ import { Server as SocketIOServer } from 'socket.io';
 import { Pool } from 'pg';
 import jwt from 'jsonwebtoken';
 import WebSocket, { WebSocketServer } from 'ws';
+import crypto from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Cache em memória das mensagens (não grava na tabela messages da base de dados)
+const messageCache = new Map(); // chatId -> array de mensagens
+const MAX_CACHE_PER_CHANNEL = 300;
+function getCachedMessages(chatId) {
+  return messageCache.get(chatId) || [];
+}
+function addCachedMessage(chatId, msg) {
+  let list = messageCache.get(chatId);
+  if (!list) {
+    list = [];
+    messageCache.set(chatId, list);
+  }
+  list.push(msg);
+  if (list.length > MAX_CACHE_PER_CHANNEL) list.shift();
+}
+
+// Atividade em app (minutos) para ranking "By Activity" — só em memória
+const activityByUser = new Map(); // userId -> { minutes, username }
+const ACTIVITY_PING_INTERVAL_MS = 60 * 1000;
+const ACTIVITY_MIN_INTERVAL_MS = 50 * 1000; // mínimo entre pings para contar
+function addActivityPing(userId, username) {
+  const now = Date.now();
+  const cur = activityByUser.get(userId) || { minutes: 0, username: username || 'User', lastPing: 0 };
+  if (now - cur.lastPing >= ACTIVITY_MIN_INTERVAL_MS) {
+    cur.minutes += 1;
+    cur.lastPing = now;
+  }
+  if (username) cur.username = username;
+  cur.userId = userId;
+  activityByUser.set(userId, cur);
+}
+function getActivityLevel(minutes) {
+  if (minutes < 5) return 0;
+  return Math.floor(Math.log(minutes / 5) / Math.log(1.2)) + 1;
+}
+function getXpLevel(xp) {
+  if (xp < 500) return 0;
+  return Math.floor(Math.log(xp / 500) / Math.log(1.2)) + 1;
+}
+function computeContentXpByUser() {
+  const byUser = new Map(); // author_id -> { xp, username }
+  for (const list of messageCache.values()) {
+    for (const msg of list) {
+      const id = msg.author_id || msg.author;
+      if (!id) continue;
+      const cur = byUser.get(id) || { xp: 0, username: msg.author_username || msg.author || 'User' };
+      cur.xp += (msg.content && msg.content.length) ? msg.content.length : 0;
+      if (msg.author_username) cur.username = msg.author_username;
+      if (msg.author && typeof msg.author === 'string') cur.username = msg.author;
+      byUser.set(id, cur);
+    }
+  }
+  return byUser;
+}
 
 // --- db (inline para deploy sem pasta db/)
 // Usa env (DATABASE_URL, BANCO_DADOS, DB_URL) ou, se não definida, esta URL embutida (Neon).
@@ -680,130 +736,84 @@ async function start() {
     }
   });
 
-  // Mensagens: só DB; exige login (fluxo simplificado /api/messages)
+  // Mensagens: só em cache (memória), não grava na base de dados
   app.post('/api/messages', auth.requireAuth, async (req, res) => {
-    if (!db.isConfigured() || !db.isConnected()) {
-      return res
-        .status(503)
-        .json({ message: 'Banco de dados indisponível. Verifique DATABASE_URL no .env.' });
-    }
-
     const { content, author } = req.body || {};
     if (!content || !String(content).trim()) {
       return res.status(400).json({ message: 'content é obrigatório' });
     }
-
     const safeContent = String(content).trim().replace(/</g, '&lt;');
     const userId = req.userId;
-
     try {
-      const chatId = await getDefaultChatId();
-      if (!chatId) {
-        return res
-          .status(503)
-          .json({ message: 'Chat padrão indisponível. Verifique a configuração do banco de dados.' });
-      }
-
-      const result = await db.query(
-        `INSERT INTO messages (content, chat_id, user_id)
-         VALUES ($1, $2, $3)
-         RETURNING id, content, created_at, user_id`,
-        [safeContent, chatId, userId]
-      );
-
-      const row = result.rows[0];
+      let chatId = null;
+      if (db.isConfigured() && db.isConnected()) chatId = await getDefaultChatId();
+      if (!chatId) chatId = 'default-chat';
       let username = (author && String(author).trim()) || 'User';
       let avatarUrl = null;
-      if (userId) {
-        const u = await db.query(
-          'SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1',
-          [userId]
-        );
-        if (u.rows[0]) {
-          username = u.rows[0].username || username;
-          avatarUrl = u.rows[0].avatar_url || null;
-        }
+      if (userId && db.isConfigured() && db.isConnected()) {
+        try {
+          const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
+          if (u.rows[0]) {
+            username = u.rows[0].username || username;
+            avatarUrl = u.rows[0].avatar_url || null;
+          }
+        } catch (_) {}
       }
+      const createdAt = new Date();
       const saved = {
-        id: String(row.id),
-        content: row.content,
+        id: crypto.randomUUID(),
+        content: safeContent,
         author: username,
         author_username: username,
         username,
         avatar_url: avatarUrl,
+        author_id: String(userId),
         channelId: 'default-channel',
-        timestamp: row.created_at || new Date(),
+        channel_id: chatId,
+        chat_id: chatId,
+        timestamp: createdAt,
+        created_at: createdAt,
       };
-
+      addCachedMessage(chatId, saved);
       const emit = req.app.locals.emitMessage;
-      if (emit && chatId) {
-        emit({ ...saved, chat_id: chatId });
-      }
-
+      if (emit && chatId) emit({ ...saved });
       return res.status(201).json({
         id: saved.id,
         content: saved.content,
         author_username: username,
         username,
         avatar_url: avatarUrl,
-        created_at: new Date(saved.timestamp).toISOString(),
+        created_at: saved.created_at.toISOString(),
       });
     } catch (err) {
       console.error('[API] POST /api/messages erro:', err.message);
-      return res
-        .status(500)
-        .json({ message: err.message || 'Erro ao salvar mensagem no banco de dados' });
+      return res.status(500).json({ message: err.message || 'Erro ao salvar mensagem' });
     }
   });
 
   app.get('/api/messages', async (_req, res) => {
-    if (!db.isConfigured() || !db.isConnected()) {
-      return res
-        .status(503)
-        .json({ message: 'Banco de dados indisponível. Verifique DATABASE_URL no .env.' });
-    }
-
     try {
-      const chatId = await getDefaultChatId();
-      if (!chatId) {
-        // Sem chat padrão ainda: nenhuma mensagem persistida
-        return res.status(200).json([]);
-      }
-
-      const result = await db.query(
-        `SELECT m.id, m.content, m.created_at, m.user_id,
-                u.username AS author_username, u.avatar_url
-         FROM messages m
-         LEFT JOIN users u ON u.id = m.user_id
-         WHERE m.chat_id = $1
-         ORDER BY m.created_at ASC
-         LIMIT 50`,
-        [chatId]
-      );
-
-      const response = result.rows.map((row, index) => ({
-        id: row.id ? String(row.id) : String(index),
-        content: String(row.content || '').trim().replace(/</g, '&lt;'),
-        author_username: row.author_username || 'User',
-        username: row.author_username || 'User',
-        avatar_url: row.avatar_url || null,
-        created_at: new Date(row.created_at || Date.now()).toISOString(),
+      let chatId = null;
+      if (db.isConfigured() && db.isConnected()) chatId = await getDefaultChatId();
+      if (!chatId) chatId = 'default-chat';
+      const cached = getCachedMessages(chatId);
+      const response = cached.map((m) => ({
+        id: m.id,
+        content: String(m.content || '').trim(),
+        author_username: m.author_username || m.author || 'User',
+        username: m.author_username || m.author || 'User',
+        avatar_url: m.avatar_url || null,
+        created_at: (m.created_at instanceof Date ? m.created_at : new Date(m.created_at)).toISOString(),
       }));
-
       return res.status(200).json(response);
     } catch (err) {
       console.error('[API] GET /api/messages erro:', err.message);
-      return res
-        .status(500)
-        .json({ message: err.message || 'Erro ao carregar mensagens do banco de dados' });
+      return res.status(500).json({ message: err.message || 'Erro ao carregar mensagens' });
     }
   });
 
-  // POST /api/servers/:serverId/channels/:channelId/messages — exige login; persiste só no DB
+  // POST /api/servers/:serverId/channels/:channelId/messages — só cache (memória), não grava na DB
   app.post('/api/servers/:serverId/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
-    if (!db.isConfigured() || !db.isConnected()) {
-      return res.status(503).json({ message: 'Banco de dados indisponível.' });
-    }
     const { content } = req.body || {};
     if (!content || !String(content).trim()) {
       return res.status(400).json({ message: 'content é obrigatório' });
@@ -811,42 +821,47 @@ async function start() {
     const safeContent = String(content).trim().replace(/</g, '&lt;');
     const userId = req.userId;
     try {
-      const chatId = await getChatIdForServerAndChannel(req.params.serverId, req.params.channelId);
-      if (!chatId) {
-        return res.status(503).json({ message: 'Chat indisponível.' });
+      let chatId = null;
+      if (db.isConfigured() && db.isConnected()) {
+        chatId = await getChatIdForServerAndChannel(req.params.serverId, req.params.channelId);
       }
-      const result = await db.query(
-        `INSERT INTO messages (content, chat_id, user_id) VALUES ($1, $2, $3)
-         RETURNING id, content, created_at, user_id`,
-        [safeContent, chatId, userId]
-      );
-      const row = result.rows[0];
+      if (!chatId) chatId = req.params.channelId;
       let username = 'User';
       let avatarUrl = null;
-      const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
-      if (u.rows[0]) {
-        username = u.rows[0].username || username;
-        avatarUrl = u.rows[0].avatar_url || null;
+      if (db.isConfigured() && db.isConnected()) {
+        try {
+          const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
+          if (u.rows[0]) {
+            username = u.rows[0].username || username;
+            avatarUrl = u.rows[0].avatar_url || null;
+          }
+        } catch (_) {}
       }
+      const createdAt = new Date();
       const saved = {
-        id: String(row.id),
-        content: row.content,
+        id: crypto.randomUUID(),
+        content: safeContent,
         author: username,
         author_username: username,
         username,
         avatar_url: avatarUrl,
+        author_id: String(userId),
         channelId: req.params.channelId,
-        timestamp: row.created_at || new Date(),
+        channel_id: chatId,
+        chat_id: chatId,
+        timestamp: createdAt,
+        created_at: createdAt,
       };
+      addCachedMessage(chatId, saved);
       const emit = req.app.locals.emitMessage;
-      if (emit && chatId) emit({ ...saved, chat_id: chatId });
+      if (emit && chatId) emit({ ...saved });
       return res.status(201).json({
         id: saved.id,
         content: saved.content,
         author_username: username,
         username,
         avatar_url: avatarUrl,
-        created_at: new Date(saved.timestamp).toISOString(),
+        created_at: saved.created_at.toISOString(),
       });
     } catch (err) {
       console.error('[API] POST /api/servers/.../channels/.../messages erro:', err.message);
@@ -869,7 +884,7 @@ async function start() {
     return await getChatIdForServerAndChannel(null, channelId) || await getDefaultChatId();
   }
 
-  // Mensagens por canal: channelId pode ser UUID (chat_id) ou nome do canal
+  // Mensagens por canal: só em cache (memória), não grava na tabela messages da base de dados
   app.post('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
     const { channelId } = req.params;
     const { content } = req.body || {};
@@ -878,25 +893,23 @@ async function start() {
     }
     const safeContent = String(content).trim().replace(/</g, '&lt;');
     const userId = req.userId;
-    if (!db.isConfigured() || !db.isConnected()) {
-      return res.status(503).json({ message: 'Banco indisponível' });
-    }
     try {
-      const chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
-      if (!chatId) return res.status(503).json({ message: 'Chat indisponível' });
-      const result = await db.query(
-        `INSERT INTO messages (content, chat_id, user_id) VALUES ($1, $2, $3)
-         RETURNING id, content, created_at, user_id`,
-        [safeContent, chatId, userId]
-      );
-      const row = result.rows[0];
+      let chatId = null;
+      if (db.isConfigured() && db.isConnected()) {
+        chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
+      }
+      if (!chatId) chatId = String(channelId);
       let username = 'User';
-      const u = await db.query('SELECT username FROM users WHERE id = $1 LIMIT 1', [userId]);
-      if (u.rows[0]) username = u.rows[0].username || username;
-      const createdAt = row.created_at || new Date();
+      if (db.isConfigured() && db.isConnected()) {
+        try {
+          const u = await db.query('SELECT username FROM users WHERE id = $1 LIMIT 1', [userId]);
+          if (u.rows[0]) username = u.rows[0].username || username;
+        } catch (_) {}
+      }
+      const createdAt = new Date();
       const saved = {
-        id: String(row.id),
-        content: row.content,
+        id: crypto.randomUUID(),
+        content: safeContent,
         author: username,
         author_username: username,
         author_id: String(userId),
@@ -906,6 +919,7 @@ async function start() {
         timestamp: createdAt,
         created_at: createdAt,
       };
+      addCachedMessage(chatId, saved);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
       return res.status(201).json({ success: true, message: saved });
@@ -918,25 +932,20 @@ async function start() {
   app.get('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
     const { channelId } = req.params;
     const userId = req.userId;
-    if (!db.isConfigured() || !db.isConnected()) {
-      return res.status(503).json({ message: 'Banco indisponível' });
-    }
     try {
-      const chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
-      if (!chatId) return res.status(200).json([]);
-      const result = await db.query(
-        `SELECT m.id, m.content, m.created_at, m.user_id AS author_id, u.username AS author_username
-         FROM messages m LEFT JOIN users u ON u.id = m.user_id
-         WHERE m.chat_id = $1 ORDER BY m.created_at ASC LIMIT 100`,
-        [chatId]
-      );
-      const list = result.rows.map((row, i) => ({
-        id: row.id ? String(row.id) : String(i),
+      let chatId = null;
+      if (db.isConfigured() && db.isConnected()) {
+        chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
+      }
+      if (!chatId) chatId = String(channelId);
+      const cached = getCachedMessages(chatId);
+      const list = cached.map((m) => ({
+        id: m.id,
         channel_id: channelId,
-        content: String(row.content || ''),
-        author_id: row.author_id ? String(row.author_id) : null,
-        author_username: row.author_username || 'User',
-        created_at: new Date(row.created_at).toISOString(),
+        content: String(m.content || ''),
+        author_id: m.author_id || null,
+        author_username: m.author_username || m.author || 'User',
+        created_at: (m.created_at instanceof Date ? m.created_at : new Date(m.created_at)).toISOString(),
       }));
       return res.status(200).json(list);
     } catch (err) {
@@ -1117,6 +1126,36 @@ async function start() {
     } catch (err) {
       console.error('[API] GET /api/v1/servers/:serverId/channels:', err.message);
       return res.status(500).json({ message: err.message || 'Erro ao listar canais' });
+    }
+  });
+
+  // GET /api/v1/servers/:serverId/members — membros do servidor (distinct por user)
+  app.get('/api/v1/servers/:serverId/members', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const serverId = req.params.serverId;
+    try {
+      const r = await db.query(
+        `SELECT DISTINCT u.id, u.username, u.avatar_url
+         FROM users u
+         INNER JOIN chat_members cm ON cm.user_id = u.id
+         INNER JOIN chats c ON c.id = cm.chat_id AND c.server_id = $1::uuid
+         ORDER BY u.username ASC`,
+        [serverId]
+      );
+      const list = r.rows.map((row) => ({
+        user_id: String(row.id),
+        id: String(row.id),
+        username: row.username,
+        avatar_url: row.avatar_url || null,
+        avatar: row.avatar_url || null,
+        status: 'online',
+      }));
+      return res.status(200).json(list);
+    } catch (err) {
+      console.error('[API] GET /api/v1/servers/:serverId/members:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao listar membros' });
     }
   });
 
@@ -1393,31 +1432,59 @@ async function start() {
   app.patch('/api/v1/users/me', auth.requireAuth, patchMe);
   app.patch('/api/v1/users/@me', auth.requireAuth, patchMe);
 
-  // GET /api/v1/ranking — top usuários por quantidade de mensagens (quem mais fica e comenta)
-  app.get('/api/v1/ranking', auth.requireAuth, async (req, res) => {
-    if (!db.isConfigured() || !db.isConnected()) {
-      return res.status(503).json({ message: 'Banco indisponível' });
+  // POST /api/v1/activity/ping — incrementa tempo em app (para ranking By Activity)
+  app.post('/api/v1/activity/ping', auth.requireAuth, async (req, res) => {
+    const userId = req.userId;
+    let username = 'User';
+    if (db.isConfigured() && db.isConnected()) {
+      try {
+        const u = await db.query('SELECT username FROM users WHERE id = $1 LIMIT 1', [userId]);
+        if (u.rows[0]) username = u.rows[0].username || username;
+      } catch (_) {}
     }
-    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+    addActivityPing(userId, username);
+    return res.status(204).end();
+  });
+
+  // GET /api/v1/ranking — By Activity (tempo em app) + By Content (XP)
+  app.get('/api/v1/ranking', auth.requireAuth, async (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
     try {
-      const r = await db.query(
-        `SELECT u.id, u.username, u.avatar_url, COUNT(m.id)::int AS message_count
-         FROM users u
-         LEFT JOIN messages m ON m.user_id = u.id
-         GROUP BY u.id, u.username, u.avatar_url
-         HAVING COUNT(m.id) > 0
-         ORDER BY message_count DESC
-         LIMIT $1`,
-        [limit]
-      );
-      const list = r.rows.map((row, index) => ({
-        rank: index + 1,
-        id: String(row.id),
-        username: row.username,
-        avatar_url: row.avatar_url || null,
-        message_count: row.message_count,
+      const byActivityList = [];
+      for (const [userId, data] of activityByUser.entries()) {
+        byActivityList.push({
+          id: userId,
+          username: data.username || 'User',
+          minutes: data.minutes || 0,
+          level: getActivityLevel(data.minutes || 0),
+        });
+      }
+      byActivityList.sort((a, b) => b.minutes - a.minutes);
+      const by_activity = byActivityList.slice(0, limit).map((u, i) => ({
+        rank: i + 1,
+        id: u.id,
+        username: u.username,
+        minutes: u.minutes,
+        level: u.level,
       }));
-      return res.status(200).json(list);
+
+      const xpByUser = computeContentXpByUser();
+      const byContentList = Array.from(xpByUser.entries()).map(([id, data]) => ({
+        id,
+        username: data.username || 'User',
+        xp: data.xp || 0,
+        level: getXpLevel(data.xp || 0),
+      }));
+      byContentList.sort((a, b) => b.xp - a.xp);
+      const by_content = byContentList.slice(0, limit).map((u, i) => ({
+        rank: i + 1,
+        id: u.id,
+        username: u.username,
+        xp: u.xp,
+        level: u.level,
+      }));
+
+      return res.status(200).json({ by_activity, by_content });
     } catch (err) {
       console.error('[LIBERTY] GET /ranking', err);
       return res.status(500).json({ message: err.message || 'Erro ao buscar ranking' });

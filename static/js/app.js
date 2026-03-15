@@ -396,6 +396,16 @@ class LibertyApp {
         this.updateUserPanel();
         this.selectHome();
         this.loadFriends().catch(() => {});
+        this._startActivityPing();
+    }
+
+    _startActivityPing() {
+        if (this._activityPingInterval) clearInterval(this._activityPingInterval);
+        if (!API.Token?.getAccessToken?.()) return;
+        API.Activity?.ping?.();
+        this._activityPingInterval = setInterval(() => {
+            if (API.Token?.getAccessToken?.()) API.Activity?.ping?.();
+        }, 60 * 1000);
     }
 
     updateUserPanel() {
@@ -637,7 +647,7 @@ class LibertyApp {
                 created_at: msg.created_at || msg.timestamp,
             };
             if (chId === this.currentChannel?.id) {
-                this.addMessage(normalized, true, true);
+                this.addMessage(normalized, true);
                 this.scrollToBottom();
             } else {
                 this.unreadChannels.add(chId);
@@ -1625,6 +1635,11 @@ class LibertyApp {
         }
     }
 
+    _formatActivityTime(minutes) {
+        if (minutes >= 60) return (Math.round(minutes / 6) / 10).toFixed(1) + ' h';
+        return minutes + ' min';
+    }
+
     async renderRankingsView() {
         const friendsView = document.getElementById('friends-view');
         const messagesContainer = document.getElementById('messages-container');
@@ -1636,31 +1651,55 @@ class LibertyApp {
         if (addSection) addSection.classList.add('hidden');
         if (searchWrapper) searchWrapper.style.display = 'none';
         if (!friendsList) return;
-        friendsList.innerHTML = '<div class="friends-list-loading" style="padding:20px;text-align:center;color:var(--text-muted)">A carregar ranking…</div>';
+        friendsList.innerHTML = '<div class="ranking-loading" style="padding:24px;text-align:center;color:var(--text-muted)">A carregar ranking…</div>';
         this._updateUserControlsVoiceVisibility();
         try {
-            const list = await API.Ranking.list(20);
-            const headerStyle = 'padding:8px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary)';
-            let bodyHtml = `<div style="${headerStyle}">Quem mais fica e comenta</div>`;
-            if (!list || list.length === 0) {
-                bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">Ainda não há mensagens para ranking.</div>';
-            } else {
-                const avatarColors = ['#5865F2','#57F287','#FEE75C','#EB459E','#ED4245','#3BA55D','#FAA61A','#9B59B6','#E67E22','#1ABC9C'];
-                list.forEach((row) => {
-                    const color = avatarColors[row.rank % avatarColors.length];
-                    const initial = (row.username || 'U').charAt(0).toUpperCase();
-                    bodyHtml += `<div class="friend-item ranking-item" data-user-id="${this.escapeHtml(row.id)}">
-                        <div class="friend-item-avatar offline" style="background:${color}"><span>${this.escapeHtml(initial)}</span></div>
-                        <div class="friend-item-info" style="flex:1">
-                            <div class="friend-item-name">#${row.rank} ${this.escapeHtml(row.username)}</div>
-                            <div class="friend-item-status">${row.message_count} mensagens</div>
+            const data = await API.Ranking.list(10);
+            const byActivity = data?.by_activity || [];
+            const byContent = data?.by_content || [];
+            const avatarColors = ['#5865F2','#57F287','#FEE75C','#EB459E','#ED4245','#3BA55D','#FAA61A','#9B59B6','#E67E22','#1ABC9C'];
+            const renderRankRow = (row, type) => {
+                const color = avatarColors[(row.rank || 0) % avatarColors.length];
+                const initials = (row.username || 'U').slice(0, 2).toUpperCase().replace(/\s/g, '') || 'U';
+                const stat = type === 'activity'
+                    ? `${this._formatActivityTime(row.minutes || 0)} · Nível ${row.level || 0 ? row.level : 'UNKNOWN'}`
+                    : `${row.xp || 0} XP · Nível ${row.level || 0 ? row.level : 'UNKNOWN'}`;
+                return `<div class="ranking-item" data-user-id="${this.escapeHtml(row.id)}">
+                    <span class="rank">#${row.rank}</span>
+                    <div class="rank-avatar" style="background:${color}"><span>${this.escapeHtml(initials)}</span></div>
+                    <div class="rank-info">
+                        <span class="rank-name">${this.escapeHtml(row.username || 'User')}</span>
+                        <span class="rank-stat">${stat}</span>
+                    </div>
+                </div>`;
+            };
+            let html = `
+                <div class="ranking-view">
+                    <div class="ranking-header">
+                        <i class="fas fa-trophy ranking-icon" aria-hidden="true"></i>
+                        <h2>LIBERTY Ranking</h2>
+                        <p>Community activity and levels</p>
+                    </div>
+                    <div class="ranking-tables">
+                        <div class="ranking-table">
+                            <h3><i class="fas fa-clock" aria-hidden="true"></i> By Activity</h3>
+                            <p class="ranking-desc">Time in app (incl. background). 5 min → Level 1, each level +20%</p>
+                            <div class="ranking-list">
+                                ${byActivity.length ? byActivity.map(r => renderRankRow(r, 'activity')).join('') : '<div class="ranking-empty">Ainda não há atividade.</div>'}
+                            </div>
                         </div>
-                    </div>`;
-                });
-            }
-            friendsList.innerHTML = bodyHtml;
+                        <div class="ranking-table">
+                            <h3><i class="fas fa-star" aria-hidden="true"></i> By Content (XP)</h3>
+                            <p class="ranking-desc">1 char = 1 XP. Files = 2.5x size. 500 XP → Level 1, each level +20%</p>
+                            <div class="ranking-list">
+                                ${byContent.length ? byContent.map(r => renderRankRow(r, 'content')).join('') : '<div class="ranking-empty">Ainda não há conteúdo.</div>'}
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            friendsList.innerHTML = html;
         } catch (err) {
-            friendsList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--error)">Falha ao carregar ranking.</div>';
+            friendsList.innerHTML = '<div class="ranking-empty" style="padding:24px;text-align:center;color:var(--error)">Falha ao carregar ranking.</div>';
         }
     }
 
@@ -1818,6 +1857,10 @@ class LibertyApp {
 
         if (this.isHomeView) {
             membersSidebar.classList.remove('collapsed');
+            const headerEl = document.getElementById('members-sidebar-header');
+            const onlineTitleEl = document.getElementById('members-online-title');
+            if (headerEl) headerEl.classList.add('hidden');
+            if (onlineTitleEl) onlineTitleEl.classList.add('hidden');
             membersList.innerHTML = `
                 <div class="active-now-panel" style="width:100%;border:none;padding:16px">
                     <h4 style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:16px">Active Now</h4>
@@ -1871,6 +1914,12 @@ class LibertyApp {
                 this.channels = Array.isArray(channelList) ? channelList : [];
             }
             this.members = data.members || [];
+            if (this.members.length === 0) {
+                try {
+                    const memberList = await API.Member.list(serverId);
+                    this.members = Array.isArray(memberList) ? memberList : [];
+                } catch (_) {}
+            }
             this.renderChannels();
             this.renderMembers();
             const textChannel = this.channels.find(c => c.channel_type === 'text' && c.type !== 'category');
@@ -2499,7 +2548,7 @@ class LibertyApp {
         return `hsl(${h % 360}, 55%, 65%)`;
     }
 
-    addMessage(message, scroll = true, isJustSent = false) {
+    addMessage(message, scroll = true) {
         const container = document.getElementById('messages-list');
         const welcomeEl = container.querySelector('.welcome-message');
         if (welcomeEl && !container.querySelector('.message-group')) welcomeEl.style.display = 'none';
@@ -2507,6 +2556,8 @@ class LibertyApp {
         const time = new Date(message.created_at || Date.now());
         const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const dateStr = this._formatDate(time);
+        const isToday = time.toDateString() === new Date().toDateString();
+        const headerTimeStr = isToday ? timeStr : `${dateStr} ${timeStr}`;
         const authorName = message.author?.username || message.author_username || message.username || this.currentUser?.username || 'User';
         const authorAvatar = message.author?.avatar || message.avatar || null;
         const avatarLetter = authorName.charAt(0).toUpperCase();
@@ -2520,7 +2571,7 @@ class LibertyApp {
         const barColor = this._authorColor(authorName);
 
         const messageEl = document.createElement('div');
-        messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '') + (isJustSent ? ' message-just-sent' : '');
+        messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
         messageEl.dataset.message = message.id;
         messageEl.dataset.author = authorName;
         if (authorId) messageEl.dataset.authorId = String(authorId);
@@ -2534,7 +2585,7 @@ class LibertyApp {
                 ${message.replyTo ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;display:flex;align-items:center;gap:4px"><i class="fas fa-reply" style="font-size:10px"></i> Replying to <strong style="color:var(--primary-yellow)">${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
                 ${!isContinuation ? `<div class="message-header">
                     <span class="message-author ${isSelf ? 'self' : ''}">${this.escapeHtml(authorName)}</span>
-                    <span class="message-timestamp" title="${time.toLocaleString()}">${dateStr} ${timeStr}</span>
+                    <span class="message-timestamp" title="${time.toLocaleString()}">${headerTimeStr}</span>
                 </div>` : ''}
                 <div class="message-text">${this._parseMessageContent(message.content)}</div>
                 <div class="reactions-container"></div>
@@ -2586,7 +2637,6 @@ class LibertyApp {
 
         container.appendChild(messageEl);
         if (scroll) this.scrollToBottom();
-        if (isJustSent) setTimeout(() => messageEl.classList.remove('message-just-sent'), 400);
     }
 
     startEditMessage(messageId, content) {
@@ -2777,7 +2827,7 @@ class LibertyApp {
                     author_id: msg.author_id,
                     created_at: msg.created_at || msg.timestamp,
                 };
-                this.addMessage(normalized, true, true);
+                this.addMessage(normalized, true);
                 this.scrollToBottom();
             } else {
                 await this.loadMessages(channelId);
@@ -2884,77 +2934,99 @@ class LibertyApp {
 
     renderMembers() {
         const container = document.getElementById('members-list');
+        const headerEl = document.getElementById('members-sidebar-header');
+        const onlineTitleEl = document.getElementById('members-online-title');
+        if (!container) return;
         container.innerHTML = '';
 
         const isOnline = m => { const s = m.status || m.presence?.status; return !s || s === 'online' || s === 'idle' || s === 'dnd'; };
         const online = this.members.filter(isOnline);
         const offline = this.members.filter(m => !isOnline(m));
 
-        const roleGroups = new Map();
-        const noRole = [];
-        online.forEach(m => {
-            const roleName = m.role_name || (m.roles?.length ? m.roles[0] : '');
-            if (roleName) {
-                if (!roleGroups.has(roleName)) roleGroups.set(roleName, []);
-                roleGroups.get(roleName).push(m);
-            } else {
-                noRole.push(m);
-            }
-        });
-
-        if (roleGroups.size > 0) {
-            roleGroups.forEach((members, roleName) => {
-                const cat = document.createElement('div');
-                cat.className = 'member-category';
-                cat.innerHTML = `<div class="member-category-title">${this.escapeHtml(roleName)} — ${members.length}</div>`;
-                members.forEach(m => cat.appendChild(this.createMemberElement(m)));
-                container.appendChild(cat);
-            });
-            if (noRole.length > 0) {
-                const cat = document.createElement('div');
-                cat.className = 'member-category';
-                cat.innerHTML = `<div class="member-category-title">Online — ${noRole.length}</div>`;
-                noRole.forEach(m => cat.appendChild(this.createMemberElement(m)));
-                container.appendChild(cat);
-            }
-        } else if (online.length > 0) {
-            const cat = document.createElement('div');
-            cat.className = 'member-category';
-            cat.innerHTML = `<div class="member-category-title">Online — ${online.length}</div>`;
-            online.forEach(m => cat.appendChild(this.createMemberElement(m)));
-            container.appendChild(cat);
+        if (headerEl) {
+            headerEl.textContent = `MEMBROS — ${this.members.length}`;
+            headerEl.classList.remove('hidden');
         }
+        if (onlineTitleEl) {
+            onlineTitleEl.textContent = `ONLINE — ${online.length}`;
+            onlineTitleEl.classList.remove('hidden');
+        }
+
+        online.forEach(m => container.appendChild(this.createMemberElement(m, true)));
 
         if (offline.length > 0) {
-            const cat = document.createElement('div');
-            cat.className = 'member-category';
-            cat.innerHTML = `<div class="member-category-title">Offline — ${offline.length}</div>`;
-            offline.forEach(m => cat.appendChild(this.createMemberElement(m)));
-            container.appendChild(cat);
+            const offlineHeader = document.createElement('div');
+            offlineHeader.className = 'members-section-title members-section-offline';
+            offlineHeader.textContent = `OFFLINE — ${offline.length}`;
+            container.appendChild(offlineHeader);
+            offline.forEach(m => container.appendChild(this.createMemberElement(m, false)));
         }
+
         if (this.members.length === 0) {
-            container.innerHTML = '<div class="empty-state"><p class="empty-state-description" style="padding:16px">No members found</p></div>';
+            container.innerHTML = '<div class="members-empty">Nenhum membro</div>';
         }
     }
 
-    createMemberElement(member) {
+    createMemberElement(member, isOnline) {
         const item = document.createElement('div');
-        item.className = 'member-item';
-        item.dataset.userId = member.user_id || member.id;
-        const status = member.status || member.presence?.status || 'online';
+        item.className = 'member-item' + (isOnline ? ' member-item-online' : '');
+        const userId = member.user_id || member.id;
+        item.dataset.userId = userId;
         const name = member.nickname || member.username || member.display_name || 'User';
-        const avatarLetter = name.charAt(0).toUpperCase();
-        const roleColor = member.role_color || (member.roles?.length ? '#FFD700' : '');
-        const roleName = member.role_name || (member.roles?.length ? member.roles[0] : '');
+        const initials = (name.slice(0, 2).toUpperCase().replace(/\s/g, '') || name.charAt(0).toUpperCase() || 'U').slice(0, 2);
+        const status = member.status || member.presence?.status || 'online';
         item.innerHTML = `
-            <div class="member-avatar ${status}">
-                ${member.avatar ? `<img src="${this.escapeHtml(member.avatar)}" alt="${this.escapeHtml(name)}">` : `<span>${avatarLetter}</span>`}
+            <div class="member-avatar member-avatar-yellow ${isOnline ? status : 'offline'}">
+                ${member.avatar ? `<img src="${this.escapeHtml(member.avatar)}" alt="${this.escapeHtml(name)}">` : `<span>${this.escapeHtml(initials)}</span>`}
             </div>
-            <span class="member-name" ${roleColor ? `style="color:${roleColor}"` : ''}>${this.escapeHtml(name)}</span>
-            ${roleName ? `<span class="member-role-badge" style="background:${roleColor || '#FFD700'}20;color:${roleColor || '#FFD700'}">${this.escapeHtml(roleName)}</span>` : ''}
+            <span class="member-name">${this.escapeHtml(name)}</span>
+            <div class="member-item-actions">
+                <button type="button" class="member-action-btn" data-action="call" title="Chamar" aria-label="Chamar"><i class="fas fa-phone"></i></button>
+                <button type="button" class="member-action-btn" data-action="add-friend" title="Adicionar amigo" aria-label="Adicionar amigo"><i class="fas fa-user-plus"></i></button>
+            </div>
         `;
-        item.addEventListener('click', e => this.showProfileCard(member, e));
+        item.querySelector('.member-avatar, .member-name').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.showProfileCard(member, e);
+        });
+        item.querySelector('[data-action="call"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this._memberActionCall(userId, name);
+        });
+        item.querySelector('[data-action="add-friend"]').addEventListener('click', (e) => {
+            e.stopPropagation();
+            this._memberActionAddFriend(userId, name);
+        });
         return item;
+    }
+
+    async _memberActionCall(userId, username) {
+        if (!userId) return;
+        try {
+            const channel = await API.DM.create(userId);
+            this.showToast(`Abrir conversa com ${username} para chamada.`, 'info');
+            if (this.currentChannel?.id !== channel?.id) {
+                document.getElementById('friends-view')?.classList?.add('hidden');
+                document.getElementById('messages-container').style.display = '';
+                document.querySelector('.message-input-container').style.display = '';
+                this.currentChannel = channel;
+                if (channel?.id && this.gateway) this.gateway.subscribeChannel(channel.id);
+                this._renderDMChat(channel);
+                this._updateChannelHeaderForContext();
+            }
+        } catch (err) {
+            this.showToast(err.message || 'Não foi possível abrir conversa', 'error');
+        }
+    }
+
+    async _memberActionAddFriend(userId, displayName) {
+        const username = displayName || (this.members.find(m => String(m.user_id || m.id) === String(userId))?.username) || userId;
+        try {
+            await API.Friend.add(username);
+            this.showToast(`Pedido de amizade enviado para ${username}`, 'success');
+        } catch (err) {
+            this.showToast(err.message || 'Falha ao adicionar amigo', 'error');
+        }
     }
 
     showProfileCard(member, e) {
@@ -3518,6 +3590,10 @@ class LibertyApp {
             item.addEventListener('click', () => {
                 const section = item.dataset.section;
                 if (section === 'logout') {
+                    if (this._activityPingInterval) {
+                        clearInterval(this._activityPingInterval);
+                        this._activityPingInterval = null;
+                    }
                     API.Auth.logout();
                     window.location.reload();
                     return;

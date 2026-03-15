@@ -152,10 +152,23 @@ const UserAPI = {
     }
 };
 
-// Ranking API — quem mais fica e comenta
+// Ranking API — By Activity + By Content (XP)
 const RankingAPI = {
-    async list(limit = 20) {
+    async list(limit = 10) {
         return apiRequest(`/ranking?limit=${limit}`);
+    }
+};
+
+// Activity API — ping para ranking "By Activity" (tempo em app)
+const ActivityAPI = {
+    async ping() {
+        const token = getStoredToken();
+        if (!token) return;
+        await fetch(`${API_BASE}/activity/ping`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).catch(() => {});
     }
 };
 
@@ -475,6 +488,7 @@ window.API = {
     DM: DMAPI,
     Friend: FriendAPI,
     Ranking: RankingAPI,
+    Activity: ActivityAPI,
     Reaction: ReactionAPI,
     Pin: PinAPI,
     Ban: BanAPI
