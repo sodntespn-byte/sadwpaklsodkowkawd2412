@@ -637,7 +637,7 @@ class LibertyApp {
                 created_at: msg.created_at || msg.timestamp,
             };
             if (chId === this.currentChannel?.id) {
-                this.addMessage(normalized, true);
+                this.addMessage(normalized, true, true);
                 this.scrollToBottom();
             } else {
                 this.unreadChannels.add(chId);
@@ -2499,7 +2499,7 @@ class LibertyApp {
         return `hsl(${h % 360}, 55%, 65%)`;
     }
 
-    addMessage(message, scroll = true) {
+    addMessage(message, scroll = true, isJustSent = false) {
         const container = document.getElementById('messages-list');
         const welcomeEl = container.querySelector('.welcome-message');
         if (welcomeEl && !container.querySelector('.message-group')) welcomeEl.style.display = 'none';
@@ -2520,7 +2520,7 @@ class LibertyApp {
         const barColor = this._authorColor(authorName);
 
         const messageEl = document.createElement('div');
-        messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
+        messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '') + (isJustSent ? ' message-just-sent' : '');
         messageEl.dataset.message = message.id;
         messageEl.dataset.author = authorName;
         if (authorId) messageEl.dataset.authorId = String(authorId);
@@ -2586,6 +2586,7 @@ class LibertyApp {
 
         container.appendChild(messageEl);
         if (scroll) this.scrollToBottom();
+        if (isJustSent) setTimeout(() => messageEl.classList.remove('message-just-sent'), 400);
     }
 
     startEditMessage(messageId, content) {
@@ -2776,7 +2777,7 @@ class LibertyApp {
                     author_id: msg.author_id,
                     created_at: msg.created_at || msg.timestamp,
                 };
-                this.addMessage(normalized, true);
+                this.addMessage(normalized, true, true);
                 this.scrollToBottom();
             } else {
                 await this.loadMessages(channelId);

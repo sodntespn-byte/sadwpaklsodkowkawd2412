@@ -1198,47 +1198,56 @@ a:hover {
     margin-left: var(--spacing-xs);
 }
 
-/* ── Message groups (Discord-style: avatar à esquerda, mesmo autor agrupado) ── */
+/* ── Message groups: design limpo (avatar à esquerda, nome + hora na mesma linha, texto abaixo) ── */
 .message-group {
     display: flex;
-    gap: 0;
-    padding: 1px 16px 1px 0;
-    margin-left: 16px;
-    border-radius: 4px;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 6px 12px 10px 0;
+    margin-bottom: 2px;
+    border-radius: 6px;
     transition: background 0.15s ease;
     position: relative;
     min-height: 1.5em;
 }
 .message-group:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(255, 255, 255, 0.03);
+}
+.message-group:hover .message-actions {
+    opacity: 1;
+    visibility: visible;
 }
 .message-group-bar {
     position: absolute;
     left: 0;
-    top: 0;
-    bottom: 0;
+    top: 8px;
+    bottom: 8px;
     width: 3px;
     border-radius: 9999px;
-    opacity: 0.85;
+    opacity: 0.6;
 }
+.message-group .message-avatar,
 .message-group-avatar {
     width: 40px;
     height: 40px;
+    min-width: 40px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 16px;
     font-weight: 700;
-    color: rgba(0, 0, 0, 0.75);
+    color: var(--text-primary);
+    background: var(--dark-gray);
     flex-shrink: 0;
-    margin-right: 16px;
-    margin-top: 2px;
+    overflow: hidden;
 }
+.message-group .message-avatar span,
 .message-group-avatar span {
-    font-size: 18px;
-    font-weight: 700;
+    font-size: 17px;
+    font-weight: 600;
 }
+.message-group .message-avatar img,
 .message-group-avatar img,
 .message-group-avatar .message-avatar-img {
     width: 100%;
@@ -1247,27 +1256,38 @@ a:hover {
     border-radius: 50%;
     display: block;
 }
-.message-group--continuation .message-group-avatar {
+.message-group--continuation .message-group-bar {
+    display: none;
+}
+.message-group--continuation .message-avatar {
     visibility: hidden;
     width: 40px;
     min-width: 40px;
-    margin-right: 16px;
+    margin-right: 0;
 }
 .message-group-body {
     flex: 1;
     min-width: 0;
-    padding-left: 0;
+}
+.message-group .message-content {
+    flex: 1;
+    min-width: 0;
 }
 .message-group .message-header {
     display: flex;
     align-items: baseline;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 2px;
 }
+.message-group .message-author,
 .message-group .message-username {
-    font-size: 1rem;
+    font-size: 15px;
     font-weight: 600;
     color: var(--text-primary);
+}
+.message-group .message-author.self {
+    color: var(--primary-yellow);
 }
 .message-group .message-timestamp {
     font-size: 12px;
@@ -1275,11 +1295,33 @@ a:hover {
     flex-shrink: 0;
     font-weight: 400;
 }
-.message-group .message-content {
-    font-size: 1rem;
-    line-height: 1.375;
+.message-group .message-text {
+    font-size: 14px;
+    line-height: 1.5;
     word-break: break-word;
     color: var(--text-primary);
+    padding-left: 0;
+}
+.message-group .message-text a {
+    color: var(--primary-yellow);
+    text-decoration: none;
+}
+.message-group .message-text a:hover {
+    text-decoration: underline;
+}
+/* Animação suave quando uma nova mensagem aparece (tempo real) */
+.message-group.message-just-sent {
+    animation: messageAppear 0.35s ease-out;
+}
+@keyframes messageAppear {
+    from {
+        opacity: 0.6;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Ações de mensagem (aparece no hover) */
