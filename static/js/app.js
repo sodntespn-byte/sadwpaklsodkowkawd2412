@@ -2134,7 +2134,7 @@ class LibertyApp {
         if (addSection) addSection.classList.add('hidden');
         if (searchWrapper) searchWrapper.style.display = 'none';
         if (!friendsList) return;
-        friendsList.innerHTML = '<div class="ranking-loading" style="padding:24px;text-align:center;color:var(--text-muted)">A carregar ranking…</div>';
+        friendsList.innerHTML = '<div class="ranking-loading"><i class="fas fa-trophy"></i><span>A carregar ranking…</span></div>';
         this._updateUserControlsVoiceVisibility();
         try {
             const data = await API.Ranking.list(10);
@@ -2142,44 +2142,58 @@ class LibertyApp {
             const byContent = data?.by_content || [];
             const renderRankRow = (row, type) => {
                 const name = (row.username || 'User').trim();
-                const displayName = name.slice(0, 2).toUpperCase().replace(/\s/g, '') || 'U';
+                const initial = (name.charAt(0) || 'U').toUpperCase();
                 const progress = type === 'activity' ? this._rankingActivityProgress(row.minutes) : this._rankingXpProgress(row.xp);
-                const levelLabel = row.level != null && row.level > 0 ? row.level : 'UNKNOWN';
+                const pct = Math.max(8, Math.min(100, progress));
+                const levelLabel = row.level != null && row.level > 0 ? row.level : '—';
                 const stat = type === 'activity'
                     ? `${this._formatActivityTime(row.minutes || 0)} · Nível ${levelLabel}`
-                    : `${row.xp || 0} XP · Nível ${levelLabel}`;
-                return `<div class="ranking-item" data-user-id="${this.escapeHtml(row.id)}">
-                    <span class="ranking-item-rank">#${row.rank}</span>
-                    <div class="ranking-bar-wrap">
-                        <div class="ranking-bar-fill" style="width:${Math.max(12, progress)}%">
-                            <span class="ranking-bar-name">${this.escapeHtml(displayName)}</span>
-                        </div>
+                    : `${(row.xp || 0).toLocaleString()} XP · Nível ${levelLabel}`;
+                const rankClass = row.rank === 1 ? 'rank-1' : row.rank === 2 ? 'rank-2' : row.rank === 3 ? 'rank-3' : '';
+                return `<div class="ranking-row ${rankClass}" data-user-id="${this.escapeHtml(row.id)}" data-rank="${row.rank}">
+                    <div class="ranking-row-rank">${row.rank}</div>
+                    <div class="ranking-row-avatar" aria-hidden="true">${this.escapeHtml(initial)}</div>
+                    <div class="ranking-row-info">
+                        <span class="ranking-row-name">${this.escapeHtml(name)}</span>
+                        <span class="ranking-row-stat">${stat}</span>
                     </div>
-                    <div class="ranking-bar-detail">${this.escapeHtml(name)} ${stat}</div>
+                    <div class="ranking-row-bar-wrap">
+                        <div class="ranking-row-bar-fill" style="width:${pct}%"></div>
+                    </div>
                 </div>`;
             };
             const html = `
                 <div class="ranking-view">
-                    <div class="ranking-header">
-                        <i class="fas fa-medal ranking-icon" aria-hidden="true"></i>
-                        <h2>LIBERTY Ranking</h2>
-                        <p>Community activity and levels</p>
-                    </div>
+                    <header class="ranking-hero">
+                        <div class="ranking-hero-icon" aria-hidden="true"><i class="fas fa-trophy"></i></div>
+                        <h1 class="ranking-hero-title">LIBERTY Ranking</h1>
+                        <p class="ranking-hero-desc">Atividade e níveis da comunidade</p>
+                    </header>
                     <div class="ranking-tables">
-                        <div class="ranking-table">
-                            <h3><i class="fas fa-clock" aria-hidden="true"></i> By Activity</h3>
-                            <p class="ranking-desc">Time in app (incl. background). 5 min → Level 1, each level +20%</p>
-                            <div class="ranking-list">
-                                ${byActivity.length ? byActivity.map(r => renderRankRow(r, 'activity')).join('') : '<div class="ranking-empty">Ainda não há atividade.</div>'}
+                        <section class="ranking-card">
+                            <div class="ranking-card-head">
+                                <span class="ranking-card-icon" aria-hidden="true"><i class="fas fa-clock"></i></span>
+                                <div>
+                                    <h2 class="ranking-card-title">Por atividade</h2>
+                                    <p class="ranking-card-desc">Tempo em app. 5 min → Nível 1, +20% por nível</p>
+                                </div>
                             </div>
-                        </div>
-                        <div class="ranking-table">
-                            <h3><i class="fas fa-star" aria-hidden="true"></i> By Content (XP)</h3>
-                            <p class="ranking-desc">1 char = 1 XP. Files = 2.5x size. 500 XP → Level 1, each level +20%</p>
                             <div class="ranking-list">
-                                ${byContent.length ? byContent.map(r => renderRankRow(r, 'content')).join('') : '<div class="ranking-empty">Ainda não há conteúdo.</div>'}
+                                ${byActivity.length ? byActivity.map(r => renderRankRow(r, 'activity')).join('') : '<div class="ranking-empty"><i class="fas fa-inbox"></i><span>Ainda não há atividade.</span></div>'}
                             </div>
-                        </div>
+                        </section>
+                        <section class="ranking-card">
+                            <div class="ranking-card-head">
+                                <span class="ranking-card-icon" aria-hidden="true"><i class="fas fa-bolt"></i></span>
+                                <div>
+                                    <h2 class="ranking-card-title">Por conteúdo (XP)</h2>
+                                    <p class="ranking-card-desc">1 char = 1 XP. 500 XP → Nível 1, +20% por nível</p>
+                                </div>
+                            </div>
+                            <div class="ranking-list">
+                                ${byContent.length ? byContent.map(r => renderRankRow(r, 'content')).join('') : '<div class="ranking-empty"><i class="fas fa-inbox"></i><span>Ainda não há conteúdo.</span></div>'}
+                            </div>
+                        </section>
                     </div>
                 </div>`;
             friendsList.innerHTML = html;
