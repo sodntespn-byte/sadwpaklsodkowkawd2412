@@ -9,8 +9,114 @@ import helmet from 'helmet';
 import bcrypt from 'bcrypt';
 import { Server as SocketIOServer } from 'socket.io';
 import db from './db/index.js';
-import { init as dbInit } from './db/init.js';
 import * as auth from './auth.js';
+
+// Schema PostgreSQL inlined para deploy (evita dependência de db/init.js e db/schema.sql no runtime)
+const LIBERTY_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS users (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  username     VARCHAR(32) NOT NULL UNIQUE,
+  email        VARCHAR(255) UNIQUE,
+  password_hash VARCHAR(255),
+  avatar_url   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE TABLE IF NOT EXISTS servers (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       VARCHAR(100) NOT NULL,
+  owner_id   UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS chats (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       VARCHAR(100),
+  type       VARCHAR(20) NOT NULL DEFAULT 'channel' CHECK (type IN ('channel', 'dm', 'group_dm')),
+  server_id  UUID REFERENCES servers(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_chats_server ON chats(server_id);
+CREATE INDEX IF NOT EXISTS idx_chats_type ON chats(type);
+CREATE TABLE IF NOT EXISTS chat_members (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chat_id   UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role      VARCHAR(20) NOT NULL DEFAULT 'member',
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(chat_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_chat_members_chat ON chat_members(chat_id);
+CREATE INDEX IF NOT EXISTS idx_chat_members_user ON chat_members(user_id);
+CREATE TABLE IF NOT EXISTS messages (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chat_id    UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+  content    TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(chat_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS group_members (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  chat_id   UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(chat_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_group_members_chat ON group_members(chat_id);
+CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
+CREATE TABLE IF NOT EXISTS friendships (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  friend_id  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status     VARCHAR(20) NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, friend_id)
+);
+CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
+CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id);
+`;
+
+async function dbInit() {
+  if (!db.isConfigured() || !db.isConnected()) return;
+  const sql = LIBERTY_SCHEMA_SQL.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--[^\n]*/g, '').trim();
+  const statements = sql.split(';').map((s) => s.trim()).filter(Boolean);
+  let applied = 0;
+  for (const stmt of statements) {
+    if (!stmt.toUpperCase().startsWith('CREATE')) continue;
+    try {
+      await db.query(stmt + ';');
+      applied++;
+    } catch (err) {
+      if (err.code === '42P07') applied++;
+      else console.warn('[LIBERTY] Schema statement falhou:', err.message, '\n', stmt.slice(0, 60) + '...');
+    }
+  }
+  try {
+    await db.query(`ALTER TABLE chats DROP CONSTRAINT IF EXISTS chats_type_check`);
+    await db.query(`ALTER TABLE chats ADD CONSTRAINT chats_type_check CHECK (type IN ('channel', 'dm', 'group_dm'))`);
+  } catch (err) {
+    if (err.code !== '42704' && err.code !== '42P01') console.warn('[LIBERTY] Migração chats_type_check:', err.message);
+  }
+  try {
+    await db.query(`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`);
+  } catch (err) {
+    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.password_hash:', err.message);
+  }
+  try {
+    await db.query(`ALTER TABLE users ALTER COLUMN email DROP NOT NULL`);
+  } catch (err) {
+    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.email:', err.message);
+  }
+  try {
+    await db.query(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
+  } catch (err) {
+    if (err.code !== '42701') console.warn('[LIBERTY] Migração users.avatar_url:', err.message);
+  }
+  console.log('[LIBERTY] Schema PostgreSQL aplicado (' + applied + ' statements)');
+}
 import * as ws from './ws.js';
 
 // Diretórios básicos
