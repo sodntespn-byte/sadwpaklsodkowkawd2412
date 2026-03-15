@@ -74,8 +74,9 @@
 .profile-card-btn:disabled{opacity:.6;cursor:default}
 .profile-card-close{width:100%;padding:10px 16px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text-primary);font-size:14px;cursor:pointer;font-family:inherit}
 .profile-card-close:hover{background:var(--medium-gray);border-color:var(--primary-yellow)}
-.profile-card-full{pointer-events:auto;align-items:center;justify-content:center;padding:24px}
+.profile-card-full{pointer-events:auto!important;align-items:center;justify-content:center;padding:24px}
 .profile-card-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:0}
+.profile-card-modal.profile-card-full{pointer-events:auto!important}
 .profile-card-full .profile-card-modal-inner{position:relative;z-index:1;display:flex;max-width:90vw;width:720px;max-height:85vh;overflow:hidden;border-radius:16px;text-align:left;padding:0}
 .profile-card-two-panels{background:rgba(24,21,18,.98);border:1px solid rgba(255,215,0,.2);box-shadow:0 0 60px rgba(255,215,0,.12)}
 .profile-card-close-btn{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;transition:all .15s}
@@ -118,7 +119,7 @@
 .player-banner-banner{height:120px;background:linear-gradient(135deg,var(--primary-yellow) 0%,var(--dark-yellow) 50%,#b8860b 100%);background-size:cover;background-position:center;position:relative}
 .player-banner-banner::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(18,16,14,.6) 100%)}
 .player-banner-avatar-wrap{text-align:center;margin-top:-52px;position:relative;z-index:1;padding:0 24px}
-.player-banner-avatar{width:100px;height:100px;margin:0 auto;border-radius:50%;border:4px solid rgba(18,16,14,.98);background:var(--dark-gray);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:var(--text-secondary);overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.player-banner-avatar{position:relative;width:100px;height:100px;margin:0 auto;border-radius:50%;border:4px solid rgba(18,16,14,.98);background:var(--dark-gray);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:var(--text-secondary);overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4)}
 .player-banner-avatar img{width:100%;height:100%;object-fit:cover}
 .player-banner-avatar .profile-card-online-dot{position:absolute;bottom:6px;right:6px;width:16px;height:16px;border-radius:50%;border:3px solid rgba(18,16,14,.98)}
 .player-banner-body{padding:16px 24px 24px;text-align:center;flex:1;overflow-y:auto}
@@ -3488,8 +3489,22 @@ class LibertyApp {
                 </div>
             </div>
         `;
-        if (!overlay) return;
+        let overlay = document.getElementById('modal-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'modal-overlay';
+            overlay.className = 'modal-overlay';
+            overlay.setAttribute('role', 'presentation');
+            overlay.addEventListener('click', e => {
+                if (e.target.id === 'modal-overlay' || e.target === overlay) {
+                    this.hideProfileCard();
+                    this.hideModal();
+                }
+            });
+            document.body.appendChild(overlay);
+        }
         overlay.classList.remove('hidden');
+        overlay.style.display = 'flex';
         overlay.appendChild(card);
         this._profileCard = card;
 
