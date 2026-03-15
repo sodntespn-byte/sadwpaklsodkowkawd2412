@@ -1715,30 +1715,45 @@ async function start() {
         });
       }
       byActivityList.sort((a, b) => b.minutes - a.minutes);
-      const by_activity = byActivityList.slice(0, limit).map((u, i) => ({
+      let by_activity = byActivityList.slice(0, limit).map((u, i) => ({
         rank: i + 1,
         id: u.id,
         username: u.username,
         minutes: u.minutes,
         level: u.level,
+        avatar_url: null,
       }));
 
       const messagesByChannel = await getAllMessageLists();
       const xpByUser = computeContentXpByUser(messagesByChannel);
-      const byContentList = Array.from(xpByUser.entries()).map(([id, data]) => ({
+      let byContentList = Array.from(xpByUser.entries()).map(([id, data]) => ({
         id,
         username: data.username || 'User',
         xp: data.xp || 0,
         level: getXpLevel(data.xp || 0),
+        avatar_url: null,
       }));
       byContentList.sort((a, b) => b.xp - a.xp);
-      const by_content = byContentList.slice(0, limit).map((u, i) => ({
+      let by_content = byContentList.slice(0, limit).map((u, i) => ({
         rank: i + 1,
         id: u.id,
         username: u.username,
         xp: u.xp,
         level: u.level,
+        avatar_url: null,
       }));
+
+      const allIds = [...new Set([...by_activity.map((u) => u.id), ...by_content.map((u) => u.id)].filter((id) => id && isUuid(id)))];
+      let avatarByUser = {};
+      if (db.isConfigured() && db.isConnected() && allIds.length > 0) {
+        try {
+          const placeholders = allIds.map((_, i) => `$${i + 1}::uuid`).join(',');
+          const r = await db.query(`SELECT id, avatar_url FROM users WHERE id IN (${placeholders})`, allIds);
+          avatarByUser = Object.fromEntries((r.rows || []).map((row) => [String(row.id), row.avatar_url || null]));
+        } catch (_) {}
+      }
+      by_activity = by_activity.map((u) => ({ ...u, avatar_url: avatarByUser[u.id] || null }));
+      by_content = by_content.map((u) => ({ ...u, avatar_url: avatarByUser[u.id] || null }));
 
       return res.status(200).json({ by_activity, by_content });
     } catch (err) {

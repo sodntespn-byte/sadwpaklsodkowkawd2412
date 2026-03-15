@@ -592,14 +592,21 @@ class LibertyApp {
         }
     }
 
+    _refreshDMListSidebar() {
+        const dmList = document.getElementById('dm-list');
+        const navArea = document.querySelector('.home-nav');
+        if (dmList) {
+            dmList.innerHTML = '';
+            this._loadDMList(dmList, navArea, { mergeFriends: true });
+        }
+    }
+
     _refreshUIAfterConnect() {
         requestAnimationFrame(() => {
             this.updateUserPanel();
             this.renderServers();
             if (this.isHomeView) {
-                const dmList = document.getElementById('dm-list');
-                const navArea = document.querySelector('.home-nav');
-                if (dmList && navArea) { dmList.innerHTML = ''; this._loadDMList(dmList, navArea, { mergeFriends: true }); }
+                this._refreshDMListSidebar();
                 this.renderFriendsView(this.currentFriendsTab || 'online').catch(() => {});
             }
             const channelList = document.getElementById('channel-list');
@@ -979,6 +986,7 @@ class LibertyApp {
             if (document.getElementById('friends-view')?.classList.contains('hidden') === false) {
                 this.renderFriendsView('pending').catch(() => {});
             }
+            this._refreshDMListSidebar();
         });
         g.on('friendship_pending_sent', () => {
             if (document.getElementById('friends-view')?.classList.contains('hidden') === false) {
@@ -991,14 +999,7 @@ class LibertyApp {
             if (document.getElementById('friends-view')?.classList.contains('hidden') === false) {
                 this.renderFriendsView('all').catch(() => {});
             }
-            // Atualizar lista de Direct Messages para o novo amigo aparecer (com merge de amigos sem DM)
-            const homeContainer = document.getElementById('home-sidebar-content');
-            const dmList = homeContainer && homeContainer.querySelector('#dm-list');
-            const navArea = homeContainer && homeContainer.querySelector('.home-nav');
-            if (dmList) {
-                dmList.innerHTML = '';
-                this._loadDMList(dmList, navArea, { mergeFriends: true });
-            }
+            this._refreshDMListSidebar();
         });
         this._setupVoiceCallHandlers();
         this._setupVoiceCallButton();
@@ -1887,12 +1888,7 @@ class LibertyApp {
                 const channel = await API.DM.createGroup(name, ids);
                 this.dmChannels.push(channel);
                 closeModal();
-                const dmList = document.getElementById('dm-list');
-                const navArea = document.querySelector('.home-nav');
-                if (dmList) {
-                    dmList.innerHTML = '';
-                    this._loadDMList(dmList, navArea, { mergeFriends: true });
-                }
+                this._refreshDMListSidebar();
                 this.showToast('Group created.', 'success');
             } catch (err) {
                 this.showToast(err.message || 'Failed to create group.', 'error');
@@ -2039,6 +2035,7 @@ class LibertyApp {
                         await API.Friend.accept(relId);
                         this.showToast('Friend request accepted!', 'success');
                         this.renderFriendsView(tab);
+                        this._refreshDMListSidebar();
                     } else if ((action === 'Deny' || action === 'Cancel' || action === 'Unblock') && relId) {
                         await API.Friend.remove(relId);
                         this.showToast(action === 'Unblock' ? 'User unblocked' : 'Request removed', 'success');
@@ -2064,6 +2061,7 @@ class LibertyApp {
                                 if ((this.currentChannel?.room || channel?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || channel.id);
                                 this._renderDMChat(channel);
                                 if (channel.id) try { history.replaceState({}, '', `/channels/@me/${channel.id}`); } catch (_) {}
+                                this._refreshDMListSidebar();
                             } catch (err) {
                                 this.showToast(err.message || 'Não foi possível abrir a conversa', 'error');
                             }
@@ -2143,6 +2141,7 @@ class LibertyApp {
             const renderRankRow = (row, type) => {
                 const name = (row.username || 'User').trim();
                 const initial = (name.charAt(0) || 'U').toUpperCase();
+                const avatarUrl = (row.avatar_url || '').trim();
                 const progress = type === 'activity' ? this._rankingActivityProgress(row.minutes) : this._rankingXpProgress(row.xp);
                 const pct = Math.max(8, Math.min(100, progress));
                 const levelLabel = row.level != null && row.level > 0 ? row.level : '—';
@@ -2150,9 +2149,12 @@ class LibertyApp {
                     ? `${this._formatActivityTime(row.minutes || 0)} · Nível ${levelLabel}`
                     : `${(row.xp || 0).toLocaleString()} XP · Nível ${levelLabel}`;
                 const rankClass = row.rank === 1 ? 'rank-1' : row.rank === 2 ? 'rank-2' : row.rank === 3 ? 'rank-3' : '';
+                const avatarHtml = avatarUrl
+                    ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none">${this.escapeHtml(initial)}</span>`
+                    : `<span>${this.escapeHtml(initial)}</span>`;
                 return `<div class="ranking-row ${rankClass}" data-user-id="${this.escapeHtml(row.id)}" data-rank="${row.rank}">
                     <div class="ranking-row-rank">${row.rank}</div>
-                    <div class="ranking-row-avatar" aria-hidden="true">${this.escapeHtml(initial)}</div>
+                    <div class="ranking-row-avatar" aria-hidden="true">${avatarHtml}</div>
                     <div class="ranking-row-info">
                         <span class="ranking-row-name">${this.escapeHtml(name)}</span>
                         <span class="ranking-row-stat">${stat}</span>
@@ -3543,6 +3545,7 @@ class LibertyApp {
                 if ((this.currentChannel?.room || channel?.id) && this.gateway) this.gateway.subscribeChannel(this.currentChannel.room || channel.id);
                 this._renderDMChat(channel);
                 this._updateChannelHeaderForContext();
+                this._refreshDMListSidebar();
             }
         } catch (err) {
             this.showToast(err.message || 'Não foi possível abrir conversa', 'error');
@@ -3755,6 +3758,7 @@ class LibertyApp {
             this._updateChannelHeaderForContext();
             this.selectChannel(channel?.id);
             this.renderServers();
+            this._refreshDMListSidebar();
         } catch (e) {
             this.showToast(e?.message || 'Não foi possível abrir a conversa.', 'error');
         }
