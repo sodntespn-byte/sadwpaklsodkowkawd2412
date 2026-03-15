@@ -1852,14 +1852,23 @@ class LibertyApp {
         this._updateChannelHeaderForContext();
         this.disconnectVoice();
         try {
-            const data = await API.Server.get(serverId);
+            let data = {};
+            try {
+                data = await API.Server.get(serverId);
+            } catch (_) {
+                data = {};
+            }
             this.channels = data.channels || (data.server && data.server.channels) || [];
+            if (this.channels.length === 0) {
+                const channelList = await API.Channel.list(serverId);
+                this.channels = Array.isArray(channelList) ? channelList : [];
+            }
             this.members = data.members || [];
             this.renderChannels();
             this.renderMembers();
-            const textChannel = this.channels.find(c => c.channel_type === 'text');
+            const textChannel = this.channels.find(c => c.channel_type === 'text' && c.type !== 'category');
             if (textChannel) this.selectChannel(textChannel.id);
-        } catch {
+        } catch (err) {
             this.showToast('Failed to load server', 'error');
         }
     }
