@@ -230,6 +230,19 @@
 .settings-overlay .settings-row-desc{font-size:12px;color:var(--text-muted);margin-top:2px}
 .settings-overlay .settings-profile-card{background:var(--secondary-black);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;border:1px solid rgba(255,215,0,.06)}
 .settings-overlay .settings-profile-banner{height:100px;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow))}
+.settings-overlay .settings-profile-about-empty{color:var(--text-muted);font-style:italic}
+.settings-overlay .settings-voice-select{background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:8px 12px;color:var(--text-primary);font-size:14px;min-width:200px}
+.settings-overlay .settings-voice-range{width:180px;accent-color:var(--primary-yellow)}
+.settings-overlay .settings-voice-test-card{margin-top:20px}
+.settings-overlay .settings-voice-test-row{margin-bottom:20px}
+.settings-overlay .settings-voice-test-block{padding:16px;background:var(--dark-gray);border-radius:var(--radius-md);border:1px solid rgba(255,255,255,.06)}
+.settings-overlay .settings-voice-level-wrap{margin-bottom:12px}
+.settings-overlay .settings-voice-level-bars{display:flex;align-items:flex-end;gap:4px;height:24px;margin-bottom:6px}
+.settings-overlay .settings-voice-level-bars span{width:8px;height:4px;background:rgba(255,255,255,.2);border-radius:2px;transition:height .05s,background .1s}
+.settings-overlay .settings-voice-level-bars span.active{height:100%;background:var(--status-online)}
+.settings-overlay .settings-voice-level-label{font-size:12px;color:var(--text-muted)}
+.settings-overlay .settings-voice-video-preview{width:100%;max-width:400px;aspect-ratio:16/10;background:#000;border-radius:var(--radius-md);overflow:hidden;margin-bottom:8px}
+.settings-overlay .settings-voice-video-preview video{width:100%;height:100%;object-fit:contain}
 .settings-overlay .settings-profile-info{padding:0 16px 16px;position:relative}
 .settings-overlay .settings-profile-avatar{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:var(--primary-black);margin-top:-40px;border:6px solid var(--secondary-black);position:relative;overflow:hidden;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow))}
 .settings-overlay .settings-profile-details{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
@@ -302,7 +315,7 @@
 .friends-tab.add-friend{background:rgba(67,160,71,.15);color:var(--status-online)}
 .friends-tab.add-friend:hover{background:rgba(67,160,71,.25)}
 .friends-list{flex:1;overflow-y:auto;padding:8px 16px}
-.friend-item{display:flex;align-items:center;gap:12px;padding:10px 8px;border-radius:var(--radius-md);border-top:1px solid rgba(255,255,255,.03);cursor:pointer;transition:background .15s}
+.friend-item{display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:var(--radius-md);border-top:1px solid rgba(255,255,255,.03);cursor:pointer;transition:background .15s;min-height:48px;box-sizing:border-box}
 .friend-item:hover{background:var(--dark-gray)}
 .friend-item-avatar{width:36px;height:36px;border-radius:50%;background:var(--medium-gray);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--text-secondary);position:relative;flex-shrink:0}
 .friend-item-avatar::after{content:'';position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--primary-black)}
@@ -340,21 +353,21 @@
 .message-edit-actions a:hover{text-decoration:underline}
 .server-dropdown{position:absolute;top:calc(var(--header-height) + 2px);left:0;width:220px;background:rgba(24,21,18,.96);backdrop-filter:blur(20px);border:1px solid rgba(255,215,0,.12);border-radius:var(--radius-lg);box-shadow:var(--glass-shadow);z-index:200;padding:6px 0;animation:contextMenuIn .15s var(--ease-out-expo)}
 .btn-icon.muted{color:var(--error)!important;background:rgba(229,57,53,.12)!important}
-.friends-header-tabs{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
-.friends-header-tab{padding:6px 12px;border-radius:var(--radius-md);background:transparent;border:none;font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
+.friends-header-tabs{display:flex;gap:10px;align-items:center;flex-wrap:wrap;row-gap:8px}
+.friends-header-tab{padding:8px 14px;border-radius:var(--radius-md);background:transparent;border:none;font-size:14px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap;min-height:36px;display:inline-flex;align-items:center;justify-content:center}
 .friends-header-tab:hover{background:var(--dark-gray);color:var(--text-primary)}
 .friends-header-tab.active{background:rgba(255,215,0,.2);color:var(--primary-yellow)}
 .friends-header-tab.add-friend{background:transparent;color:var(--text-secondary)}
 .friends-header-tab.add-friend:hover,.friends-header-tab.add-friend.active{background:var(--primary-yellow);color:#000}
-.friends-search-wrapper{padding:8px 16px}
-.friends-search-wrapper input{width:100%;padding:8px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit}
+.friends-search-wrapper{padding:12px 16px}
+.friends-search-wrapper input{width:100%;padding:10px 14px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit;min-height:44px;box-sizing:border-box}
 .friends-search-wrapper input:focus{outline:none;border-color:var(--primary-yellow)}
 .friends-search-wrapper i{display:none}
-.friends-add-section{padding:20px 16px}
-.friends-add-section h2{font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:8px}
+.friends-add-section{padding:24px 20px}
+.friends-add-section h2{font-size:17px;font-weight:700;color:var(--text-primary);margin-bottom:10px}
 .friends-add-section p{font-size:14px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5}
-.friends-add-input-wrapper{display:flex;gap:8px}
-.friends-add-input-wrapper input{flex:1;padding:10px 14px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit}
+.friends-add-input-wrapper{display:flex;gap:10px}
+.friends-add-input-wrapper input{flex:1;padding:12px 16px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit;min-height:44px;box-sizing:border-box}
 .friends-add-input-wrapper input:focus{outline:none;border-color:var(--primary-yellow)}
 .friends-view{display:flex;flex-direction:column;flex:1;overflow:hidden}
 .main-content{position:relative}
@@ -693,48 +706,71 @@ class LibertyApp {
   applyBackground() {
     const type = localStorage.getItem('liberty-bg-type') || 'default';
     const body = document.body;
+    const appEl = document.getElementById('app');
     body.style.backgroundImage = '';
     body.style.backgroundSize = '';
     body.style.backgroundPosition = '';
     body.style.backgroundRepeat = '';
     body.style.backgroundAttachment = '';
+    body.style.background = '#000';
+    body.style.backgroundColor = '#000';
+
+    let layer = appEl && appEl.querySelector('.app-bg-layer');
     if (type === 'default') {
-      body.style.background = '#000';
-      body.style.backgroundColor = '#000';
+      if (appEl) appEl.classList.remove('app-has-custom-bg');
+      if (layer) {
+        layer.style.background = '';
+        layer.style.backgroundImage = '';
+        layer.style.backgroundColor = '';
+        layer.style.visibility = 'hidden';
+      }
       return;
     }
+
+    if (!appEl) return;
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.className = 'app-bg-layer';
+      layer.setAttribute('aria-hidden', 'true');
+      appEl.insertBefore(layer, appEl.firstChild);
+    }
+    layer.style.visibility = '';
+    layer.style.backgroundRepeat = 'no-repeat';
+    layer.style.backgroundPosition = 'center';
+    layer.style.backgroundAttachment = 'fixed';
+
     if (type === 'solid') {
       const color = localStorage.getItem('liberty-bg-solid') || '#000000';
-      body.style.background = color;
-      body.style.backgroundColor = color;
-      return;
-    }
-    if (type === 'gradient') {
+      layer.style.background = color;
+      layer.style.backgroundColor = color;
+      layer.style.backgroundImage = '';
+      layer.style.backgroundSize = '';
+    } else if (type === 'gradient') {
       try {
         const g = JSON.parse(localStorage.getItem('liberty-bg-gradient') || '{}');
         const angle = g.angle ?? 135;
         const c1 = g.color1 || '#0d0b09';
         const c2 = g.color2 || '#1a1814';
-        body.style.background = `linear-gradient(${angle}deg, ${c1}, ${c2})`;
-        body.style.backgroundColor = c1;
+        layer.style.background = `linear-gradient(${angle}deg, ${c1}, ${c2})`;
+        layer.style.backgroundColor = c1;
+        layer.style.backgroundImage = '';
+        layer.style.backgroundSize = '';
       } catch (_) {
-        body.style.background = '#000';
-        body.style.backgroundColor = '#000';
+        layer.style.background = '#000';
+        layer.style.backgroundColor = '#000';
       }
-      return;
-    }
-    if (type === 'image') {
+    } else if (type === 'image') {
       const url = (localStorage.getItem('liberty-bg-image') || '').trim();
-      body.style.background = '#000';
-      body.style.backgroundColor = '#000';
+      layer.style.backgroundColor = '#000';
       if (url) {
-        body.style.backgroundImage = `url(${url})`;
-        body.style.backgroundSize = 'cover';
-        body.style.backgroundPosition = 'center';
-        body.style.backgroundRepeat = 'no-repeat';
-        body.style.backgroundAttachment = 'fixed';
+        layer.style.backgroundImage = `url("${String(url).replace(/\\/g, '\\\\').replace(/"/g, '\\22')}")`;
+        layer.style.backgroundSize = 'cover';
+      } else {
+        layer.style.backgroundImage = '';
+        layer.style.backgroundSize = '';
       }
     }
+    appEl.classList.add('app-has-custom-bg');
   }
 
   applyTheme(themeClass) {
@@ -895,25 +931,37 @@ class LibertyApp {
 
   _getAvatarUrl() {
     const u = this.currentUser;
-    const fromUser = u && (u.avatar_url || u.avatar);
-    if (fromUser) return fromUser;
-    try {
-      const local = localStorage.getItem('liberty_avatar_url');
-      if (local && local.trim()) return local.trim();
-    } catch (_) {}
-    return null;
+    let url = (u && (u.avatar_url || u.avatar)) || null;
+    if (!url) {
+      try {
+        const local = localStorage.getItem('liberty_avatar_url');
+        if (local && local.trim()) url = local.trim();
+      } catch (_) {}
+    }
+    if (!url) return null;
+    const bust = this._avatarCacheBuster;
+    const sep = url.includes('?') ? '&' : '?';
+    return bust ? `${url}${sep}_=${bust}` : url;
   }
 
   _updateUserAvatarInUI() {
     this.updateUserPanel();
+    const letter = this.currentUser ? (this.currentUser.username || 'U').charAt(0).toUpperCase() : 'U';
+    const avatarSrc = this._getAvatarUrl();
     const sidebarAvatar = document.querySelector('.settings-sidebar-profile-avatar');
     if (sidebarAvatar && this.currentUser) {
-      const avatarSrc = this._getAvatarUrl();
-      const letter = (this.currentUser.username || 'U').charAt(0).toUpperCase();
       if (avatarSrc) {
         sidebarAvatar.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--primary-black)">${this.escapeHtml(letter)}</span>`;
       } else {
         sidebarAvatar.innerHTML = `<span>${this.escapeHtml(letter)}</span>`;
+      }
+    }
+    const heroPreview = document.querySelector('#settings-avatar-preview');
+    if (heroPreview && this.currentUser) {
+      if (avatarSrc) {
+        heroPreview.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${this.escapeHtml(letter)}</span>`;
+      } else {
+        heroPreview.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(letter)}</span>`;
       }
     }
   }
@@ -2751,7 +2799,7 @@ class LibertyApp {
 
     let bodyHtml = '';
     const headerStyle =
-      'padding:8px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary)';
+      'padding:12px 0 8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary);min-height:1.5em';
 
     if (tab === 'online') {
       const online = friends.filter(f => f.user?.status !== 'offline');
@@ -3148,6 +3196,9 @@ class LibertyApp {
     }
     if (isDM) this._wireDMHeaderVoiceVideoButtons();
     this._updateUserControlsVoiceVisibility();
+    actions?.querySelectorAll('.channel-header-dm-only').forEach(el => {
+      el.style.display = isDM ? '' : 'none';
+    });
   }
 
   _updateUserControlsVoiceVisibility() {
@@ -5727,6 +5778,7 @@ class LibertyApp {
   }
 
   _renderSettingsSection(overlay, type, section) {
+    if (this._voiceTestCleanup) { this._voiceTestCleanup(); }
     const content = overlay.querySelector('#settings-content');
     const sectionRenderers = {
       account: () => {
@@ -5820,29 +5872,46 @@ class LibertyApp {
                     </div>
                 </div>`;
       },
-      profile: () => `<h2 class="settings-page-title">Perfil</h2>
+      profile: () => {
+        const u = this.currentUser;
+        const displayName = u?.username || 'User';
+        const aboutMe = u?.description || '';
+        const bannerUrl = u?.banner_url || '';
+        const profileColor = (typeof localStorage !== 'undefined' && localStorage.getItem('liberty_accent_color')) || '#FFD700';
+        const avatarUrl = this._getAvatarUrl ? this._getAvatarUrl() : (u?.avatar_url || u?.avatar || '');
+        const hasAvatar = !!avatarUrl;
+        const initial = (displayName || 'U').charAt(0).toUpperCase();
+        const avatarPreviewHtml = hasAvatar
+          ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(initial)}</span>`
+          : `<span>${this.escapeHtml(initial)}</span>`;
+        const bannerStyle = bannerUrl ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"` : `style="background:linear-gradient(135deg, ${this.escapeHtml(profileColor)}, ${this.escapeHtml(profileColor)}99)"`;
+        const aboutText = aboutMe ? this.escapeHtml(aboutMe) : 'No bio set yet';
+        const aboutClass = aboutMe ? '' : ' settings-profile-about-empty';
+        return `<h2 class="settings-page-title">Perfil</h2>
                 <div style="display:flex;gap:32px;flex-wrap:wrap">
                     <div style="flex:1;min-width:280px">
                         <div class="settings-card">
-                            <div class="settings-row"><div style="flex:1"><div class="settings-row-label">Display Name</div><input type="text" value="${this.escapeHtml(this.currentUser?.username || 'User')}" style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:8px 12px;color:var(--text-primary);font-size:14px;width:100%;margin-top:8px"></div></div>
-                            <div class="settings-row"><div style="flex:1"><div class="settings-row-label">About Me</div><textarea style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:8px 12px;color:var(--text-primary);font-size:14px;width:100%;height:80px;resize:none;margin-top:8px;font-family:inherit" placeholder="Tell the world about yourself"></textarea></div></div>
-                            <div class="settings-row"><div><div class="settings-row-label">Avatar</div></div><button class="btn btn-primary btn-sm" onclick="app.showToast('Avatar upload coming soon!','info')">Change Avatar</button></div>
-                            <div class="settings-row"><div><div class="settings-row-label">Profile Banner</div></div><button class="btn btn-primary btn-sm" onclick="app.showToast('Banner upload coming soon!','info')">Change Banner</button></div>
-                            <div class="settings-row"><div><div class="settings-row-label">Profile Color</div></div><input type="color" value="#FFD700" style="width:40px;height:30px;border:none;background:transparent;cursor:pointer"></div>
+                            <div class="settings-row"><div style="flex:1"><div class="settings-row-label">Display Name</div><input type="text" id="settings-profile-display-name" value="${this.escapeHtml(displayName)}" maxlength="32" style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:8px 12px;color:var(--text-primary);font-size:14px;width:100%;margin-top:8px;box-sizing:border-box"></div></div>
+                            <div class="settings-row"><div style="flex:1"><div class="settings-row-label">About Me</div><textarea id="settings-profile-about" maxlength="190" style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:8px 12px;color:var(--text-primary);font-size:14px;width:100%;height:80px;resize:none;margin-top:8px;font-family:inherit;box-sizing:border-box" placeholder="Tell the world about yourself">${this.escapeHtml(aboutMe)}</textarea></div></div>
+                            <div class="settings-row" style="align-items:center;gap:12px"><div><div class="settings-row-label">Avatar</div></div><input type="file" id="settings-profile-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none"><button type="button" class="btn btn-primary btn-sm" id="settings-profile-avatar-btn">Change Avatar</button></div>
+                            <div class="settings-row" style="align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><div class="settings-row-label">Profile Banner</div><input type="url" id="settings-profile-banner-url" value="${this.escapeHtml(bannerUrl)}" placeholder="https://exemplo.com/banner.jpg" style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:8px 12px;color:var(--text-primary);font-size:14px;width:100%;margin-top:8px;box-sizing:border-box"></div><button type="button" class="btn btn-primary btn-sm" id="settings-profile-banner-save">Save Banner</button></div>
+                            <div class="settings-row"><div><div class="settings-row-label">Profile Color</div><div class="settings-row-desc">Cor de destaque no perfil</div></div><input type="color" id="settings-profile-color" value="${this.escapeHtml(profileColor)}" style="width:40px;height:30px;border:none;background:transparent;cursor:pointer"></div>
+                            <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn btn-primary" id="settings-profile-save-btn">Guardar alterações</button></div>
                         </div>
                     </div>
                     <div style="width:300px;flex-shrink:0">
                         <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px">Preview</div>
-                        <div class="settings-profile-card">
-                            <div class="settings-profile-banner"></div>
+                        <div class="settings-profile-card" id="settings-profile-preview-card">
+                            <div class="settings-profile-banner" id="settings-profile-preview-banner" ${bannerStyle}></div>
                             <div class="settings-profile-info">
-                                <div class="settings-profile-avatar"><span>${(this.currentUser?.username || 'U').charAt(0).toUpperCase()}</span></div>
-                                <div style="padding:8px 0"><div class="settings-profile-name">${this.escapeHtml(this.currentUser?.username || 'User')}</div><div class="settings-profile-email">Online</div></div>
-                                <div style="padding:12px 0;border-top:1px solid rgba(255,255,255,.06);font-size:12px"><div style="font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">About Me</div><div style="color:var(--text-primary)">No bio set yet</div></div>
+                                <div class="settings-profile-avatar" id="settings-profile-preview-avatar">${avatarPreviewHtml}</div>
+                                <div style="padding:8px 0"><div class="settings-profile-name" id="settings-profile-preview-name">${this.escapeHtml(displayName)}</div><div class="settings-profile-email">Online</div></div>
+                                <div style="padding:12px 0;border-top:1px solid rgba(255,255,255,.06);font-size:12px"><div style="font-weight:700;text-transform:uppercase;color:var(--text-secondary);margin-bottom:4px">About Me</div><div class="settings-profile-about-text${aboutClass}" id="settings-profile-preview-about" style="color:var(--text-primary)">${aboutText}</div></div>
                             </div>
                         </div>
                     </div>
-                </div>`,
+                </div>`;
+      },
       appearance: () => {
         const current = localStorage.getItem('liberty-theme') || 'Dark-theme';
         const border = t => (t === current ? 'var(--primary-yellow)' : 'transparent');
@@ -5910,14 +5979,60 @@ class LibertyApp {
                 <div class="settings-row"><div><div class="settings-row-label">High Contrast</div><div class="settings-row-desc">Increase contrast for better readability</div></div><div class="toggle-switch" onclick="this.classList.toggle('active')"></div></div>
                 <div class="settings-row"><div><div class="settings-row-label">Link Previews</div><div class="settings-row-desc">Show previews of links in chat</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
                 </div>`,
-      voice: () => `<h2>Voice & Video</h2><div class="settings-card">
-                <div class="settings-row"><div><div class="settings-row-label">Input Device</div></div><select style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:6px 10px;color:var(--text-primary);font-size:13px"><option>Default</option><option>Microphone (HD Audio)</option></select></div>
-                <div class="settings-row"><div><div class="settings-row-label">Output Device</div></div><select style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:6px 10px;color:var(--text-primary);font-size:13px"><option>Default</option><option>Speakers (HD Audio)</option></select></div>
-                <div class="settings-row"><div><div class="settings-row-label">Input Volume</div></div><input type="range" min="0" max="100" value="80" style="width:150px"></div>
-                <div class="settings-row"><div><div class="settings-row-label">Output Volume</div></div><input type="range" min="0" max="100" value="100" style="width:150px"></div>
-                <div class="settings-row"><div><div class="settings-row-label">Noise Suppression</div><div class="settings-row-desc">Automatically remove background noise</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
-                <div class="settings-row"><div><div class="settings-row-label">Echo Cancellation</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
-                </div>`,
+      voice: () => {
+        const ns = typeof localStorage !== 'undefined' && localStorage.getItem('liberty_voice_noise_suppression');
+        const ec = typeof localStorage !== 'undefined' && localStorage.getItem('liberty_voice_echo_cancel');
+        const inputVol = typeof localStorage !== 'undefined' && localStorage.getItem('liberty_voice_input_volume');
+        const outputVol = typeof localStorage !== 'undefined' && localStorage.getItem('liberty_voice_output_volume');
+        const noiseSuppression = ns !== 'false' && ns !== '0';
+        const echoCancellation = ec !== 'false' && ec !== '0';
+        const inputVolVal = inputVol != null && inputVol !== '' ? Math.min(100, Math.max(0, parseInt(inputVol, 10))) : 80;
+        const outputVolVal = outputVol != null && outputVol !== '' ? Math.min(100, Math.max(0, parseInt(outputVol, 10))) : 100;
+        return `<h2>Voice & Video</h2>
+                <div class="settings-card">
+                <div class="settings-row"><div><div class="settings-row-label">Input Device</div><div class="settings-row-desc">Microfone para voz</div></div><select id="settings-voice-input-device" class="settings-voice-select"><option value="">A carregar...</option></select></div>
+                <div class="settings-row"><div><div class="settings-row-label">Output Device</div><div class="settings-row-desc">Colunas ou auscultadores</div></div><select id="settings-voice-output-device" class="settings-voice-select"><option value="">A carregar...</option></select></div>
+                <div class="settings-row"><div><div class="settings-row-label">Input Volume</div><div class="settings-row-desc">Ganho do microfone (0-100)</div></div><input type="range" id="settings-voice-input-volume" min="0" max="100" value="${inputVolVal}" class="settings-voice-range"></div>
+                <div class="settings-row"><div><div class="settings-row-label">Output Volume</div><div class="settings-row-desc">Volume de saída (0-100)</div></div><input type="range" id="settings-voice-output-volume" min="0" max="100" value="${outputVolVal}" class="settings-voice-range"></div>
+                <div class="settings-row"><div><div class="settings-row-label">Noise Suppression</div><div class="settings-row-desc">Remover ruído de fundo</div></div><div class="toggle-switch ${noiseSuppression ? 'active' : ''}" id="settings-voice-noise-suppression" role="button" tabindex="0"></div></div>
+                <div class="settings-row"><div><div class="settings-row-label">Echo Cancellation</div><div class="settings-row-desc">Cancelar eco</div></div><div class="toggle-switch ${echoCancellation ? 'active' : ''}" id="settings-voice-echo-cancel" role="button" tabindex="0"></div></div>
+                </div>
+                <div class="settings-card settings-voice-test-card">
+                <h3 style="margin-top:0">Testar dispositivos</h3>
+                <p class="settings-row-desc" style="margin-bottom:16px">Verifique o microfone, a câmara e a partilha de ecrã antes de entrar numa chamada.</p>
+                <div class="settings-voice-test-row">
+                  <div class="settings-voice-test-block">
+                    <div class="settings-row-label" style="margin-bottom:8px"><i class="fas fa-microphone" style="margin-right:6px"></i>Microfone</div>
+                    <div id="settings-voice-mic-level-wrap" class="settings-voice-level-wrap" style="display:none"><div class="settings-voice-level-bars"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div><div class="settings-voice-level-label">Nível: <span id="settings-voice-mic-level-text">0</span>%</div></div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                      <button type="button" class="btn btn-primary btn-sm" id="settings-voice-mic-test-btn">Testar microfone</button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="settings-voice-mic-stop-btn" style="display:none">Parar teste</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-voice-test-row">
+                  <div class="settings-voice-test-block">
+                    <div class="settings-row-label" style="margin-bottom:8px"><i class="fas fa-video" style="margin-right:6px"></i>Câmara</div>
+                    <select id="settings-voice-camera-device" class="settings-voice-select" style="margin-bottom:8px;width:100%"><option value="">A carregar...</option></select>
+                    <div id="settings-voice-camera-preview-wrap" class="settings-voice-video-preview" style="display:none"><video id="settings-voice-camera-preview" playsinline muted autoplay></video></div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+                      <button type="button" class="btn btn-primary btn-sm" id="settings-voice-camera-start-btn">Ver câmara</button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="settings-voice-camera-stop-btn" style="display:none">Parar</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-voice-test-row">
+                  <div class="settings-voice-test-block">
+                    <div class="settings-row-label" style="margin-bottom:8px"><i class="fas fa-desktop" style="margin-right:6px"></i>Partilha de ecrã</div>
+                    <div id="settings-voice-screen-preview-wrap" class="settings-voice-video-preview" style="display:none"><video id="settings-voice-screen-preview" playsinline muted autoplay></video></div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px">
+                      <button type="button" class="btn btn-primary btn-sm" id="settings-voice-screen-test-btn">Testar partilha de ecrã</button>
+                      <button type="button" class="btn btn-secondary btn-sm" id="settings-voice-screen-stop-btn" style="display:none">Parar partilha</button>
+                    </div>
+                  </div>
+                </div>
+                </div>`;
+      },
       'admin-db': () => {
         return `<h2 class="settings-page-title">Base de dados</h2>
                 <p class="settings-row-desc" style="margin-bottom:16px">Estatísticas gerais (apenas administradores).</p>
@@ -6077,6 +6192,7 @@ class LibertyApp {
                   this.currentUser.avatar_url = url;
                   this.currentUser.avatar = url;
                 }
+                this._avatarCacheBuster = Date.now();
                 setPreviewHtml(url);
                 if (avatarUrlInput) avatarUrlInput.value = url;
                 this.showToast('Foto de perfil atualizada!', 'success');
@@ -6132,6 +6248,7 @@ class LibertyApp {
               this.currentUser.avatar_url = u;
               this.currentUser.avatar = u;
             }
+            this._avatarCacheBuster = Date.now();
             setPreviewHtml(u);
             this._updateUserAvatarInUI();
           };
@@ -6251,6 +6368,362 @@ class LibertyApp {
           setTimeout(() => this._doLogout(), 400);
         });
       }
+    }
+    if (section === 'profile' && type === 'user') {
+      const displayNameEl = content.querySelector('#settings-profile-display-name');
+      const aboutEl = content.querySelector('#settings-profile-about');
+      const avatarFileEl = content.querySelector('#settings-profile-avatar-file');
+      const avatarBtn = content.querySelector('#settings-profile-avatar-btn');
+      const bannerUrlEl = content.querySelector('#settings-profile-banner-url');
+      const bannerSaveBtn = content.querySelector('#settings-profile-banner-save');
+      const colorEl = content.querySelector('#settings-profile-color');
+      const saveBtn = content.querySelector('#settings-profile-save-btn');
+      const previewBanner = content.querySelector('#settings-profile-preview-banner');
+      const previewAvatar = content.querySelector('#settings-profile-preview-avatar');
+      const previewName = content.querySelector('#settings-profile-preview-name');
+      const previewAbout = content.querySelector('#settings-profile-preview-about');
+
+      const updateProfilePreview = () => {
+        const name = (displayNameEl && displayNameEl.value || '').trim() || 'User';
+        const about = (aboutEl && aboutEl.value || '').trim();
+        const bannerUrl = (bannerUrlEl && bannerUrlEl.value || '').trim();
+        const color = (colorEl && colorEl.value) || '#FFD700';
+        if (previewName) previewName.textContent = name;
+        if (previewAbout) {
+          previewAbout.textContent = about || 'No bio set yet';
+          previewAbout.classList.toggle('settings-profile-about-empty', !about);
+        }
+        if (previewBanner) {
+          if (bannerUrl) {
+            previewBanner.style.backgroundImage = `url("${bannerUrl.replace(/\\/g, '\\\\').replace(/"/g, '\\22')}")`;
+            previewBanner.style.backgroundSize = 'cover';
+            previewBanner.style.backgroundPosition = 'center';
+          } else {
+            previewBanner.style.backgroundImage = '';
+            previewBanner.style.background = `linear-gradient(135deg, ${color}, ${color}99)`;
+          }
+        }
+        if (previewAvatar && previewAvatar.querySelector('span') && !previewAvatar.querySelector('img')) {
+          previewAvatar.querySelector('span').textContent = (name || 'U').charAt(0).toUpperCase();
+        }
+      };
+
+      if (displayNameEl) displayNameEl.addEventListener('input', updateProfilePreview);
+      if (aboutEl) aboutEl.addEventListener('input', updateProfilePreview);
+      if (bannerUrlEl) bannerUrlEl.addEventListener('input', updateProfilePreview);
+      if (colorEl) colorEl.addEventListener('input', () => {
+        try { localStorage.setItem('liberty_accent_color', colorEl.value); } catch (_) {}
+        updateProfilePreview();
+      });
+
+      if (avatarBtn && avatarFileEl) {
+        avatarBtn.addEventListener('click', () => avatarFileEl.click());
+        avatarFileEl.addEventListener('change', () => {
+          const file = avatarFileEl.files && avatarFileEl.files[0];
+          if (!file || !file.type.startsWith('image/')) {
+            this.showToast('Escolha uma imagem (JPEG, PNG, GIF ou WebP).', 'error');
+            avatarFileEl.value = '';
+            return;
+          }
+          if (file.size > 4 * 1024 * 1024) {
+            this.showToast('Imagem demasiado grande (máx. 4 MB).', 'error');
+            avatarFileEl.value = '';
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = reader.result;
+            if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
+              API.User.uploadAvatar(dataUrl)
+                .then(r => {
+                  const url = r && r.avatar_url ? r.avatar_url : dataUrl;
+                  if (this.currentUser) { this.currentUser.avatar_url = url; this.currentUser.avatar = url; }
+                  this._avatarCacheBuster = Date.now();
+                  this._updateUserAvatarInUI();
+                  if (previewAvatar) {
+                    const letter = (this.currentUser?.username || 'U').charAt(0).toUpperCase();
+                    previewAvatar.innerHTML = `<img src="${this.escapeHtml(this._getAvatarUrl())}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(letter)}</span>`;
+                  }
+                  this.showToast('Avatar atualizado!', 'success');
+                })
+                .catch(e => this.showToast(e.message || 'Erro ao enviar foto', 'error'));
+            } else this.showToast('Faça login para alterar o avatar.', 'info');
+            avatarFileEl.value = '';
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (bannerSaveBtn && bannerUrlEl) {
+        bannerSaveBtn.addEventListener('click', () => {
+          const url = (bannerUrlEl.value || '').trim();
+          if (url && !/^https?:\/\//i.test(url) && !/^\/uploads?\//.test(url)) {
+            this.showToast('URL deve começar por http://, https:// ou /uploads/', 'error');
+            return;
+          }
+          if (this.currentUser) this.currentUser.banner_url = url || null;
+          if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
+            API.User.updateCurrentUser({ banner_url: url || '' })
+              .then(() => {
+                this.showToast(url ? 'Banner atualizado!' : 'Banner removido.', 'success');
+                updateProfilePreview();
+              })
+              .catch(e => this.showToast(e.message || 'Erro ao guardar banner.', 'error'));
+          } else {
+            updateProfilePreview();
+            this.showToast(url ? 'Banner guardado localmente. Faça login para sincronizar.' : 'Banner removido localmente.', 'info');
+          }
+        });
+      }
+
+      const saveProfile = () => {
+        const name = (displayNameEl && displayNameEl.value || '').trim().substring(0, 32);
+        const about = (aboutEl && aboutEl.value || '').trim().substring(0, 190);
+        const color = (colorEl && colorEl.value) || '#FFD700';
+        if (!name) {
+          this.showToast('O nome não pode estar vazio.', 'info');
+          return;
+        }
+        try { localStorage.setItem('liberty_accent_color', color); } catch (_) {}
+        if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
+          const payload = { username: name, description: about || null };
+          API.User.updateCurrentUser(payload)
+            .then(() => {
+              if (this.currentUser) {
+                this.currentUser.username = name;
+                this.currentUser.description = about || null;
+              }
+              this.showToast('Perfil guardado!', 'success');
+              updateProfilePreview();
+              this.updateUserPanel();
+            })
+            .catch(e => this.showToast(e.message || 'Erro ao guardar perfil', 'error'));
+        } else {
+          if (this.currentUser) { this.currentUser.username = name; this.currentUser.description = about || null; }
+          try { localStorage.setItem('liberty_username', name); } catch (_) {}
+          this.showToast('Perfil guardado localmente.', 'success');
+          updateProfilePreview();
+          this.updateUserPanel();
+        }
+      };
+
+      if (saveBtn) saveBtn.addEventListener('click', saveProfile);
+    }
+    if (section === 'voice' && type === 'user') {
+      const inputDeviceSelect = content.querySelector('#settings-voice-input-device');
+      const outputDeviceSelect = content.querySelector('#settings-voice-output-device');
+      const cameraDeviceSelect = content.querySelector('#settings-voice-camera-device');
+      const inputVolumeRange = content.querySelector('#settings-voice-input-volume');
+      const outputVolumeRange = content.querySelector('#settings-voice-output-volume');
+      const noiseSuppressionToggle = content.querySelector('#settings-voice-noise-suppression');
+      const echoCancelToggle = content.querySelector('#settings-voice-echo-cancel');
+      const micTestBtn = content.querySelector('#settings-voice-mic-test-btn');
+      const micStopBtn = content.querySelector('#settings-voice-mic-stop-btn');
+      const micLevelWrap = content.querySelector('#settings-voice-mic-level-wrap');
+      const micLevelText = content.querySelector('#settings-voice-mic-level-text');
+      const cameraStartBtn = content.querySelector('#settings-voice-camera-start-btn');
+      const cameraStopBtn = content.querySelector('#settings-voice-camera-stop-btn');
+      const cameraPreviewWrap = content.querySelector('#settings-voice-camera-preview-wrap');
+      const cameraPreview = content.querySelector('#settings-voice-camera-preview');
+      const screenTestBtn = content.querySelector('#settings-voice-screen-test-btn');
+      const screenStopBtn = content.querySelector('#settings-voice-screen-stop-btn');
+      const screenPreviewWrap = content.querySelector('#settings-voice-screen-preview-wrap');
+      const screenPreview = content.querySelector('#settings-voice-screen-preview');
+
+      let voiceTestMicStream = null;
+      let voiceTestMicAnalyser = null;
+      let voiceTestMicRaf = null;
+      let voiceTestCameraStream = null;
+      let voiceTestScreenStream = null;
+
+      const stopAllVoiceTests = () => {
+        if (voiceTestMicRaf) { cancelAnimationFrame(voiceTestMicRaf); voiceTestMicRaf = null; }
+        if (voiceTestMicStream) { voiceTestMicStream.getTracks().forEach(t => t.stop()); voiceTestMicStream = null; }
+        if (micLevelWrap) micLevelWrap.style.display = 'none';
+        if (micTestBtn) micTestBtn.style.display = '';
+        if (micStopBtn) micStopBtn.style.display = 'none';
+        if (voiceTestCameraStream) { voiceTestCameraStream.getTracks().forEach(t => t.stop()); voiceTestCameraStream = null; }
+        if (cameraPreview) cameraPreview.srcObject = null;
+        if (cameraPreviewWrap) cameraPreviewWrap.style.display = 'none';
+        if (cameraStartBtn) cameraStartBtn.style.display = '';
+        if (cameraStopBtn) cameraStopBtn.style.display = 'none';
+        if (voiceTestScreenStream) { voiceTestScreenStream.getTracks().forEach(t => t.stop()); voiceTestScreenStream = null; }
+        if (screenPreview) screenPreview.srcObject = null;
+        if (screenPreviewWrap) screenPreviewWrap.style.display = 'none';
+        if (screenTestBtn) screenTestBtn.style.display = '';
+        if (screenStopBtn) screenStopBtn.style.display = 'none';
+      };
+
+      const fillDevices = async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+          if (inputDeviceSelect) { inputDeviceSelect.innerHTML = '<option value="">Não suportado</option>'; }
+          if (outputDeviceSelect) { outputDeviceSelect.innerHTML = '<option value="">Não suportado</option>'; }
+          if (cameraDeviceSelect) { cameraDeviceSelect.innerHTML = '<option value="">Não suportado</option>'; }
+          return;
+        }
+        let devices = [];
+        try {
+          devices = await navigator.mediaDevices.enumerateDevices();
+        } catch (e) {
+          this.showToast('Não foi possível listar dispositivos.', 'error');
+        }
+        const audioInputs = devices.filter(d => d.kind === 'audioinput');
+        const audioOutputs = devices.filter(d => d.kind === 'audiooutput');
+        const videoInputs = devices.filter(d => d.kind === 'videoinput');
+        const savedInput = typeof localStorage !== 'undefined' ? localStorage.getItem('liberty_voice_input_device') : '';
+        const savedOutput = typeof localStorage !== 'undefined' ? localStorage.getItem('liberty_voice_output_device') : '';
+        const savedCamera = typeof localStorage !== 'undefined' ? localStorage.getItem('liberty_voice_camera_device') : '';
+
+        const opt = (val, label) => `<option value="${this.escapeHtml(val || '')}">${this.escapeHtml(label || 'Predefinido')}</option>`;
+        if (inputDeviceSelect) {
+          inputDeviceSelect.innerHTML = opt('', 'Predefinido') + audioInputs.map(d => opt(d.deviceId, d.label || `Microfone ${d.deviceId.slice(0, 8)}`)).join('');
+          if (savedInput && audioInputs.some(d => d.deviceId === savedInput)) inputDeviceSelect.value = savedInput;
+        }
+        if (outputDeviceSelect) {
+          outputDeviceSelect.innerHTML = opt('', 'Predefinido') + audioOutputs.map(d => opt(d.deviceId, d.label || `Saída ${d.deviceId.slice(0, 8)}`)).join('');
+          if (savedOutput && audioOutputs.some(d => d.deviceId === savedOutput)) outputDeviceSelect.value = savedOutput;
+        }
+        if (cameraDeviceSelect) {
+          cameraDeviceSelect.innerHTML = opt('', 'Predefinido') + videoInputs.map(d => opt(d.deviceId, d.label || `Câmara ${d.deviceId.slice(0, 8)}`)).join('');
+          if (savedCamera && videoInputs.some(d => d.deviceId === savedCamera)) cameraDeviceSelect.value = savedCamera;
+        }
+      };
+
+      fillDevices();
+
+      if (inputDeviceSelect) inputDeviceSelect.addEventListener('change', () => { try { localStorage.setItem('liberty_voice_input_device', inputDeviceSelect.value || ''); } catch (_) {} });
+      if (outputDeviceSelect) outputDeviceSelect.addEventListener('change', () => { try { localStorage.setItem('liberty_voice_output_device', outputDeviceSelect.value || ''); } catch (_) {} });
+      if (cameraDeviceSelect) cameraDeviceSelect.addEventListener('change', () => { try { localStorage.setItem('liberty_voice_camera_device', cameraDeviceSelect.value || ''); } catch (_) {} });
+      if (inputVolumeRange) inputVolumeRange.addEventListener('input', () => { try { localStorage.setItem('liberty_voice_input_volume', inputVolumeRange.value); } catch (_) {} });
+      if (outputVolumeRange) outputVolumeRange.addEventListener('input', () => { try { localStorage.setItem('liberty_voice_output_volume', outputVolumeRange.value); } catch (_) {} });
+
+      if (noiseSuppressionToggle) {
+        noiseSuppressionToggle.addEventListener('click', () => {
+          noiseSuppressionToggle.classList.toggle('active');
+          try { localStorage.setItem('liberty_voice_noise_suppression', noiseSuppressionToggle.classList.contains('active') ? '1' : '0'); } catch (_) {}
+        });
+      }
+      if (echoCancelToggle) {
+        echoCancelToggle.addEventListener('click', () => {
+          echoCancelToggle.classList.toggle('active');
+          try { localStorage.setItem('liberty_voice_echo_cancel', echoCancelToggle.classList.contains('active') ? '1' : '0'); } catch (_) {}
+        });
+      }
+
+      if (micTestBtn && micStopBtn && micLevelWrap) {
+        micTestBtn.addEventListener('click', async () => {
+          if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+            this.showToast('Acesso ao microfone não disponível (use HTTPS ou localhost).', 'error');
+            return;
+          }
+          const deviceId = inputDeviceSelect && inputDeviceSelect.value ? inputDeviceSelect.value : undefined;
+          const ns = noiseSuppressionToggle && noiseSuppressionToggle.classList.contains('active');
+          const ec = echoCancelToggle && echoCancelToggle.classList.contains('active');
+          try {
+            voiceTestMicStream = await navigator.mediaDevices.getUserMedia({
+              audio: { deviceId: deviceId ? { exact: deviceId } : undefined, noiseSuppression: ns, echoCancellation: ec }
+            });
+          } catch (e) {
+            this.showToast(e.name === 'NotAllowedError' ? 'Acesso ao microfone negado.' : (e.message || 'Erro ao aceder ao microfone.'), 'error');
+            return;
+          }
+          micTestBtn.style.display = 'none';
+          micStopBtn.style.display = '';
+          micLevelWrap.style.display = 'block';
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const source = audioContext.createMediaStreamSource(voiceTestMicStream);
+          voiceTestMicAnalyser = audioContext.createAnalyser();
+          voiceTestMicAnalyser.fftSize = 256;
+          voiceTestMicAnalyser.smoothingTimeConstant = 0.8;
+          source.connect(voiceTestMicAnalyser);
+          const dataArray = new Uint8Array(voiceTestMicAnalyser.frequencyBinCount);
+          const bars = micLevelWrap.querySelectorAll('.settings-voice-level-bars span');
+          const updateLevel = () => {
+            if (!voiceTestMicStream || voiceTestMicStream.getAudioTracks().every(t => t.readyState === 'ended')) {
+              if (voiceTestMicRaf) cancelAnimationFrame(voiceTestMicRaf);
+              return;
+            }
+            voiceTestMicAnalyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+            const avg = Math.min(100, Math.round((sum / dataArray.length) * 100 / 128));
+            if (micLevelText) micLevelText.textContent = avg;
+            bars.forEach((bar, i) => { bar.classList.toggle('active', (i + 1) * 10 <= avg); });
+            voiceTestMicRaf = requestAnimationFrame(updateLevel);
+          };
+          updateLevel();
+        });
+        micStopBtn.addEventListener('click', () => {
+          if (voiceTestMicRaf) { cancelAnimationFrame(voiceTestMicRaf); voiceTestMicRaf = null; }
+          if (voiceTestMicStream) { voiceTestMicStream.getTracks().forEach(t => t.stop()); voiceTestMicStream = null; }
+          micLevelWrap.style.display = 'none';
+          micTestBtn.style.display = '';
+          micStopBtn.style.display = 'none';
+        });
+      }
+
+      if (cameraStartBtn && cameraStopBtn && cameraPreview && cameraPreviewWrap) {
+        cameraStartBtn.addEventListener('click', async () => {
+          if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+            this.showToast('Acesso à câmara não disponível (use HTTPS ou localhost).', 'error');
+            return;
+          }
+          const deviceId = cameraDeviceSelect && cameraDeviceSelect.value ? cameraDeviceSelect.value : undefined;
+          try {
+            voiceTestCameraStream = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 640 }, height: { ideal: 480 } }
+            });
+          } catch (e) {
+            this.showToast(e.name === 'NotAllowedError' ? 'Acesso à câmara negado.' : (e.message || 'Erro ao aceder à câmara.'), 'error');
+            return;
+          }
+          cameraPreview.srcObject = voiceTestCameraStream;
+          cameraPreviewWrap.style.display = 'block';
+          cameraStartBtn.style.display = 'none';
+          cameraStopBtn.style.display = '';
+        });
+        cameraStopBtn.addEventListener('click', () => {
+          if (voiceTestCameraStream) { voiceTestCameraStream.getTracks().forEach(t => t.stop()); voiceTestCameraStream = null; }
+          cameraPreview.srcObject = null;
+          cameraPreviewWrap.style.display = 'none';
+          cameraStartBtn.style.display = '';
+          cameraStopBtn.style.display = 'none';
+        });
+      }
+
+      if (screenTestBtn && screenStopBtn && screenPreview && screenPreviewWrap) {
+        screenTestBtn.addEventListener('click', async () => {
+          if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+            this.showToast('Partilha de ecrã não suportada (use HTTPS ou localhost).', 'error');
+            return;
+          }
+          try {
+            voiceTestScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+          } catch (e) {
+            this.showToast(e.name === 'NotAllowedError' ? 'Partilha cancelada.' : (e.message || 'Erro ao partilhar ecrã.'), 'error');
+            return;
+          }
+          voiceTestScreenStream.getVideoTracks()[0].onended = () => stopAllVoiceTests();
+          screenPreview.srcObject = voiceTestScreenStream;
+          screenPreviewWrap.style.display = 'block';
+          screenTestBtn.style.display = 'none';
+          screenStopBtn.style.display = '';
+        });
+        screenStopBtn.addEventListener('click', () => {
+          if (voiceTestScreenStream) { voiceTestScreenStream.getTracks().forEach(t => t.stop()); voiceTestScreenStream = null; }
+          screenPreview.srcObject = null;
+          screenPreviewWrap.style.display = 'none';
+          screenTestBtn.style.display = '';
+          screenStopBtn.style.display = 'none';
+        });
+      }
+
+      content.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') stopAllVoiceTests(); });
+      if (typeof this._voiceTestCleanup === 'function') this._voiceTestCleanup();
+      this._voiceTestCleanup = () => {
+        stopAllVoiceTests();
+        this._voiceTestCleanup = null;
+      };
     }
     if (section === 'auth-security' && type === 'user') {
       const savePwBtn = content.querySelector('#settings-save-password-btn');
@@ -6428,6 +6901,7 @@ class LibertyApp {
   }
 
   hideSettingsPanel() {
+    if (this._voiceTestCleanup) { this._voiceTestCleanup(); }
     if (this._settingsOverlay) {
       this._settingsOverlay.style.animation = 'none';
       this._settingsOverlay.style.opacity = '0';

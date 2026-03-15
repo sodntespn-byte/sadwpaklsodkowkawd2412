@@ -2109,16 +2109,20 @@ async function start() {
     }
   });
 
-  // PATCH /api/v1/users/me e PATCH /api/v1/users/@me — atualizar perfil (avatar_url, banner_url, description)
+  // PATCH /api/v1/users/me e PATCH /api/v1/users/@me — atualizar perfil (username, avatar_url, banner_url, description)
   const patchMe = async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
-    const { avatar_url, banner_url, description } = req.body || {};
+    const { username, avatar_url, banner_url, description } = req.body || {};
     const MAX_URL_LEN = 2048;
+    let usernameVal = username !== undefined ? sanitizeUsername(username) : null;
     let avatarVal = avatar_url != null ? String(avatar_url).trim() : null;
     let bannerVal = banner_url != null ? String(banner_url).trim() : null;
     const descVal = description != null ? sanitizeDescription(description) : null;
+    if (usernameVal !== null && (usernameVal.length < 1 || usernameVal.length > 32)) {
+      return res.status(400).json({ message: 'username deve ter entre 1 e 32 caracteres' });
+    }
     if (avatarVal && avatarVal.length > 0) {
       if (!/^https?:\/\//i.test(avatarVal) && !/^\//.test(avatarVal)) {
         return res.status(400).json({ message: 'avatar_url deve ser uma URL (http/https) ou caminho (/uploads/...)' });
@@ -2132,19 +2136,27 @@ async function start() {
       if (bannerVal.length > MAX_URL_LEN) bannerVal = bannerVal.slice(0, MAX_URL_LEN);
     }
     try {
-      const cur = await db.query('SELECT avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1', [
+      const cur = await db.query('SELECT username, avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1', [
         req.userId,
       ]);
       const c = cur.rows[0];
+      const newUsername = username !== undefined ? usernameVal : (c?.username ?? null);
       const newAvatar = avatar_url !== undefined ? avatarVal : (c?.avatar_url ?? null);
       const newBanner = banner_url !== undefined ? bannerVal : (c?.banner_url ?? null);
       const newDesc = description !== undefined ? descVal : (c?.description ?? null);
-      await db.query('UPDATE users SET avatar_url = $1, banner_url = $2, description = $3 WHERE id = $4', [
-        newAvatar,
-        newBanner,
-        newDesc,
-        req.userId,
-      ]);
+      if (newUsername != null) {
+        const existing = await db.query('SELECT id FROM users WHERE username = $1 AND id != $2::uuid LIMIT 1', [
+          newUsername,
+          req.userId,
+        ]);
+        if (existing.rows[0]) {
+          return res.status(409).json({ message: 'Esse nome de utilizador já está em uso' });
+        }
+      }
+      await db.query(
+        'UPDATE users SET username = COALESCE($1, username), avatar_url = $2, banner_url = $3, description = $4 WHERE id = $5',
+        [newUsername, newAvatar, newBanner, newDesc, req.userId]
+      );
       const r = await db.query(
         'SELECT id, username, email, avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1',
         [req.userId]
