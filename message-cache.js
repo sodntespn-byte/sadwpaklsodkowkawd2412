@@ -106,9 +106,29 @@ async function addCachedMessage(chatId, msg) {
   await setCachedMessages(chatId, next);
 }
 
+/**
+ * Retorna todas as listas de mensagens em cache (para ranking XP por conteúdo).
+ * Memória: values do Map. Redis: keys com PREFIX e depois GET de cada uma.
+ */
+async function getAllMessageLists() {
+  const r = await getRedisClient();
+  if (r) {
+    try {
+      const keys = await r.keys(PREFIX + '*');
+      if (!keys.length) return [];
+      const lists = await Promise.all(keys.map((k) => r.get(k).then((raw) => (raw ? JSON.parse(raw) : [])).catch(() => [])));
+      return lists.filter((arr) => Array.isArray(arr) && arr.length > 0);
+    } catch (_) {
+      return [];
+    }
+  }
+  return Array.from(memory.values()).filter((arr) => Array.isArray(arr) && arr.length > 0);
+}
+
 export default {
   getCachedMessages,
   setCachedMessages,
   addCachedMessage,
+  getAllMessageLists,
   MAX_CACHE_PER_CHANNEL,
 };

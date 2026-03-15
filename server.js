@@ -22,6 +22,7 @@ import messageCacheModule from './message-cache.js';
 const getCachedMessages = messageCacheModule.getCachedMessages;
 const setCachedMessages = messageCacheModule.setCachedMessages;
 const addCachedMessage = messageCacheModule.addCachedMessage;
+const getAllMessageLists = messageCacheModule.getAllMessageLists;
 const MAX_CACHE_PER_CHANNEL = messageCacheModule.MAX_CACHE_PER_CHANNEL;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -112,9 +113,10 @@ function getXpLevel(xp) {
   if (xp < 500) return 0;
   return Math.floor(Math.log(xp / 500) / Math.log(1.2)) + 1;
 }
-function computeContentXpByUser() {
+function computeContentXpByUser(messagesByChannel) {
   const byUser = new Map(); // author_id -> { xp, username }
-  for (const list of messageCache.values()) {
+  const lists = messagesByChannel || [];
+  for (const list of lists) {
     for (const msg of list) {
       const id = msg.author_id || msg.author;
       if (!id) continue;
@@ -1721,7 +1723,8 @@ async function start() {
         level: u.level,
       }));
 
-      const xpByUser = computeContentXpByUser();
+      const messagesByChannel = await getAllMessageLists();
+      const xpByUser = computeContentXpByUser(messagesByChannel);
       const byContentList = Array.from(xpByUser.entries()).map(([id, data]) => ({
         id,
         username: data.username || 'User',
