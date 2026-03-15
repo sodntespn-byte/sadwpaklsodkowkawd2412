@@ -972,10 +972,17 @@ class LibertyApp {
         return id;
     }
 
+    /** Após login/registo: esconde auth, fecha overlay e conecta (sem modal de aviso que não existe no HTML). */
     showSecurityWarningThenConnect(loginResult) {
         this._pendingLoginResult = loginResult;
-        document.getElementById('modal-overlay')?.classList?.remove('hidden');
-        document.getElementById('security-warning-modal')?.classList?.remove('hidden');
+        document.getElementById('security-warning-modal')?.classList?.add('hidden');
+        document.getElementById('modal-overlay')?.classList?.add('hidden');
+        document.getElementById('auth-screen')?.classList?.add('hidden');
+        this.connect().catch(() => {
+            this.showAuth();
+        }).finally(() => {
+            this._pendingLoginResult = null;
+        });
     }
 
     _onSecurityWarningIgnore() {
@@ -2350,8 +2357,9 @@ class LibertyApp {
                 container.innerHTML = `
                     <div class="welcome-message">
                         <div class="welcome-icon"><i class="fas fa-hashtag"></i></div>
-                        <h2 class="welcome-title">Welcome to #${this.escapeHtml(this.currentChannel?.name || 'channel')}</h2>
-                        <p class="welcome-description">This is the beginning of this channel. Be the first to say something!</p>
+                        <h2 class="welcome-title">Bem-vindo a #${this.escapeHtml(this.currentChannel?.name || 'canal')}</h2>
+                        <p class="welcome-description">Este é o início do canal.</p>
+                        <p class="welcome-encryption"><i class="fas fa-lock"></i> End-to-end encryption AES-GCM</p>
                     </div>
                 `;
                 return;

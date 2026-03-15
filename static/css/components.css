@@ -607,6 +607,15 @@
     max-width: 480px;
     line-height: 1.65;
 }
+.welcome-encryption {
+    font-size: 13px;
+    color: var(--primary-yellow);
+    margin-top: var(--spacing-md);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.welcome-encryption i { opacity: 0.9; }
 
 /* ══════════════════════════════════════════
    EMBED

@@ -854,7 +854,22 @@ async function start() {
     }
   });
 
-  // Mensagens por canal (legacy): só DB
+  // Resolve channelId para chat_id: se for UUID válido, usa como chat_id (canal do servidor); senão resolve por nome
+  async function resolveChannelToChatId(userId, channelId) {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(String(channelId).trim())) {
+      const r = await db.query(
+        'SELECT c.id FROM chats c LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $2::uuid WHERE c.id = $1::uuid AND (c.type IN (\'channel\',\'dm\',\'group_dm\') AND (c.server_id IS NOT NULL OR cm.user_id IS NOT NULL)) LIMIT 1',
+        [channelId, userId]
+      );
+      if (r.rows[0]) return String(r.rows[0].id);
+      const any = await db.query('SELECT id FROM chats WHERE id = $1::uuid LIMIT 1', [channelId]);
+      if (any.rows[0]) return String(any.rows[0].id);
+    }
+    return await getChatIdForServerAndChannel(null, channelId) || await getDefaultChatId();
+  }
+
+  // Mensagens por canal: channelId pode ser UUID (chat_id) ou nome do canal
   app.post('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
     const { channelId } = req.params;
     const { content } = req.body || {};
@@ -867,7 +882,7 @@ async function start() {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
     try {
-      const chatId = await getChatIdForServerAndChannel(null, channelId) || await getDefaultChatId();
+      const chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
       if (!chatId) return res.status(503).json({ message: 'Chat indisponível' });
       const result = await db.query(
         `INSERT INTO messages (content, chat_id, user_id) VALUES ($1, $2, $3)
@@ -894,13 +909,14 @@ async function start() {
     }
   });
 
-  app.get('/api/v1/channels/:channelId/messages', async (req, res) => {
+  app.get('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
     const { channelId } = req.params;
+    const userId = req.userId;
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
     try {
-      const chatId = await getChatIdForServerAndChannel(null, channelId) || await getDefaultChatId();
+      const chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
       if (!chatId) return res.status(200).json([]);
       const result = await db.query(
         `SELECT m.id, m.content, m.created_at, u.username AS author_username
@@ -1336,7 +1352,7 @@ async function start() {
   app.patch('/api/v1/users/me', auth.requireAuth, patchMe);
   app.patch('/api/v1/users/@me', auth.requireAuth, patchMe);
 
-  // GET /api/v1/users/@me/relationships — lista de amigos (para modal de grupo)
+  // GET /api/v1/users/@me/relationships — lista com type: 1=amigo, 2=bloqueado, 3=pending recebido, 4=pending enviado
   app.get('/api/v1/users/@me/relationships', auth.requireAuth, async (req, res) => {
     const userId = req.userId;
     if (!db.isConfigured() || !db.isConnected()) {
@@ -1344,16 +1360,107 @@ async function start() {
     }
     try {
       const r = await db.query(
-        `SELECT u.id, u.username FROM users u
-         INNER JOIN friendships f ON (f.friend_id = u.id AND f.user_id = $1::uuid) OR (f.user_id = u.id AND f.friend_id = $2::uuid)
-         WHERE f.status = 'accepted' AND u.id != $3::uuid`,
-        [userId, userId, userId]
+        `SELECT f.id AS rel_id, f.user_id, f.friend_id, f.status,
+                u.id AS other_id, u.username AS other_username
+         FROM friendships f
+         INNER JOIN users u ON (u.id = f.friend_id AND f.user_id = $1::uuid) OR (u.id = f.user_id AND f.friend_id = $1::uuid)
+         WHERE f.user_id = $1::uuid OR f.friend_id = $1::uuid`,
+        [userId]
       );
-      const list = r.rows.map((row) => ({ id: String(row.id), username: row.username }));
+      const list = r.rows.map((row) => {
+        const otherId = String(row.user_id) === userId ? row.friend_id : row.user_id;
+        const sentByMe = String(row.user_id) === userId;
+        let type = 1;
+        if (row.status === 'blocked') type = 2;
+        else if (row.status === 'pending') type = sentByMe ? 4 : 3;
+        return {
+          id: String(row.rel_id),
+          type,
+          user: { id: String(otherId), username: row.other_username },
+        };
+      });
       return res.status(200).json(list);
     } catch (err) {
       console.error('[LIBERTY] GET @me/relationships', err);
       return res.status(500).json({ message: err.message || 'Erro ao listar amigos' });
+    }
+  });
+
+  // POST /api/v1/users/@me/relationships — adicionar amigo por username (envia pedido pending)
+  app.post('/api/v1/users/@me/relationships', auth.requireAuth, async (req, res) => {
+    const userId = req.userId;
+    const { username } = req.body || {};
+    const name = username && String(username).trim();
+    if (!name) return res.status(400).json({ message: 'username é obrigatório' });
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    try {
+      const target = await db.query('SELECT id FROM users WHERE username = $1 LIMIT 1', [name]);
+      if (!target.rows[0]) return res.status(404).json({ message: 'Utilizador não encontrado' });
+      const friendId = target.rows[0].id;
+      if (String(friendId) === userId) return res.status(400).json({ message: 'Não pode adicionar-se a si mesmo' });
+      const existing = await db.query(
+        'SELECT id, status FROM friendships WHERE (user_id = $1::uuid AND friend_id = $2::uuid) OR (user_id = $2::uuid AND friend_id = $1::uuid) LIMIT 1',
+        [userId, friendId]
+      );
+      if (existing.rows[0]) {
+        if (existing.rows[0].status === 'accepted') return res.status(400).json({ message: 'Já são amigos' });
+        if (existing.rows[0].status === 'pending') return res.status(400).json({ message: 'Pedido já enviado ou pendente' });
+        if (existing.rows[0].status === 'blocked') return res.status(400).json({ message: 'Não é possível adicionar este utilizador' });
+      }
+      await db.query(
+        'INSERT INTO friendships (user_id, friend_id, status) VALUES ($1::uuid, $2::uuid, $3) ON CONFLICT (user_id, friend_id) DO NOTHING',
+        [userId, friendId, 'pending']
+      );
+      const rel = await db.query(
+        'SELECT id FROM friendships WHERE user_id = $1::uuid AND friend_id = $2::uuid LIMIT 1',
+        [userId, friendId]
+      );
+      return res.status(201).json({
+        id: rel.rows[0] ? String(rel.rows[0].id) : null,
+        type: 4,
+        user: { id: String(friendId), username: name },
+      });
+    } catch (err) {
+      if (err.code === '23505') return res.status(400).json({ message: 'Pedido já existe' });
+      console.error('[LIBERTY] POST @me/relationships', err);
+      return res.status(500).json({ message: err.message || 'Erro ao adicionar amigo' });
+    }
+  });
+
+  // PUT /api/v1/users/@me/relationships/:id — aceitar pedido de amizade
+  app.put('/api/v1/users/@me/relationships/:relationshipId', auth.requireAuth, async (req, res) => {
+    const userId = req.userId;
+    const relId = req.params.relationshipId;
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    try {
+      const r = await db.query(
+        'UPDATE friendships SET status = $1 WHERE id = $2::uuid AND friend_id = $3::uuid AND status = $4 RETURNING id',
+        ['accepted', relId, userId, 'pending']
+      );
+      if (!r.rows[0]) return res.status(404).json({ message: 'Pedido não encontrado ou já processado' });
+      return res.status(200).json({ id: String(r.rows[0].id), status: 'accepted' });
+    } catch (err) {
+      console.error('[LIBERTY] PUT @me/relationships/:id', err);
+      return res.status(500).json({ message: err.message || 'Erro ao aceitar pedido' });
+    }
+  });
+
+  // DELETE /api/v1/users/@me/relationships/:id — remover amizade / cancelar pedido / desbloquear
+  app.delete('/api/v1/users/@me/relationships/:relationshipId', auth.requireAuth, async (req, res) => {
+    const userId = req.userId;
+    const relId = req.params.relationshipId;
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    try {
+      await db.query(
+        'DELETE FROM friendships WHERE id = $1::uuid AND (user_id = $2::uuid OR friend_id = $2::uuid)',
+        [relId, userId]
+      );
+      return res.status(204).end();
+    } catch (err) {
+      console.error('[LIBERTY] DELETE @me/relationships/:id', err);
+      return res.status(500).json({ message: err.message || 'Erro ao remover' });
     }
   });
 
