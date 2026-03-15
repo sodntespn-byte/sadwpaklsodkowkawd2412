@@ -534,6 +534,44 @@ async function start() {
     }
   });
 
+  // Refresh: valida o token e devolve access_token + user (para o front não voltar ao login ao recarregar)
+  app.post('/api/v1/auth/refresh', async (req, res) => {
+    const token = (req.body && (req.body.refresh_token || req.body.token || req.body.access_token)) ? String(req.body.refresh_token || req.body.token || req.body.access_token).trim() : null;
+    if (!token) {
+      return res.status(401).json({ message: 'Token ausente' });
+    }
+    const payload = auth.verify(token);
+    if (!payload || !payload.sub) {
+      return res.status(401).json({ message: 'Token inválido ou expirado' });
+    }
+    try {
+      const r = await db.query(
+        `SELECT id, username, email FROM users WHERE id = $1::uuid LIMIT 1`,
+        [payload.sub]
+      );
+      const row = r.rows[0];
+      if (!row) {
+        return res.status(401).json({ message: 'Usuário não encontrado' });
+      }
+      const user = { id: String(row.id), username: row.username, email: row.email };
+      const access_token = auth.sign(user);
+      res.cookie('liberty_token', access_token, {
+        path: '/',
+        maxAge: 90 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax',
+        httpOnly: false,
+      });
+      return res.status(200).json({
+        access_token,
+        refresh_token: access_token,
+        user,
+      });
+    } catch (err) {
+      console.error('[API] refresh', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao renovar sessão' });
+    }
+  });
+
   // Login: username obrigatório; senha opcional (se usuário não tiver senha, login só com username)
   app.post('/api/v1/auth/login', async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
