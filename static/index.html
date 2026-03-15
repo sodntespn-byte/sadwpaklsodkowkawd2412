@@ -809,8 +809,7 @@
          ══════════════════════════════ -->
     <div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true" role="status"></div>
 
-    <!-- Scripts: Socket.io (opcional) + Gateway WebSocket para chamadas WebRTC -->
-    <script src="/socket.io/socket.io.js"></script>
+    <!-- Scripts: Gateway usa WebSocket /ws (sem Socket.io para evitar bloqueios CSP e conexão recusada) -->
     <script src="/js/api.js"></script>
     <script src="/js/websocket.js"></script>
     <script src="/js/logo-fallback.js"></script>

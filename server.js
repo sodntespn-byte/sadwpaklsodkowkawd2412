@@ -344,7 +344,18 @@ async function dbInit() {
   } catch (err) {
     if (err.code !== '42701') console.warn('[LIBERTY] Migração users.avatar_url:', err.message);
   }
+  try {
+    await db.query(`ALTER TABLE servers ADD COLUMN icon_url TEXT`);
+  } catch (err) {
+    if (err.code !== '42701') console.warn('[LIBERTY] Migração servers.icon_url:', err.message);
+  }
   console.log('[LIBERTY] Schema PostgreSQL aplicado (' + applied + ' statements)');
+}
+
+function isOfficialLibertyServer(row) {
+  if (!row) return false;
+  const name = (row.name || '').trim();
+  return name.toLowerCase() === 'liberty' && (row.owner_id == null || row.owner_id === '');
 }
 
 // --- auth (inline para deploy sem auth.js)
@@ -1074,7 +1085,7 @@ async function start() {
     try {
       const userId = req.userId;
       const r = await db.query(
-        `SELECT DISTINCT s.id, s.name, s.owner_id, s.created_at
+        `SELECT DISTINCT s.id, s.name, s.owner_id, s.created_at, s.icon_url
          FROM servers s
          LEFT JOIN chats c ON c.server_id = s.id
          LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $1::uuid
@@ -1087,18 +1098,22 @@ async function start() {
         name: row.name,
         owner_id: row.owner_id ? String(row.owner_id) : null,
         created_at: row.created_at,
+        icon: row.icon_url || null,
+        icon_url: row.icon_url || null,
       }));
       return res.status(200).json(servers);
     } catch (err) {
       if (err.message && err.message.includes('does not exist')) {
         try {
           await dbInit();
-          const r = await db.query(`SELECT id, name, owner_id, created_at FROM servers ORDER BY created_at ASC`);
+          const r = await db.query(`SELECT id, name, owner_id, created_at, icon_url FROM servers ORDER BY created_at ASC`);
           const servers = r.rows.map((row) => ({
             id: String(row.id),
             name: row.name,
             owner_id: row.owner_id ? String(row.owner_id) : null,
             created_at: row.created_at,
+            icon: row.icon_url || null,
+            icon_url: row.icon_url || null,
           }));
           return res.status(200).json(servers);
         } catch (e) {
@@ -1120,7 +1135,7 @@ async function start() {
     const userId = req.userId;
     try {
       const r = await db.query(
-        `SELECT s.id, s.name, s.owner_id, s.created_at
+        `SELECT s.id, s.name, s.owner_id, s.created_at, s.icon_url
          FROM servers s
          LEFT JOIN chats c ON c.server_id = s.id
          LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $2::uuid
@@ -1137,6 +1152,8 @@ async function start() {
         name: row.name,
         owner_id: row.owner_id ? String(row.owner_id) : null,
         created_at: row.created_at,
+        icon: row.icon_url || null,
+        icon_url: row.icon_url || null,
       });
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Servidor não encontrado' });
@@ -1150,7 +1167,7 @@ async function start() {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
-    const { name, region } = req.body || {};
+    const { name, region, icon } = req.body || {};
     const serverName = (name && String(name).trim()) || 'Novo servidor';
     const userId = req.userId;
     try {
@@ -1159,11 +1176,31 @@ async function start() {
         [serverName, userId]
       );
       const row = ins.rows[0];
+      const serverId = row.id;
+      let iconUrl = null;
+      if (icon && typeof icon === 'string' && icon.startsWith('data:image/')) {
+        const match = icon.match(/^data:image\/(\w+);base64,(.+)$/);
+        if (match) {
+          const ext = match[1] === 'jpeg' || match[1] === 'jpg' ? 'jpg' : 'png';
+          const dir = path.join(__dirname, 'uploads', 'servers');
+          try {
+            fs.mkdirSync(dir, { recursive: true });
+            const filePath = path.join(dir, `${serverId}.${ext}`);
+            fs.writeFileSync(filePath, Buffer.from(match[2], 'base64'));
+            iconUrl = `/uploads/servers/${serverId}.${ext}`;
+            await db.query(`UPDATE servers SET icon_url = $1 WHERE id = $2::uuid`, [iconUrl, serverId]);
+          } catch (e) {
+            console.warn('[API] Erro ao gravar ícone do servidor:', e.message);
+          }
+        }
+      }
       const server = {
         id: String(row.id),
         name: row.name,
         owner_id: String(row.owner_id),
         created_at: row.created_at,
+        icon: iconUrl,
+        icon_url: iconUrl,
       };
       const ch = await db.query(
         `INSERT INTO chats (name, type, server_id) VALUES ($1, 'channel', $2::uuid) RETURNING id`,
@@ -1199,6 +1236,8 @@ async function start() {
               name: row.name,
               owner_id: String(row.owner_id),
               created_at: row.created_at,
+              icon: null,
+              icon_url: null,
             },
           });
         } catch (e) {

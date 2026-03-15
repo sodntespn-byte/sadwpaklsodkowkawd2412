@@ -17,9 +17,15 @@ class LibertyGateway {
         this.reconnectMaxDelay = 30000;
         this._connectResolve = null;
         this._connectReject = null;
+        this._reconnectTimeout = null;
+        this._connectIntent = false;
+        this._disconnectRequested = false;
     }
     
     connect() {
+        this._connectIntent = true;
+        this._disconnectRequested = false;
+        this._clearReconnect();
         return new Promise((resolve, reject) => {
             this._connectResolve = resolve;
             this._connectReject = reject;
@@ -28,6 +34,7 @@ class LibertyGateway {
     }
 
     _resolveConnect(data) {
+        this._connectIntent = false;
         if (this._connectResolve) {
             this._connectResolve(data || {});
             this._connectResolve = null;
@@ -37,40 +44,13 @@ class LibertyGateway {
 
     _doConnect() {
         const token = typeof API !== 'undefined' && API.Token ? API.Token.getAccessToken() : (localStorage.getItem('access_token') || localStorage.getItem('token') || '');
-        if (typeof io !== 'undefined') {
-            try {
-                this.socket = io({ auth: { token }, transports: ['websocket', 'polling'], withCredentials: true });
-                this.socket.on('connect', () => {
-                    this.connected = true;
-                    this.authenticated = !!token;
-                    this.reconnectAttempts = 0;
-                    this.emit('ready', {});
-                    this._resolveConnect({});
-                });
-                this.socket.on('message', (payload) => {
-                    const msg = (payload && payload.data) || (payload && payload.message) || payload;
-                    if (msg) this.emit('message', msg);
-                });
-                this.socket.on('disconnect', () => {
-                    this.connected = false;
-                    this.authenticated = false;
-                    this._scheduleReconnect();
-                });
-                this.socket.on('connect_error', (err) => {
-                    if (this._connectReject) this._connectReject(err);
-                    this._connectResolve = null;
-                    this._connectReject = null;
-                });
-                return;
-            } catch (e) {
-                this.socket = null;
-            }
-        }
+        this.socket = null;
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = token ? `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}` : `${protocol}//${window.location.host}/ws`;
         try {
             this.ws = new WebSocket(wsUrl);
         } catch (e) {
+            if (this._connectIntent) this._rejectConnect(new Error('WebSocket failed'));
             this._scheduleReconnect();
             return;
         }
@@ -92,21 +72,40 @@ class LibertyGateway {
             this.connected = false;
             this.authenticated = false;
             this.stopHeartbeat();
+            if (this._connectResolve && this._connectIntent) this._rejectConnect(new Error('Conexão fechada'));
             this._scheduleReconnect();
         };
-        this.ws.onerror = () => {}
+        this.ws.onerror = () => {
+            if (this._connectResolve && this._connectIntent) this._rejectConnect(new Error('Erro de conexão'));
+        };
+    }
+
+    _rejectConnect(err) {
+        if (this._connectReject) {
+            this._connectReject(err);
+            this._connectReject = null;
+            this._connectResolve = null;
+        }
+        this._connectIntent = false;
+    }
+
+    _clearReconnect() {
+        if (this._reconnectTimeout) {
+            clearTimeout(this._reconnectTimeout);
+            this._reconnectTimeout = null;
+        }
     }
 
     _scheduleReconnect() {
-        if (this.reconnectAttempts === 0) {
-            this.reconnectAttempts = 1;
-        }
+        if (this._disconnectRequested) return;
+        if (this.reconnectAttempts === 0) this.reconnectAttempts = 1;
         const delay = Math.min(
             this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
             this.reconnectMaxDelay
         );
         this.reconnectAttempts++;
-        setTimeout(() => {
+        this._reconnectTimeout = setTimeout(() => {
+            this._reconnectTimeout = null;
             this._doConnect();
         }, delay);
     }
@@ -402,17 +401,22 @@ class LibertyGateway {
     }
     
     disconnect() {
+        this._connectIntent = false;
+        this._disconnectRequested = true;
+        this._clearReconnect();
         this.stopHeartbeat();
         if (this.socket) {
             this.socket.disconnect();
             this.socket = null;
         }
         if (this.ws) {
-            this.ws.close(1000, 'Client disconnect');
+            try { this.ws.close(1000, 'Client disconnect'); } catch (_) {}
             this.ws = null;
         }
         this.connected = false;
         this.authenticated = false;
+        this._connectResolve = null;
+        this._connectReject = null;
     }
 }
 

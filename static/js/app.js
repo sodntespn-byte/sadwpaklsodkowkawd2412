@@ -1153,16 +1153,15 @@ class LibertyApp {
         this._voiceCallState.pendingOffer = null;
         this._voiceCallState.targetUserId = from;
         this._voiceCallState.videoEnabled = true;
+        this._voiceCallState.stream = null;
         try {
             this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-        } catch (e) {
-            this.showToast('Permissão de câmara/microfone negada.', 'error');
-            if (this.gateway) this.gateway.send('webrtc_reject', { target_user_id: from });
-            return;
+        } catch (_) {
+            this._voiceCallState.stream = null;
         }
         const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
         this._voiceCallState.pc = pc;
-        this._voiceCallState.stream.getTracks().forEach((track) => pc.addTrack(track, this._voiceCallState.stream));
+        if (this._voiceCallState.stream) this._voiceCallState.stream.getTracks().forEach((track) => pc.addTrack(track, this._voiceCallState.stream));
         pc.ontrack = (e) => this._attachRemoteTrack(e);
         pc.onicecandidate = (e) => {
             if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: from, payload: e.candidate });
@@ -1221,16 +1220,16 @@ class LibertyApp {
             return;
         }
         const voiceView = document.getElementById('voice-call-view');
+        this._voiceCallState.stream = null;
         try {
             this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-        } catch (e) {
-            this.showToast('Permissão de câmara/microfone negada ou indisponível.', 'error');
-            return;
+        } catch (_) {
+            this._voiceCallState.stream = null;
         }
         this._voiceCallState.targetUserId = targetId;
-        this._voiceCallState.videoEnabled = true;
+        this._voiceCallState.videoEnabled = !!this._voiceCallState.stream;
         const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-        this._voiceCallState.stream.getTracks().forEach((track) => pc.addTrack(track, this._voiceCallState.stream));
+        if (this._voiceCallState.stream) this._voiceCallState.stream.getTracks().forEach((track) => pc.addTrack(track, this._voiceCallState.stream));
         pc.ontrack = (e) => this._attachRemoteTrack(e);
         pc.onicecandidate = (e) => {
             if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: e.candidate });
@@ -1311,15 +1310,21 @@ class LibertyApp {
         };
         // O clique em "Chamada" é tratado por delegação em document (init) para funcionar sempre
         if (disconnectBtn) disconnectBtn.addEventListener('click', closeVoiceCall);
-        if (muteBtn) muteBtn.addEventListener('click', () => {
-            if (this._voiceCallState.stream) {
-                this._voiceCallState.stream.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
-                this._updateWebrtcControlButtons();
+        if (muteBtn) muteBtn.addEventListener('click', async () => {
+            if (!this._voiceCallState.stream) {
+                await this._requestCallMedia();
+                return;
             }
+            this._voiceCallState.stream.getAudioTracks().forEach((t) => { t.enabled = !t.enabled; });
+            this._updateWebrtcControlButtons();
         });
         const videoBtn = document.getElementById('voice-call-video');
-        if (videoBtn) videoBtn.addEventListener('click', () => {
-            if (!this._voiceCallState.stream || !this._voiceCallState.pc) return;
+        if (videoBtn) videoBtn.addEventListener('click', async () => {
+            if (!this._voiceCallState.stream) {
+                await this._requestCallMedia();
+                return;
+            }
+            if (!this._voiceCallState.pc) return;
             const videoTracks = this._voiceCallState.stream.getVideoTracks();
             if (videoTracks.length === 0) return;
             this._voiceCallState.videoEnabled = !this._voiceCallState.videoEnabled;
@@ -1367,7 +1372,7 @@ class LibertyApp {
                             this._voiceCallState.displayStream = null;
                             const senders = pc.getSenders();
                             const vs = senders.find((s) => s.track && s.track.kind === 'video');
-                            if (vs && this._voiceCallState.stream) vs.replaceTrack(this._voiceCallState.stream.getVideoTracks()[0] || null);
+                            if (vs) vs.replaceTrack(this._voiceCallState.stream ? this._voiceCallState.stream.getVideoTracks()[0] || null : null);
                             if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
                             screenshareBtn.classList.remove('active');
                             screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
@@ -1384,20 +1389,54 @@ class LibertyApp {
         }
     }
 
+    async _requestCallMedia() {
+        if (this._voiceCallState.stream || !this._voiceCallState.pc || !this._voiceCallState.targetUserId) return this._voiceCallState.stream;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+            this._voiceCallState.stream = stream;
+            this._voiceCallState.videoEnabled = true;
+            const pc = this._voiceCallState.pc;
+            stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            if (this.gateway) this.gateway.send('webrtc_offer', { target_user_id: this._voiceCallState.targetUserId, payload: pc.localDescription });
+            const localV = document.getElementById('webrtc-local-video');
+            if (localV) localV.srcObject = stream;
+            this._updateWebrtcControlButtons();
+            return stream;
+        } catch (_) {
+            this.showToast('Permissão de microfone/câmara necessária para falar.', 'info');
+            return null;
+        }
+    }
+
     _updateWebrtcControlButtons() {
         const muteBtn = document.getElementById('voice-call-mute');
         const videoBtn = document.getElementById('voice-call-video');
-        if (muteBtn && this._voiceCallState.stream) {
-            const enabled = this._voiceCallState.stream.getAudioTracks().some((t) => t.enabled);
-            muteBtn.classList.toggle('muted', !enabled);
-            muteBtn.querySelector('i').className = enabled ? 'fas fa-microphone' : 'fas fa-microphone-slash';
-            muteBtn.querySelector('span').textContent = enabled ? 'Mute' : 'Desmutar';
+        const stream = this._voiceCallState.stream;
+        if (muteBtn) {
+            if (stream) {
+                const enabled = stream.getAudioTracks().some((t) => t.enabled);
+                muteBtn.classList.toggle('muted', !enabled);
+                muteBtn.querySelector('i').className = enabled ? 'fas fa-microphone' : 'fas fa-microphone-slash';
+                muteBtn.querySelector('span').textContent = enabled ? 'Mute' : 'Desmutar';
+            } else {
+                muteBtn.classList.remove('muted');
+                muteBtn.querySelector('i').className = 'fas fa-microphone';
+                muteBtn.querySelector('span').textContent = 'Ativar microfone';
+            }
         }
         if (videoBtn) {
-            const on = this._voiceCallState.videoEnabled !== false;
-            videoBtn.classList.toggle('off', !on);
-            videoBtn.querySelector('i').className = on ? 'fas fa-video' : 'fas fa-video-slash';
-            videoBtn.querySelector('span').textContent = on ? 'Vídeo' : 'Ligar vídeo';
+            if (stream) {
+                const on = this._voiceCallState.videoEnabled !== false;
+                videoBtn.classList.toggle('off', !on);
+                videoBtn.querySelector('i').className = on ? 'fas fa-video' : 'fas fa-video-slash';
+                videoBtn.querySelector('span').textContent = on ? 'Vídeo' : 'Ligar vídeo';
+            } else {
+                videoBtn.classList.remove('off');
+                videoBtn.querySelector('i').className = 'fas fa-video';
+                videoBtn.querySelector('span').textContent = 'Ativar câmara';
+            }
         }
     }
 
@@ -1430,10 +1469,15 @@ class LibertyApp {
         document.getElementById('security-warning-modal')?.classList?.add('hidden');
         document.getElementById('modal-overlay')?.classList?.add('hidden');
         document.getElementById('auth-screen')?.classList?.add('hidden');
-        this.connect().catch(() => {
-            this.showAuth();
-        }).finally(() => {
+        if (window.Gateway && typeof window.Gateway.disconnect === 'function') window.Gateway.disconnect();
+        this.gateway = window.Gateway || null;
+        this.connect().then(() => {
             this._pendingLoginResult = null;
+        }).catch((err) => {
+            this._pendingLoginResult = null;
+            this.showToast(err && err.message ? err.message : 'Não foi possível conectar. Tente novamente.', 'error');
+            document.getElementById('app')?.classList?.add('hidden');
+            this.showAuth();
         });
     }
 
@@ -4771,13 +4815,18 @@ class LibertyApp {
         }
     }
 
-    _doLogout() {
+    async _doLogout() {
         if (this._activityPingInterval) {
             clearInterval(this._activityPingInterval);
             this._activityPingInterval = null;
         }
         if (this.gateway && typeof this.gateway.disconnect === 'function') this.gateway.disconnect();
-        API.Auth.logout();
+        this.gateway = null;
+        try {
+            await API.Auth.logout();
+        } catch (_) {
+            if (typeof API !== 'undefined' && API.Token && API.Token.clearTokens) API.Token.clearTokens();
+        }
         this.currentUser = null;
         this.servers = [];
         this.channels = [];
@@ -4785,7 +4834,6 @@ class LibertyApp {
         this.currentServer = null;
         this.currentChannel = null;
         this.isHomeView = true;
-        this.gateway = null;
         this.hideSettingsPanel();
         this.hideProfileCard();
         document.getElementById('app')?.classList.add('hidden');
