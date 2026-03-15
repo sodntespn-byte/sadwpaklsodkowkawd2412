@@ -71,9 +71,32 @@
 .settings-overlay .settings-sidebar-search{width:100%;padding:6px 8px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px;font-family:inherit;margin-bottom:8px}
 .settings-overlay .settings-sidebar-search:focus{outline:none;border-color:var(--primary-yellow)}
 .settings-overlay .settings-sidebar-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary);padding:6px 10px;margin-top:8px}
-.settings-overlay .settings-sidebar-item{display:flex;align-items:center;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:14px;color:var(--text-secondary);transition:background .15s,color .15s;margin-bottom:1px;white-space:nowrap}
+.settings-overlay .settings-sidebar-item{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:14px;color:var(--text-secondary);transition:background .15s,color .15s;margin-bottom:1px;white-space:nowrap}
+.settings-overlay .settings-sidebar-item i{width:18px;text-align:center;font-size:14px;flex-shrink:0}
 .settings-overlay .settings-sidebar-item:hover{background:rgba(255,255,255,.04);color:var(--text-primary)}
 .settings-overlay .settings-sidebar-item.active{background:var(--medium-gray);color:var(--text-primary);font-weight:500}
+.settings-overlay .settings-content h2.settings-page-title{font-size:24px;font-weight:700;color:var(--primary-yellow);margin-bottom:24px;display:block}
+.settings-overlay .settings-account-hero{display:flex;align-items:center;gap:16px;padding:20px 24px;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow));border-radius:var(--radius-lg);margin-bottom:24px}
+.settings-overlay .settings-account-hero-avatar{width:64px;height:64px;border-radius:50%;background:var(--secondary-black);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden}
+.settings-overlay .settings-account-hero-avatar img{width:100%;height:100%;object-fit:cover}
+.settings-overlay .settings-account-hero-name{font-size:18px;font-weight:700;color:var(--primary-black);flex:1}
+.settings-overlay .settings-account-hero .btn-change-photo{background:var(--primary-black);color:var(--primary-yellow);border:none;padding:8px 14px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.settings-overlay .settings-account-hero .btn-change-photo:hover{background:rgba(0,0,0,.8)}
+.settings-overlay .settings-subscription-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px}
+.settings-overlay .settings-subscription-label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--text-primary)}
+.settings-overlay .settings-subscription-label i{color:var(--primary-yellow)}
+.settings-overlay .settings-section-block{margin-bottom:24px}
+.settings-overlay .settings-section-block h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary);margin:0 0 8px;display:block}
+.settings-overlay .settings-section-block p{font-size:13px;color:var(--text-secondary);line-height:1.5;margin:0 0 10px}
+.settings-overlay .settings-section-block .input-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.settings-overlay .settings-section-block input[type="text"],.settings-overlay .settings-section-block input[type="url"]{flex:1;min-width:200px;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit}
+.settings-overlay .settings-section-block input:focus{outline:none;border-color:var(--primary-yellow)}
+.settings-overlay .settings-section-block .btn-save{background:var(--primary-yellow);color:var(--primary-black);border:none;padding:10px 18px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.settings-overlay .settings-section-block .btn-save:hover{background:var(--dark-yellow);color:var(--primary-black)}
+.settings-overlay .settings-section-block .btn-clear-db{background:var(--error);color:#fff;border:none;padding:10px 18px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px}
+.settings-overlay .settings-section-block .btn-clear-db:hover{background:#c62828}
+.settings-overlay .settings-section-block select{padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit;min-width:200px}
+.settings-overlay .settings-section-block select:focus{outline:none;border-color:var(--primary-yellow)}
 .settings-overlay .settings-sidebar-item.danger{color:var(--error)}
 .settings-overlay .settings-sidebar-item.danger:hover{background:rgba(229,57,53,.12)}
 .settings-overlay .settings-sidebar-divider{height:1px;background:rgba(255,255,255,.06);margin:8px 10px}
@@ -1811,7 +1834,7 @@ class LibertyApp {
         const categories = new Map();
         const noCategory = [];
         this.channels.forEach(channel => {
-            if (channel.channel_type === 'category') {
+            if (channel.type === 'category') {
                 if (!categories.has(channel.id)) categories.set(channel.id, { category: channel, channels: [] });
             } else if (channel.parent_id) {
                 if (!categories.has(channel.parent_id)) categories.set(channel.parent_id, { category: null, channels: [] });
@@ -2997,38 +3020,104 @@ class LibertyApp {
         return modal;
     }
 
-    showCreateChannelModal(categoryId) {
-        this.createModal('create-channel-modal', 'Create Channel', `
-            <div class="form-group">
-                <label>Channel Type</label>
-                <select id="new-channel-type">
-                    <option value="text">📝 Text Channel</option>
-                    <option value="voice">🔊 Voice Channel</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Channel Name</label>
-                <input type="text" id="new-channel-name" placeholder="new-channel" maxlength="100">
-            </div>
-            <div class="modal-actions">
-                <button class="btn btn-secondary" data-action="cancel">Cancel</button>
-                <button class="btn btn-primary" data-action="create"><i class="fas fa-plus"></i> Create</button>
-            </div>
-        `);
-        this.showModal('create-channel-modal');
+    async showCreateChannelModal(categoryId) {
         const modal = document.getElementById('create-channel-modal');
-        modal.querySelector('[data-action="cancel"]').addEventListener('click', () => this.hideModal());
-        modal.querySelector('[data-action="create"]').addEventListener('click', () => {
-            const name = document.getElementById('new-channel-name').value.trim();
-            const type = document.getElementById('new-channel-type').value;
-            if (!name) return;
-            if (this.gateway) this.gateway.createChannel(this.currentServer?.id, name, type, categoryId || null);
-            const newChannel = { id: `ch-${Date.now()}`, name, channel_type: type, parent_id: categoryId || null, server_id: this.currentServer?.id };
-            this.channels.push(newChannel);
-            this.renderChannels();
-            this.hideModal();
-            this.showToast(`Channel #${name} created!`, 'success');
-        });
+        if (!modal) return;
+        const serverId = this.currentServer?.id;
+        if (!serverId) return;
+        const channelFields = document.getElementById('add-channel-fields');
+        const categoryFields = document.getElementById('add-category-fields');
+        const createBtn = document.getElementById('add-create-btn');
+        const catSelect = document.getElementById('add-channel-category');
+        const addChannelName = document.getElementById('add-channel-name');
+        const addCategoryName = document.getElementById('add-category-name');
+        const previewSlug = document.getElementById('add-channel-preview-slug');
+
+        const isChannel = () => modal.querySelector('.add-tab[data-add-tab="channel"]')?.classList.contains('active');
+        const setTab = (tab) => {
+            modal.querySelectorAll('.add-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.addTab === tab);
+                t.setAttribute('aria-selected', t.dataset.addTab === tab ? 'true' : 'false');
+            });
+            if (tab === 'channel') {
+                channelFields?.classList.remove('hidden');
+                categoryFields?.classList.add('hidden');
+                if (createBtn) createBtn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Criar canal';
+            } else {
+                channelFields?.classList.add('hidden');
+                categoryFields?.classList.remove('hidden');
+                if (createBtn) createBtn.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i> Criar categoria';
+            }
+        };
+        const updatePreview = () => {
+            const raw = (addChannelName?.value || '').trim();
+            const slug = raw ? raw.replace(/\s+/g, '-').toLowerCase().replace(/[^a-z0-9-]/g, '') || 'nome-do-canal' : 'nome-do-canal';
+            if (previewSlug) previewSlug.textContent = '#' + slug;
+        };
+
+        if (!modal.dataset.addBound) {
+            modal.dataset.addBound = '1';
+            modal.querySelectorAll('.add-tab').forEach(btn => {
+                btn.addEventListener('click', () => setTab(btn.dataset.addTab));
+            });
+            document.querySelectorAll('.add-type-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    modal.querySelectorAll('.add-type-option').forEach(o => o.classList.remove('active'));
+                    opt.classList.add('active');
+                    opt.querySelector('input[type="radio"]').checked = true;
+                });
+            });
+            if (addChannelName) addChannelName.addEventListener('input', updatePreview);
+            modal.querySelector('.modal-cancel-btn')?.addEventListener('click', () => this.hideModal());
+            modal.querySelector('.modal-close-btn')?.addEventListener('click', () => this.hideModal());
+            createBtn?.addEventListener('click', async () => {
+                if (isChannel()) {
+                    const name = addChannelName?.value?.trim();
+                    const type = modal.querySelector('input[name="add-channel-type"]:checked')?.value || 'text';
+                    const parentId = catSelect?.value?.trim() || null;
+                    if (!name) { this.showToast('Digite o nome do canal.', 'error'); return; }
+                    try {
+                        const ch = await API.Channel.create(serverId, name, type, parentId, null);
+                        this.channels = await API.Channel.list(serverId) || [];
+                        this.renderChannels();
+                        this.hideModal();
+                        this.showToast(`Canal #${ch?.name || name} criado!`, 'success');
+                    } catch (e) {
+                        this.showToast(e?.message || 'Erro ao criar canal.', 'error');
+                    }
+                } else {
+                    const name = addCategoryName?.value?.trim();
+                    if (!name) { this.showToast('Digite o nome da categoria.', 'error'); return; }
+                    try {
+                        await API.Channel.create(serverId, name, 'category', null, null);
+                        this.channels = await API.Channel.list(serverId) || [];
+                        this.renderChannels();
+                        this.hideModal();
+                        this.showToast(`Categoria "${name}" criada!`, 'success');
+                    } catch (e) {
+                        this.showToast(e?.message || 'Erro ao criar categoria.', 'error');
+                    }
+                }
+            });
+        }
+
+        setTab('channel');
+        addChannelName && (addChannelName.value = '');
+        addCategoryName && (addCategoryName.value = '');
+        updatePreview();
+        catSelect.innerHTML = '<option value="">Sem categoria</option>';
+        try {
+            const list = await API.Channel.list(serverId) || [];
+            list.filter(c => c.type === 'category').forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat.id;
+                opt.textContent = cat.name;
+                if (categoryId && cat.id === categoryId) opt.selected = true;
+                catSelect.appendChild(opt);
+            });
+            if (categoryId) catSelect.value = categoryId;
+        } catch (_) { /* keep "Sem categoria" */ }
+        this.showModal('create-channel-modal');
     }
 
     showEditChannelModal(channelId) {
@@ -3114,27 +3203,18 @@ class LibertyApp {
         overlay.className = 'settings-overlay';
 
         const categories = type === 'user' ? [
-            { group: 'User Settings' },
-            { id: 'account', label: 'My Account' },
-            { id: 'profile', label: 'User Profile' },
-            { id: 'privacy', label: 'Content & Social' },
-            { id: 'data-privacy', label: 'Data & Privacy' },
-            { id: 'notifications', label: 'Notifications' },
+            { group: 'USUÁRIO' },
+            { id: 'account', label: 'Minha Conta', icon: 'fa-user' },
+            { id: 'auth-security', label: 'Autenticação e Segurança', icon: 'fa-shield-alt' },
+            { id: 'profile', label: 'Perfil', icon: 'fa-id-card' },
+            { id: 'privacy', label: 'Privacidade', icon: 'fa-lock' },
             { divider: true },
-            { group: 'Billing Settings' },
-            { id: 'nitro', label: 'Nitro' },
-            { id: 'server-boost', label: 'Server Boost' },
+            { group: 'APP' },
+            { id: 'appearance', label: 'Aparência', icon: 'fa-eye' },
+            { id: 'voice', label: 'Voz', icon: 'fa-microphone' },
+            { id: 'notifications', label: 'Notificações', icon: 'fa-bell' },
             { divider: true },
-            { group: 'App Settings' },
-            { id: 'appearance', label: 'Appearance' },
-            { id: 'accessibility', label: 'Accessibility' },
-            { id: 'voice', label: 'Voice & Video' },
-            { id: 'chat', label: 'Chat' },
-            { id: 'keybinds', label: 'Keybinds' },
-            { id: 'language', label: 'Language' },
-            { id: 'activity', label: 'Activity Privacy' },
-            { divider: true },
-            { id: 'logout', label: 'Log Out', danger: true },
+            { id: 'logout', label: 'Sair', danger: true, icon: 'fa-sign-out-alt' },
         ] : [
             { group: this.currentServer?.name || 'Server Settings' },
             { id: 'overview', label: 'Overview' },
@@ -3160,17 +3240,18 @@ class LibertyApp {
                 <div class="settings-sidebar-profile-avatar">${initial}</div>
                 <div class="settings-sidebar-profile-info">
                     <div class="settings-sidebar-profile-name">${uname}</div>
-                    <div class="settings-sidebar-profile-link" data-section="profile">Edit Profile</div>
+                    <div class="settings-sidebar-profile-link" data-section="account">Minha Conta</div>
                 </div>
             </div>
-            <input type="text" class="settings-sidebar-search" placeholder="Search" />
+            <input type="text" class="settings-sidebar-search" placeholder="Buscar" />
         ` : `<input type="text" class="settings-sidebar-search" placeholder="Search" />`;
 
         let sidebarHtml = '';
         categories.forEach(cat => {
             if (cat.divider) { sidebarHtml += '<div class="settings-sidebar-divider"></div>'; return; }
             if (cat.group) { sidebarHtml += `<div class="settings-sidebar-title">${this.escapeHtml(cat.group)}</div>`; return; }
-            sidebarHtml += `<div class="settings-sidebar-item ${cat.danger ? 'danger' : ''}" data-section="${cat.id}">${this.escapeHtml(cat.label)}</div>`;
+            const icon = cat.icon ? `<i class="fas ${cat.icon}" aria-hidden="true"></i>` : '';
+            sidebarHtml += `<div class="settings-sidebar-item ${cat.danger ? 'danger' : ''}" data-section="${cat.id}">${icon}${icon ? '<span>' : ''}${this.escapeHtml(cat.label)}${icon ? '</span>' : ''}</div>`;
         });
 
         overlay.innerHTML = `
@@ -3189,9 +3270,9 @@ class LibertyApp {
         if (profileLink) {
             profileLink.addEventListener('click', () => {
                 overlay.querySelectorAll('.settings-sidebar-item').forEach(i => i.classList.remove('active'));
-                const profileItem = overlay.querySelector('.settings-sidebar-item[data-section="profile"]');
-                if (profileItem) profileItem.classList.add('active');
-                this._renderSettingsSection(overlay, type, 'profile');
+                const accountItem = overlay.querySelector('.settings-sidebar-item[data-section="account"]');
+                if (accountItem) accountItem.classList.add('active');
+                this._renderSettingsSection(overlay, type, 'account');
             });
         }
 
@@ -3247,43 +3328,56 @@ class LibertyApp {
             account: () => {
                 const initial = (this.currentUser?.username || 'U').charAt(0).toUpperCase();
                 const uname = this.escapeHtml(this.currentUser?.username || 'User');
-                const uemail = this.escapeHtml(this.currentUser?.email || 'user@liberty.app');
-                return `<h2>My Account</h2>
-                <div class="settings-profile-card">
-                    <div class="settings-profile-banner"></div>
-                    <div class="settings-profile-info">
-                        <div class="settings-profile-avatar"><span>${initial}</span></div>
-                        <div class="settings-profile-details">
-                            <div><div class="settings-profile-name">${uname}</div><div class="settings-profile-email">${uemail}</div></div>
-                            <button class="btn btn-primary btn-sm" onclick="app.showToast('Edit Profile coming soon!','info')">Edit User Profile</button>
-                        </div>
-                    </div>
-                    <div style="padding:0 16px 16px">
-                        <div class="settings-field-row"><div><div class="settings-field-label">Display Name</div><div class="settings-field-value">${uname}</div></div><button class="btn btn-secondary btn-sm" onclick="app.showToast('Edit coming soon!','info')">Edit</button></div>
-                        <div class="settings-field-row"><div><div class="settings-field-label">Username</div><div class="settings-field-value">${uname}</div></div><button class="btn btn-secondary btn-sm" onclick="app.showToast('Edit coming soon!','info')">Edit</button></div>
-                        <div class="settings-field-row"><div><div class="settings-field-label">E-mail</div><div class="settings-field-value">${uemail}</div></div><button class="btn btn-secondary btn-sm" onclick="app.showToast('Edit coming soon!','info')">Edit</button></div>
-                        <div class="settings-field-row"><div><div class="settings-field-label">Phone Number</div><div class="settings-field-value" style="color:var(--text-muted)">Not set</div></div><button class="btn btn-secondary btn-sm" onclick="app.showToast('Add phone coming soon!','info')">Add</button></div>
+                const avatarUrl = (this.currentUser && this.currentUser.avatar_url) ? this.escapeHtml(this.currentUser.avatar_url) : '';
+                const avatarHtml = avatarUrl ? `<img src="${avatarUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px;font-weight:700;color:#fff">${initial}</span>` : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px;font-weight:700;color:#fff">${initial}</span>`;
+                return `<h2 class="settings-page-title">Minha Conta</h2>
+                <div class="settings-subscription-row">
+                    <div class="settings-subscription-label"><i class="fas fa-crown"></i> Subscription Plan</div>
+                    <div><select class="settings-plan-select" disabled><option>Free - 5.000 chars / 100 MB</option></select></div>
+                </div>
+                <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px">Choose your plan to increase character and file size limits.</p>
+                <div class="settings-account-hero">
+                    <div class="settings-account-hero-avatar" id="settings-avatar-preview">${avatarHtml}</div>
+                    <div class="settings-account-hero-name">${uname}</div>
+                    <button type="button" class="btn-change-photo" id="settings-btn-change-photo"><i class="fas fa-camera"></i> Alterar foto</button>
+                </div>
+                <div class="settings-section-block">
+                    <h3>AVATAR POR URL OU ARQUIVO</h3>
+                    <p>Use a URL abaixo ou clique em "Alterar foto" / na foto para enviar um arquivo de imagem.</p>
+                    <div class="input-row">
+                        <input type="url" id="settings-avatar-url" placeholder="https://exemplo.com/sua-foto.jpg" value="${avatarUrl}" />
+                        <button type="button" class="btn-save" id="settings-save-avatar-btn">Salvar avatar</button>
                     </div>
                 </div>
-                <h3>Password and Authentication</h3>
-                <div class="settings-card">
-                    <button class="btn btn-primary btn-sm" onclick="app.showToast('Password change coming soon!','info')">Change Password</button>
-                    <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)">
-                        <div class="settings-row-label" style="margin-bottom:4px">Two-Factor Authentication</div>
-                        <div class="settings-row-desc" style="margin-bottom:12px">Protect your account with an extra layer of security</div>
-                        <button class="btn btn-primary btn-sm" onclick="app.showToast('2FA setup coming soon!','info')">Enable 2FA</button>
+                <div class="settings-section-block">
+                    <h3>LANGUAGE</h3>
+                    <select id="settings-language"><option value="en">English</option><option value="pt">Português</option><option value="es">Español</option><option value="fr">Français</option></select>
+                </div>
+                <div class="settings-section-block">
+                    <h3>NAME</h3>
+                    <div class="input-row">
+                        <input type="text" id="settings-display-name" value="${uname}" placeholder="Seu nome" />
+                        <button type="button" class="btn-save" id="settings-save-name-btn">Save</button>
                     </div>
                 </div>
-                <h3>Account Removal</h3>
-                <div class="settings-card">
-                    <p style="margin-bottom:12px">Disabling your account means you can recover it at any time.</p>
-                    <div style="display:flex;gap:12px">
-                        <button class="btn btn-secondary btn-sm" onclick="app.showToast('Disable Account coming soon!','info')">Disable Account</button>
-                        <button class="btn btn-danger btn-sm" onclick="app.showToast('Delete Account coming soon!','info')">Delete Account</button>
-                    </div>
+                <div class="settings-section-block">
+                    <h3>DADOS LOCAIS</h3>
+                    <p>Remove todos os dados salvos neste navegador (contas, servidores, mensagens, fotos). Você precisará criar conta e entrar de novo.</p>
+                    <button type="button" class="btn-clear-db" id="settings-clear-db-btn">Limpar banco de dados</button>
                 </div>`;
             },
-            profile: () => `<h2>User Profile</h2>
+            'auth-security': () => `<h2 class="settings-page-title">Autenticação e Segurança</h2>
+                <div class="settings-card">
+                    <h3 style="margin-top:0">Senha</h3>
+                    <p style="margin-bottom:12px">Altere sua senha para manter a conta segura.</p>
+                    <button type="button" class="btn btn-primary btn-sm" onclick="app.showToast('Alterar senha em breve!','info')">Alterar senha</button>
+                    <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.04)">
+                        <div class="settings-row-label" style="margin-bottom:4px">Autenticação em dois fatores</div>
+                        <div class="settings-row-desc" style="margin-bottom:12px">Proteja sua conta com uma camada extra de segurança.</div>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="app.showToast('2FA em breve!','info')">Ativar 2FA</button>
+                    </div>
+                </div>`,
+            profile: () => `<h2 class="settings-page-title">Perfil</h2>
                 <div style="display:flex;gap:32px;flex-wrap:wrap">
                     <div style="flex:1;min-width:280px">
                         <div class="settings-card">
@@ -3431,6 +3525,48 @@ class LibertyApp {
 
         const renderer = sectionRenderers[section];
         content.innerHTML = renderer ? renderer() : `<h2>${section}</h2><div class="settings-card"><p>Settings content for ${section} will be displayed here.</p></div>`;
+        if (section === 'account' && type === 'user') {
+            const saveAvatarBtn = content.querySelector('#settings-save-avatar-btn');
+            const avatarUrlInput = content.querySelector('#settings-avatar-url');
+            const changePhotoBtn = content.querySelector('#settings-btn-change-photo');
+            const avatarPreview = content.querySelector('#settings-avatar-preview');
+            const saveNameBtn = content.querySelector('#settings-save-name-btn');
+            const displayNameInput = content.querySelector('#settings-display-name');
+            const clearDbBtn = content.querySelector('#settings-clear-db-btn');
+            if (saveAvatarBtn && avatarUrlInput) {
+                saveAvatarBtn.addEventListener('click', () => {
+                    const url = (avatarUrlInput.value || '').trim();
+                    if (!url) { this.showToast('Cole uma URL de imagem.', 'info'); return; }
+                    if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
+                        API.User.updateCurrentUser({ avatar_url: url }).then(() => {
+                            this.showToast('Avatar salvo!', 'success');
+                            if (this.currentUser) this.currentUser.avatar_url = url;
+                            if (avatarPreview) { avatarPreview.innerHTML = '<img src="' + url.replace(/"/g, '&quot;') + '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px;font-weight:700;color:#fff">' + (this.currentUser?.username || 'U').charAt(0).toUpperCase() + '</span>'; }
+                        }).catch(e => this.showToast(e.message || 'Erro ao salvar avatar', 'error'));
+                    } else this.showToast('Faça login para salvar o avatar na nuvem.', 'info');
+                });
+            }
+            if (changePhotoBtn && avatarUrlInput) changePhotoBtn.addEventListener('click', () => avatarUrlInput.focus());
+            if (avatarPreview && avatarUrlInput) avatarUrlInput.addEventListener('input', () => { const v = avatarUrlInput.value.trim(); if (v) avatarPreview.innerHTML = '<img src="' + v.replace(/"/g, '&quot;') + '" alt="" onerror="this.style.display=\'none\'" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:24px;font-weight:700;color:#fff">' + (this.currentUser?.username || 'U').charAt(0).toUpperCase() + '</span>'; });
+            if (saveNameBtn && displayNameInput) {
+                saveNameBtn.addEventListener('click', () => {
+                    const name = (displayNameInput.value || '').trim().substring(0, 32);
+                    if (!name) { this.showToast('Digite um nome.', 'info'); return; }
+                    if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
+                        API.User.updateCurrentUser({ username: name }).then(() => { this.showToast('Nome salvo!', 'success'); if (this.currentUser) this.currentUser.username = name; }).catch(e => this.showToast(e.message || 'Erro ao salvar nome', 'error'));
+                    } else { localStorage.setItem('liberty_username', name); this.showToast('Nome salvo localmente.', 'success'); }
+                });
+            }
+            if (clearDbBtn) {
+                clearDbBtn.addEventListener('click', () => {
+                    if (!confirm('Tem certeza? Todos os dados locais (contas, servidores, mensagens) serão removidos.')) return;
+                    ['access_token', 'refresh_token', 'liberty_token', 'token', 'liberty_username'].forEach(k => localStorage.removeItem(k));
+                    this.showToast('Dados locais removidos.', 'success');
+                    this.hideSettingsPanel();
+                    setTimeout(() => window.location.reload(), 800);
+                });
+            }
+        }
     }
 
     hideSettingsPanel() {

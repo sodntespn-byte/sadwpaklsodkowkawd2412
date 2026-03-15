@@ -15,8 +15,9 @@ import WebSocket, { WebSocketServer } from 'ws';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // --- db (inline para deploy sem pasta db/)
+// Suporta DATABASE_URL, BANCO_DADOS (Square Cloud) ou DB_URL
 function _dbGetUrl() {
-  return process.env.DATABASE_URL || '';
+  return process.env.DATABASE_URL || process.env.BANCO_DADOS || process.env.DB_URL || '';
 }
 function _dbLoadMtlsOptions() {
   try {
@@ -33,15 +34,21 @@ function _dbLoadMtlsOptions() {
 let _dbPool = null;
 let _dbConnected = false;
 async function _dbConnect() {
-  const rawUrl = _dbGetUrl();
+  let rawUrl = _dbGetUrl();
   if (!rawUrl || !rawUrl.startsWith('postgres')) {
     console.warn('[LIBERTY] DATABASE_URL não definida — banco desativado');
     return null;
   }
+  // Neon pooler: remover channel_binding=require (pode causar handshake fail em alguns ambientes)
+  if (rawUrl.includes('channel_binding=require')) {
+    rawUrl = rawUrl.replace(/&channel_binding=require/g, '').replace(/\?channel_binding=require&?/g, '?').replace(/\?&/, '?');
+  }
   if (!_dbPool) {
     const isLocalhost = /@localhost[\s:]|@127\.0\.0\.1[\s:]/.test(rawUrl);
-    const poolConfig = { connectionString: rawUrl, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 15000 };
-    if (!isLocalhost) poolConfig.ssl = _dbLoadMtlsOptions() || { rejectUnauthorized: false };
+    const poolConfig = { connectionString: rawUrl, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 20000 };
+    if (!isLocalhost) {
+      poolConfig.ssl = _dbLoadMtlsOptions() || { rejectUnauthorized: true };
+    }
     _dbPool = new Pool(poolConfig);
   }
   try {
@@ -53,6 +60,7 @@ async function _dbConnect() {
     return _dbPool;
   } catch (err) {
     console.warn('[LIBERTY] PostgreSQL indisponível:', err.message);
+    _dbConnected = false;
     return null;
   }
 }
@@ -65,6 +73,13 @@ const db = {
   isConfigured: () => Boolean(_dbGetUrl()),
   isConnected: () => _dbConnected && _dbPool,
   getPool: () => _dbPool,
+  /** Tenta conectar se configurado mas ainda não conectado (útil após cold start). */
+  async ensureConnected() {
+    if (!_dbGetUrl()) return false;
+    if (_dbConnected && _dbPool) return true;
+    await _dbConnect();
+    return _dbConnected && _dbPool;
+  },
 };
 
 // Schema PostgreSQL inlined para deploy (evita dependência de db/init.js e db/schema.sql no runtime)
@@ -152,9 +167,19 @@ async function dbInit() {
   }
   try {
     await db.query(`ALTER TABLE chats DROP CONSTRAINT IF EXISTS chats_type_check`);
-    await db.query(`ALTER TABLE chats ADD CONSTRAINT chats_type_check CHECK (type IN ('channel', 'dm', 'group_dm'))`);
+    await db.query(`ALTER TABLE chats ADD CONSTRAINT chats_type_check CHECK (type IN ('channel', 'dm', 'group_dm', 'category'))`);
   } catch (err) {
     if (err.code !== '42704' && err.code !== '42P01') console.warn('[LIBERTY] Migração chats_type_check:', err.message);
+  }
+  try {
+    await db.query(`ALTER TABLE chats ADD COLUMN parent_id UUID REFERENCES chats(id) ON DELETE SET NULL`);
+  } catch (err) {
+    if (err.code !== '42701') console.warn('[LIBERTY] Migração chats.parent_id:', err.message);
+  }
+  try {
+    await db.query(`ALTER TABLE chats ADD COLUMN channel_type VARCHAR(20) DEFAULT 'text'`);
+  } catch (err) {
+    if (err.code !== '42701') console.warn('[LIBERTY] Migração chats.channel_type:', err.message);
   }
   try {
     await db.query(`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`);
@@ -486,7 +511,11 @@ async function start() {
 
   // Registro: apenas username obrigatório; email e senha opcionais (senha pode ser definida depois nas configurações)
   app.post('/api/v1/auth/register', async (req, res) => {
-    if (!db.isConfigured() || !db.isConnected()) {
+    if (!db.isConfigured()) {
+      return res.status(503).json({ message: 'Banco de dados indisponível. Defina DATABASE_URL no ambiente.' });
+    }
+    const ok = await db.ensureConnected();
+    if (!ok) {
       return res.status(503).json({ message: 'Banco de dados indisponível. Tente mais tarde.' });
     }
 
@@ -574,7 +603,11 @@ async function start() {
 
   // Login: username obrigatório; senha opcional (se usuário não tiver senha, login só com username)
   app.post('/api/v1/auth/login', async (req, res) => {
-    if (!db.isConfigured() || !db.isConnected()) {
+    if (!db.isConfigured()) {
+      return res.status(503).json({ message: 'Banco de dados indisponível. Defina DATABASE_URL no ambiente.' });
+    }
+    const ok = await db.ensureConnected();
+    if (!ok) {
       return res.status(503).json({ message: 'Banco de dados indisponível.' });
     }
     const { username, password } = req.body || {};
@@ -968,6 +1001,86 @@ async function start() {
       }
       console.error('[API] POST /api/v1/servers:', err.message);
       return res.status(500).json({ message: err.message || 'Erro ao criar servidor' });
+    }
+  });
+
+  // GET /api/v1/servers/:serverId/channels — lista canais e categorias do servidor
+  app.get('/api/v1/servers/:serverId/channels', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const serverId = req.params.serverId;
+    try {
+      const r = await db.query(
+        `SELECT id, name, type, server_id, parent_id, channel_type, created_at
+         FROM chats
+         WHERE server_id = $1::uuid AND type IN ('channel', 'category')
+         ORDER BY type ASC, created_at ASC`,
+        [serverId]
+      );
+      const list = r.rows.map((row) => ({
+        id: String(row.id),
+        name: row.name,
+        type: row.type,
+        server_id: row.server_id ? String(row.server_id) : null,
+        parent_id: row.parent_id ? String(row.parent_id) : null,
+        channel_type: row.channel_type || 'text',
+        created_at: row.created_at,
+      }));
+      return res.status(200).json(list);
+    } catch (err) {
+      console.error('[API] GET /api/v1/servers/:serverId/channels:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao listar canais' });
+    }
+  });
+
+  // POST /api/v1/servers/:serverId/channels — criar canal (texto/voz) ou categoria
+  app.post('/api/v1/servers/:serverId/channels', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const serverId = req.params.serverId;
+    const userId = req.userId;
+    const { name, type, parent_id } = req.body || {};
+    const channelType = (type === 'voice' ? 'voice' : 'text').toLowerCase();
+    const isCategory = String(type).toLowerCase() === 'category';
+    const channelName = name && String(name).trim() ? String(name).trim().replace(/\s+/g, '-').toLowerCase().substring(0, 100) : null;
+    if (!channelName || channelName.length < 1) {
+      return res.status(400).json({ message: 'Nome do canal ou categoria é obrigatório' });
+    }
+    try {
+      const chatType = isCategory ? 'category' : 'channel';
+      const parentId = parent_id && String(parent_id).trim() ? String(parent_id).trim() : null;
+      const channelTypeVal = isCategory ? null : channelType;
+      const ins = await db.query(
+        `INSERT INTO chats (name, type, server_id, parent_id, channel_type)
+         VALUES ($1, $2, $3::uuid, $4::uuid, $5)
+         RETURNING id, name, type, server_id, parent_id, channel_type, created_at`,
+        [channelName, chatType, serverId, parentId, channelTypeVal]
+      );
+      const row = ins.rows[0];
+      if (!isCategory) {
+        await db.query(
+          `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT (chat_id, user_id) DO NOTHING`,
+          [row.id, userId]
+        );
+      }
+      const channel = {
+        id: String(row.id),
+        name: row.name,
+        type: row.type,
+        server_id: String(row.server_id),
+        parent_id: row.parent_id ? String(row.parent_id) : null,
+        channel_type: row.channel_type || 'text',
+        created_at: row.created_at,
+      };
+      return res.status(201).json(channel);
+    } catch (err) {
+      if (err.code === '23503') {
+        return res.status(400).json({ message: 'Servidor ou categoria inválida' });
+      }
+      console.error('[API] POST /api/v1/servers/:serverId/channels:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao criar canal' });
     }
   });
 

@@ -27,7 +27,7 @@
         <div class="loading-content">
             <div class="logo-container">
                 <div class="logo-icon" aria-hidden="true">
-                    <img src="/assets/logo.png" alt="" width="88" height="88" data-logo-fallback>
+                    <img src="/assets/logo.png" alt="" width="88" height="88" onerror="this.onerror=null;this.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 88 88\'><rect width=\'88\' height=\'88\' fill=\'%23FFD700\'/><text x=\'44\' y=\'52\' font-family=\'Arial\' font-size=\'24\' font-weight=\'bold\' fill=\'%231a1a1a\' text-anchor=\'middle\'>L</text></svg>')">
                 </div>
                 <h1 class="logo-text">LIBERTY</h1>
             </div>
@@ -48,7 +48,7 @@
         <div class="auth-container" role="dialog" aria-label="Autenticação">
             <div class="auth-brand">
                 <div class="brand-logo" aria-hidden="true">
-                    <img src="/assets/logo.png" alt="LIBERTY" width="68" height="68" data-logo-fallback>
+                    <img src="/assets/logo.png" alt="LIBERTY" width="68" height="68" onerror="this.onerror=null;this.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 88 88\'><rect width=\'88\' height=\'88\' fill=\'%23FFD700\'/><text x=\'44\' y=\'52\' font-family=\'Arial\' font-size=\'24\' font-weight=\'bold\' fill=\'%231a1a1a\' text-anchor=\'middle\'>L</text></svg>')">
                 </div>
                 <h1>LIBERTY</h1>
                 <p class="tagline">Freedom to Connect</p>
@@ -153,7 +153,7 @@
                     tabindex="0"
                     aria-label="Home">
                     <div class="server-icon" aria-hidden="true">
-                        <img src="/assets/logo.png" alt="Home" data-logo-fallback>
+                        <img src="/assets/logo.png" alt="Home" onerror="this.onerror=null;this.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 88 88\'><rect width=\'88\' height=\'88\' fill=\'%23FFD700\'/><text x=\'44\' y=\'52\' font-family=\'Arial\' font-size=\'24\' font-weight=\'bold\' fill=\'%231a1a1a\' text-anchor=\'middle\'>L</text></svg>')">
                     </div>
                     <span class="server-name">Home</span>
                     <div class="server-indicator" aria-hidden="true"></div>
@@ -523,60 +523,66 @@
             </div>
         </div>
 
-        <!-- Modal: Criar Canal -->
+        <!-- Modal: Adicionar (Canal ou Categoria) -->
         <div id="create-channel-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="create-channel-title">
-            <div class="modal-header">
-                <h2 id="create-channel-title">Create Channel</h2>
+            <div class="modal-header add-modal-header">
+                <div class="add-modal-icon"><i class="fas fa-plus" aria-hidden="true"></i></div>
+                <h2 id="create-channel-title">Adicionar</h2>
+                <p class="add-modal-subtitle">Crie um canal de texto/voz ou uma categoria para organizar.</p>
                 <button class="btn-close modal-close-btn" aria-label="Fechar modal">
                     <i class="fas fa-times" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="modal-body">
+                <div class="add-modal-tabs" role="tablist">
+                    <button type="button" class="add-tab active" data-add-tab="channel" role="tab" aria-selected="true">
+                        <i class="fas fa-hashtag" aria-hidden="true"></i> Canal
+                    </button>
+                    <button type="button" class="add-tab" data-add-tab="category" role="tab" aria-selected="false">
+                        <i class="fas fa-folder" aria-hidden="true"></i> Categoria
+                    </button>
+                </div>
                 <form id="create-channel-form" novalidate>
-                    <div class="form-group">
-                        <label class="form-label-upper">Channel Type</label>
-                        <div class="channel-type-options" role="radiogroup" aria-label="Tipo de canal">
-                            <label class="channel-type-option active">
-                                <input type="radio" name="channel-type" value="text" checked>
-                                <div class="channel-type-icon"><i class="fas fa-hashtag" aria-hidden="true"></i></div>
-                                <div class="channel-type-info">
-                                    <span class="channel-type-name">Text</span>
-                                    <span class="channel-type-desc">Send messages, images, GIFs, emoji, opinions, and puns</span>
-                                </div>
-                                <div class="channel-type-check"><i class="fas fa-check-circle" aria-hidden="true"></i></div>
-                            </label>
-                            <label class="channel-type-option">
-                                <input type="radio" name="channel-type" value="voice">
-                                <div class="channel-type-icon"><i class="fas fa-volume-up" aria-hidden="true"></i></div>
-                                <div class="channel-type-info">
-                                    <span class="channel-type-name">Voice</span>
-                                    <span class="channel-type-desc">Hang out together with voice, video, and screen share</span>
-                                </div>
-                                <div class="channel-type-check"><i class="fas fa-circle" aria-hidden="true"></i></div>
-                            </label>
+                    <div id="add-channel-fields" class="add-fields">
+                        <div class="form-group">
+                            <label class="form-label-upper">TIPO DE CANAL</label>
+                            <div class="add-channel-type-options" role="radiogroup" aria-label="Tipo de canal">
+                                <label class="add-type-option active">
+                                    <input type="radio" name="add-channel-type" value="text" checked>
+                                    <span class="add-type-icon"><i class="fas fa-hashtag"></i></span>
+                                    <span class="add-type-text">TEXTO<br><small>Conversas por mensagens</small></span>
+                                </label>
+                                <label class="add-type-option">
+                                    <input type="radio" name="add-channel-type" value="voice">
+                                    <span class="add-type-icon"><i class="fas fa-volume-up"></i></span>
+                                    <span class="add-type-text">VOZ<br><small>Chamadas e áudio</small></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="add-channel-name" class="form-label-upper">NOME DO CANAL</label>
+                            <div class="input-wrapper add-channel-name-wrap">
+                                <i class="fas fa-hashtag" aria-hidden="true"></i>
+                                <input type="text" id="add-channel-name" placeholder="ex: geral, regras, off-topic" maxlength="100" required>
+                            </div>
+                            <p class="add-channel-preview">Será exibido como <strong id="add-channel-preview-slug">#nome-do-canal</strong></p>
+                        </div>
+                        <div class="form-group">
+                            <label for="add-channel-category" class="form-label-upper">CATEGORIA</label>
+                            <select id="add-channel-category">
+                                <option value="">Sem categoria</option>
+                            </select>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label for="channel-name-input">Channel Name</label>
-                        <div class="input-wrapper channel-name-wrapper">
-                            <i class="fas fa-hashtag" id="channel-name-prefix-icon" aria-hidden="true"></i>
-                            <input type="text"
-                                   id="channel-name-input"
-                                   placeholder="new-channel"
-                                   maxlength="100"
-                                   required>
+                    <div id="add-category-fields" class="add-fields hidden">
+                        <div class="form-group">
+                            <label for="add-category-name" class="form-label-upper">NOME DA CATEGORIA</label>
+                            <input type="text" id="add-category-name" placeholder="ex: jogos, staff" maxlength="100">
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label for="channel-topic-input">Channel Topic <span class="optional-label">(optional)</span></label>
-                        <input type="text"
-                               id="channel-topic-input"
-                               placeholder="Let everyone know what this channel is for"
-                               maxlength="1024">
-                    </div>
-                    <div class="modal-actions">
-                        <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
-                        <button type="submit" class="btn btn-primary">Create Channel</button>
+                    <div class="modal-actions add-modal-actions">
+                        <button type="button" class="btn btn-secondary modal-cancel-btn" data-close="create-channel-modal">Cancelar</button>
+                        <button type="button" id="add-create-btn" class="btn btn-primary btn-add-create"><i class="fas fa-plus" aria-hidden="true"></i> Criar canal</button>
                     </div>
                 </form>
             </div>
@@ -805,5 +811,4 @@
     </script>
 </body>
 </html>
-
 
