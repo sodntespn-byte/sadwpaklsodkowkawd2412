@@ -146,43 +146,54 @@
             </ul>
         </nav>
 
-        <!-- ─── Sidebar (rooms / people) ─── -->
-        <aside class="channel-sidebar" aria-label="Rooms e conversas">
+        <!-- ─── Sidebar estilo LIBERTY Ranking (Direct Messages) ─── -->
+        <aside class="channel-sidebar channel-sidebar-redesign" aria-label="Navegação">
             <div class="app-logo" aria-hidden="true">
                 <div class="logo-icon logo-icon-sidebar">
                     <i class="fas fa-dove"></i>
                 </div>
                 <span class="logo-text logo-text-sidebar">LIBERTY</span>
             </div>
-            <header class="server-header" role="banner">
-                <h2 id="server-name">Home</h2>
-                <button class="btn-icon" id="server-dropdown-btn" aria-label="Menu do space" aria-haspopup="true" aria-expanded="false">
-                    <i class="fas fa-chevron-down" aria-hidden="true"></i>
-                </button>
+            <header class="sidebar-direct-header" role="banner">
+                <h2 class="sidebar-direct-title">Direct Messages</h2>
             </header>
 
-            <!-- Home: People + Private chats -->
             <div id="home-sidebar-content" class="home-sidebar-content">
                 <div class="dm-search-wrapper">
-                    <input type="text" id="dm-search-input" class="dm-search" placeholder="Search people or chats" aria-label="Buscar">
+                    <input type="text" id="dm-search-input" class="dm-search" placeholder="Search" aria-label="Buscar">
+                    <i class="fas fa-search dm-search-icon" aria-hidden="true"></i>
                 </div>
-                <nav class="home-nav" aria-label="Navegação">
-                    <button class="home-nav-item active" data-view="friends" aria-label="People">
+                <nav class="home-nav home-nav-redesign" aria-label="Navegação">
+                    <button class="home-nav-item home-nav-item-ranking active" data-view="ranking" aria-label="LIBERTY Ranking">
+                        <i class="fas fa-trophy" aria-hidden="true"></i>
+                        <span>LIBERTY Ranking</span>
+                    </button>
+                    <button class="home-nav-item" data-view="friends" aria-label="People">
                         <i class="fas fa-user-friends" aria-hidden="true"></i>
-                        <span>People</span>
+                        <span>Friends</span>
+                    </button>
+                    <button class="home-nav-item" data-view="missions" aria-label="Missions">
+                        <i class="fas fa-bullseye" aria-hidden="true"></i>
+                        <span>Missions</span>
+                    </button>
+                    <button class="home-nav-item" data-view="shop" aria-label="Shop">
+                        <i class="fas fa-shopping-bag" aria-hidden="true"></i>
+                        <span>Shop</span>
                     </button>
                     <button class="home-nav-item" data-view="activity" aria-label="Activity">
                         <i class="fas fa-bolt" aria-hidden="true"></i>
                         <span>Activity</span>
                     </button>
                 </nav>
-                <div class="dm-list-header">
-                    <span>Private chats</span>
+                <div class="dm-list-header dm-list-header-uppercase">
+                    <span>DIRECT MESSAGES</span>
                     <button class="btn-icon" aria-label="New chat">
                         <i class="fas fa-plus" aria-hidden="true"></i>
                     </button>
                 </div>
-                <div id="dm-list" class="dm-list" role="list" aria-label="Conversas privadas"></div>
+                <div id="dm-list" class="dm-list" role="list" aria-label="Conversas">
+                    <div class="dm-list-empty">No conversations</div>
+                </div>
             </div>
 
             <!-- Rooms (when a space is selected) -->
@@ -209,44 +220,34 @@
                 </div>
             </div>
 
-            <!-- User Panel -->
-            <div class="user-panel" role="complementary" aria-label="Informações do usuário">
-                <div class="user-info" id="user-panel-info" tabindex="0" role="button" aria-label="Perfil do usuário">
-                    <div class="user-avatar" id="user-avatar" aria-hidden="true">
-                        <i class="fas fa-user"></i>
+            <div class="user-panel user-panel-redesign" role="complementary">
+                <button class="btn-icon btn-add-server-yellow" id="add-server-btn-side" aria-label="Add server">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <div class="user-info" id="user-panel-info" tabindex="0" role="button">
+                    <div class="user-avatar user-avatar-yellow" id="user-avatar" aria-hidden="true">
+                        <span id="user-avatar-initial">U</span>
                         <span class="user-avatar-status" id="user-avatar-status" data-status="online"></span>
                     </div>
-                    <div class="user-details">
-                        <span class="user-name" id="user-name">User</span>
-                        <span class="user-status" id="user-status">Online</span>
-                    </div>
+                    <span class="user-name" id="user-name">User</span>
                 </div>
-                <div class="user-controls" role="group" aria-label="Controles de voz">
-                    <button class="btn-icon tooltip" id="mute-btn" data-tooltip="Mute" aria-label="Mutar microfone">
-                        <i class="fas fa-microphone" aria-hidden="true"></i>
-                    </button>
-                    <button class="btn-icon tooltip" id="deafen-btn" data-tooltip="Deafen" aria-label="Silenciar áudio">
-                        <i class="fas fa-headphones" aria-hidden="true"></i>
-                    </button>
-                    <button class="btn-icon tooltip" id="user-settings-btn" data-tooltip="Settings" aria-label="Configurações do usuário">
-                        <i class="fas fa-cog" aria-hidden="true"></i>
-                    </button>
+                <div class="user-controls" role="group">
+                    <button class="btn-icon" id="mute-btn" aria-label="Mute"><i class="fas fa-microphone"></i></button>
+                    <button class="btn-icon" id="deafen-btn" aria-label="Deafen"><i class="fas fa-headphones"></i></button>
+                    <button class="btn-icon" id="user-settings-btn" aria-label="Settings"><i class="fas fa-cog"></i></button>
                 </div>
             </div>
         </aside>
 
         <!-- ─── Main Content ─── -->
         <main class="main-content" role="main">
-            <!-- Room / chat header -->
-            <header class="channel-header">
-                <button class="btn-icon channel-sidebar-toggle mobile-only" type="button" aria-label="Toggle menu" style="display:none"><i class="fas fa-bars" aria-hidden="true"></i></button>
+            <header class="channel-header channel-header-redesign">
+                <button class="btn-icon channel-sidebar-toggle mobile-only" type="button" aria-label="Menu" style="display:none"><i class="fas fa-bars"></i></button>
                 <div class="channel-info">
-                    <i class="fas fa-comment channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
-                    <h3 id="channel-name">lobby</h3>
-                    <div class="channel-header-divider" aria-hidden="true"></div>
-                    <span class="channel-topic" id="channel-topic" aria-label="Tópico">Welcome to LIBERTY</span>
+                    <span class="channel-info-label" id="channel-header-label">Direct Messages</span>
+                    <i class="fas fa-user channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
                 </div>
-                <div class="channel-actions" role="group" aria-label="Ações">
+                <div class="channel-actions" role="group">
                     <button class="btn-icon tooltip" data-tooltip="Threads" aria-label="Threads">
                         <i class="fas fa-comment-dots" aria-hidden="true"></i>
                     </button>
@@ -272,7 +273,43 @@
                 </div>
             </header>
 
-            <!-- Activity view (Home) -->
+            <!-- LIBERTY Ranking view (estilo imagem direita) -->
+            <section id="ranking-view" class="ranking-view" aria-label="LIBERTY Ranking">
+                <div class="ranking-hero">
+                    <i class="fas fa-trophy ranking-hero-icon" aria-hidden="true"></i>
+                    <h1 class="ranking-hero-title">LIBERTY Ranking</h1>
+                    <p class="ranking-hero-subtitle">Community activity and levels</p>
+                </div>
+                <div class="ranking-cards">
+                    <div class="ranking-card">
+                        <div class="ranking-card-header">
+                            <i class="fas fa-clock ranking-card-icon"></i>
+                            <h2 class="ranking-card-title">By Activity</h2>
+                        </div>
+                        <p class="ranking-card-desc">Time in app (incl. background). 5 min → Level 1, each level +20%</p>
+                        <div id="ranking-activity-list" class="ranking-list">
+                            <div class="ranking-list-empty">No activity data yet.</div>
+                        </div>
+                    </div>
+                    <div class="ranking-card">
+                        <div class="ranking-card-header">
+                            <i class="fas fa-star ranking-card-icon"></i>
+                            <h2 class="ranking-card-title">By Content (XP)</h2>
+                        </div>
+                        <p class="ranking-card-desc">1 char = 1 XP. Files = 2.5x size. 500 XP → Level 1, each level +20%</p>
+                        <div id="ranking-xp-list" class="ranking-list">
+                            <div class="ranking-list-empty">No XP data yet.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="ranking-footer">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>End-to-end encryption</span>
+                    <span class="ranking-footer-badge">AES-GCM</span>
+                </div>
+            </section>
+
+            <!-- Activity view -->
             <section id="activity-view" class="activity-view hidden" aria-label="Activity">
                 <div class="activity-placeholder">
                     <i class="fas fa-bolt" aria-hidden="true"></i>
@@ -281,8 +318,15 @@
                 </div>
             </section>
 
-            <!-- People view (Home) -->
+            <!-- People / Friends view -->
             <section id="friends-view" class="friends-view hidden">
+                <div class="friends-tabs-row">
+                    <button type="button" class="friends-header-tab active" data-htab="online">Online</button>
+                    <button type="button" class="friends-header-tab" data-htab="all">All</button>
+                    <button type="button" class="friends-header-tab" data-htab="pending">Pending</button>
+                    <button type="button" class="friends-header-tab" data-htab="blocked">Blocked</button>
+                    <button type="button" class="friends-header-tab add-friend" data-htab="add">Add person</button>
+                </div>
                 <div id="friends-add-section" class="friends-add-section hidden">
                     <h2>Add person</h2>
                     <p>Connect with someone using their LIBERTY username.</p>
@@ -345,36 +389,30 @@
                     </button>
                 </div>
 
-                <div class="message-input-wrapper" role="group" aria-label="Enviar mensagem">
-                    <button class="btn-icon tooltip" id="attach-btn" data-tooltip="Attach" aria-label="Anexar arquivo">
-                        <i class="fas fa-plus-circle" aria-hidden="true"></i>
+                <div class="message-input-wrapper message-input-redesign" role="group">
+                    <button class="btn-icon" id="attach-btn" aria-label="Anexar">
+                        <i class="fas fa-paperclip"></i>
                     </button>
                     <textarea id="message-input"
-                              placeholder="Message lobby"
+                              placeholder="Select a server or conversation to send messages"
                               rows="1"
-                              maxlength="2000"
-                              aria-label="Escrever mensagem"
-                              aria-multiline="true"></textarea>
-                    <div class="input-actions" role="group" aria-label="Opções de mensagem">
-                        <button class="btn-icon tooltip" data-tooltip="Gift" aria-label="Nitro Gift">
-                            <i class="fas fa-gift" aria-hidden="true"></i>
-                        </button>
-                        <button class="btn-icon tooltip" data-tooltip="GIF" aria-label="GIFs">
-                            <i class="fas fa-file-video" aria-hidden="true"></i>
-                        </button>
-                        <button class="btn-icon tooltip" data-tooltip="Stickers" aria-label="Stickers">
-                            <i class="fas fa-sticky-note" aria-hidden="true"></i>
-                        </button>
-                        <button class="btn-icon tooltip" id="emoji-btn" data-tooltip="Emoji" aria-label="Emojis">
-                            <i class="fas fa-smile" aria-hidden="true"></i>
-                        </button>
+                              maxlength="5000"
+                              aria-label="Mensagem"></textarea>
+                    <div class="input-actions">
+                        <button class="btn-icon" aria-label="Image"><i class="fas fa-image"></i></button>
+                        <button class="btn-icon" id="emoji-btn" aria-label="Emoji"><i class="fas fa-smile"></i></button>
                     </div>
+                    <span class="input-char-count" id="input-char-count">0/5.000</span>
+                    <button type="button" class="btn-send-yellow" id="btn-send-msg" aria-label="Enviar">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
                 </div>
             </div>
         </main>
 
-        <!-- ─── Members Sidebar (240px) ─── -->
-        <aside class="members-sidebar" id="members-sidebar" aria-label="Members">
+        <aside class="members-sidebar members-sidebar-redesign" id="members-sidebar" aria-label="Members">
+            <h3 class="members-sidebar-title">MEMBROS — <span id="members-count">0</span></h3>
+            <h4 class="members-sidebar-online">ONLINE — <span id="members-online-count">0</span></h4>
             <div class="members-list" id="members-list" role="list">
                 <!-- Membros injetados via JS -->
             </div>

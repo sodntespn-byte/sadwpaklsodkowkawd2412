@@ -352,7 +352,7 @@ class LibertyApp {
             avatarEl.style.setProperty('--status-color', statusColor);
             avatarEl.innerHTML = this.currentUser.avatar
                 ? `<img src="${this.escapeHtml(this.currentUser.avatar)}" alt="${this.escapeHtml(this.currentUser.username)}"><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`
-                : `<span>${letter}</span><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`;
+                : `<span id="user-avatar-initial">${letter}</span><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`;
         }
         if (statusEl) {
             const labels = { online: 'Online', idle: 'Idle', dnd: 'Do Not Disturb', invisible: 'Invisible' };
@@ -398,6 +398,8 @@ class LibertyApp {
 
         // Add server
         document.getElementById('add-server-btn').addEventListener('click', () => this.showModal('create-server-modal'));
+        const addServerSide = document.getElementById('add-server-btn-side');
+        if (addServerSide) addServerSide.addEventListener('click', () => this.showModal('create-server-modal'));
 
         // Modal close
         document.querySelectorAll('.modal-close-btn').forEach(btn => btn.addEventListener('click', () => this.hideModal()));
@@ -414,10 +416,14 @@ class LibertyApp {
         });
         msgInput.addEventListener('input', () => {
             this.autoResizeTextarea(msgInput);
+            const countEl = document.getElementById('input-char-count');
+            if (countEl) countEl.textContent = `${(msgInput.value || '').length.toLocaleString('pt-BR')}/5.000`;
             if (!this._typingDebounce) this.handleTyping();
             clearTimeout(this._typingDebounce);
             this._typingDebounce = setTimeout(() => { this._typingDebounce = null; }, 2000);
         });
+        const countEl = document.getElementById('input-char-count');
+        if (countEl) countEl.textContent = '0/5.000';
 
         // Members toggle
         document.getElementById('toggle-members-btn').addEventListener('click', () => this.toggleMembers());
@@ -437,9 +443,9 @@ class LibertyApp {
         }
 
         // User panel buttons
-        const muteBtn = document.querySelector('[data-tooltip="Mute"]');
-        const deafenBtn = document.querySelector('[data-tooltip="Deafen"]');
-        const settingsBtn = document.querySelector('.user-controls [data-tooltip="Settings"]');
+        const muteBtn = document.getElementById('mute-btn') || document.querySelector('[data-tooltip="Mute"]');
+        const deafenBtn = document.getElementById('deafen-btn') || document.querySelector('[data-tooltip="Deafen"]');
+        const settingsBtn = document.getElementById('user-settings-btn') || document.querySelector('.user-controls [data-tooltip="Settings"]');
         if (muteBtn) muteBtn.addEventListener('click', () => this.toggleMute());
         if (deafenBtn) deafenBtn.addEventListener('click', () => this.toggleDeafen());
         if (settingsBtn) settingsBtn.addEventListener('click', () => this.showSettingsPanel('user'));
@@ -719,7 +725,9 @@ class LibertyApp {
         const serverHeader = document.querySelector('.server-header');
         if (serverHeader) serverHeader.style.display = 'none';
         this.renderHomeSidebar();
-        this.renderFriendsView('online');
+        const sidebarTitle = document.querySelector('.sidebar-direct-title');
+        if (sidebarTitle) sidebarTitle.textContent = 'Direct Messages';
+        this.showRankingView();
         this.renderActiveNow();
         this._updateChannelHeaderForContext();
         document.querySelector('.message-input-container').style.display = 'none';
@@ -742,22 +750,23 @@ class LibertyApp {
                     btn.classList.add('active');
                     if (dmList) dmList.querySelectorAll('.dm-list-item').forEach(d => d.classList.remove('active'));
                     const view = btn.dataset.view;
-                    if (view === 'friends') {
+                    if (view === 'ranking') {
+                        this.showRankingView();
+                    } else if (view === 'friends') {
                         this.renderFriendsView(this.currentFriendsTab);
-                        const channelNameEl = document.getElementById('channel-name');
-                        const channelIconEl = document.querySelector('.channel-header .channel-info i');
-                        if (channelNameEl) channelNameEl.textContent = 'People';
-                        if (channelIconEl) channelIconEl.className = 'fas fa-users channel-header-icon';
+                        this._setHeaderLabel('People', 'fa-user-friends');
                     } else if (view === 'activity') {
+                        document.getElementById('ranking-view').classList.add('hidden');
                         document.getElementById('friends-view').classList.add('hidden');
                         document.getElementById('activity-view').classList.remove('hidden');
                         document.getElementById('messages-container').style.display = 'none';
-                        const channelNameEl = document.getElementById('channel-name');
-                        const channelIconEl = document.querySelector('.channel-header .channel-info i');
-                        if (channelNameEl) channelNameEl.textContent = 'Activity';
-                        if (channelIconEl) channelIconEl.className = 'fas fa-bolt channel-header-icon';
-                    } else {
+                        document.querySelector('.message-input-container').style.display = 'none';
+                        this._setHeaderLabel('Activity', 'fa-bolt');
+                    } else if (view === 'missions' || view === 'shop') {
+                        this.showRankingView();
                         this.showToast(`${btn.textContent.trim()} — coming soon`, 'info');
+                    } else {
+                        this.showRankingView();
                     }
                 };
             });
@@ -851,17 +860,14 @@ class LibertyApp {
                 dmList.querySelectorAll('.dm-list-item').forEach(d => d.classList.remove('active'));
                 if (navArea) navArea.querySelectorAll('.home-nav-item').forEach(b => b.classList.remove('active'));
                 item.classList.add('active');
-                const channelNameEl = document.getElementById('channel-name');
-                const channelIconEl = document.querySelector('.channel-header .channel-info i');
-                if (channelNameEl) channelNameEl.textContent = recipient.username;
-                if (channelIconEl) channelIconEl.className = 'fas fa-at channel-header-icon';
+                this._setHeaderLabel(recipient.username, 'fa-at');
                 this._renderDMChat(dm);
             });
             dmList.appendChild(item);
         });
 
         if (this.dmChannels.length === 0) {
-            dmList.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-muted);font-size:13px">No DMs yet</div>';
+            dmList.innerHTML = '<div class="dm-list-empty">No conversations</div>';
         }
     }
 
@@ -900,16 +906,23 @@ class LibertyApp {
         const friendsView = document.getElementById('friends-view');
         const messagesContainer = document.getElementById('messages-container');
 
+        const rankingView = document.getElementById('ranking-view');
         const activityView = document.getElementById('activity-view');
+        if (rankingView) rankingView.classList.add('hidden');
         if (activityView) activityView.classList.add('hidden');
         friendsView.classList.remove('hidden');
         messagesContainer.style.display = 'none';
+
+        this._setHeaderLabel('People', 'fa-user-friends');
 
         const friendsList = document.getElementById('friends-list');
         const addSection = document.getElementById('friends-add-section');
         const searchWrapper = friendsView.querySelector('.friends-search-wrapper');
 
-        this._updateChannelHeaderForContext();
+        friendsView.querySelectorAll('.friends-header-tab').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.htab === tab);
+            btn.onclick = () => this.renderFriendsView(btn.dataset.htab);
+        });
 
         if (addSection) addSection.classList.toggle('hidden', tab !== 'add');
         if (searchWrapper) searchWrapper.style.display = tab === 'add' ? 'none' : '';
@@ -1055,60 +1068,65 @@ class LibertyApp {
         return { online: 'Online', idle: 'Idle', dnd: 'Do Not Disturb', offline: 'Offline', invisible: 'Invisible' }[s] || 'Online';
     }
 
+    _setHeaderLabel(label, iconClass) {
+        const labelEl = document.getElementById('channel-header-label');
+        const iconEl = document.getElementById('channel-header-icon');
+        if (labelEl) labelEl.textContent = label;
+        if (iconEl) iconEl.className = `fas ${iconClass} channel-header-icon`;
+    }
+
+    showRankingView() {
+        const rankingView = document.getElementById('ranking-view');
+        const friendsView = document.getElementById('friends-view');
+        const activityView = document.getElementById('activity-view');
+        const messagesContainer = document.getElementById('messages-container');
+        const messageInputContainer = document.querySelector('.message-input-container');
+        if (rankingView) rankingView.classList.remove('hidden');
+        if (friendsView) friendsView.classList.add('hidden');
+        if (activityView) activityView.classList.add('hidden');
+        if (messagesContainer) messagesContainer.style.display = 'none';
+        if (messageInputContainer) messageInputContainer.style.display = '';
+        this._setHeaderLabel('Direct Messages', 'fa-user');
+    }
+
     _updateChannelHeaderForContext() {
         const header = document.querySelector('.channel-header');
         if (!header) return;
         const info = header.querySelector('.channel-info');
-        const actions = header.querySelector('.channel-actions');
+        const labelEl = document.getElementById('channel-header-label');
+        const iconEl = document.getElementById('channel-header-icon');
 
         if (this.isHomeView) {
-            const tab = this.currentFriendsTab || 'online';
-            info.innerHTML = `
-                <i class="fas fa-user-friends channel-header-icon" aria-hidden="true"></i>
-                <h3>People</h3>
-                <div class="channel-header-divider" aria-hidden="true"></div>
-                <div class="friends-header-tabs">
-                    <button class="friends-header-tab ${tab === 'online' ? 'active' : ''}" data-htab="online">Online</button>
-                    <button class="friends-header-tab ${tab === 'all' ? 'active' : ''}" data-htab="all">All</button>
-                    <button class="friends-header-tab ${tab === 'pending' ? 'active' : ''}" data-htab="pending">Pending</button>
-                    <button class="friends-header-tab ${tab === 'blocked' ? 'active' : ''}" data-htab="blocked">Blocked</button>
-                    <button class="friends-header-tab add-friend ${tab === 'add' ? 'active' : ''}" data-htab="add">Add person</button>
-                </div>
-            `;
-            info.querySelectorAll('.friends-header-tab').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    this.renderFriendsView(btn.dataset.htab);
-                    this._updateChannelHeaderForContext();
-                });
-            });
+            if (labelEl) labelEl.textContent = 'Direct Messages';
+            if (iconEl) iconEl.className = 'fas fa-user channel-header-icon';
         } else {
             const ch = this.channels.find(c => c.id === (this.currentChannel?.id || this.currentChannel));
             const icon = ch?.channel_type === 'voice' ? 'fa-volume-up' : 'fa-comment';
             const name = ch?.name || 'lobby';
-            const topic = ch?.topic || '';
-            info.innerHTML = `
-                <i class="fas ${icon} channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
-                <h3 id="channel-name">${this.escapeHtml(name)}</h3>
-                <div class="channel-header-divider" aria-hidden="true"></div>
-                <span class="channel-topic" id="channel-topic">${this.escapeHtml(topic)}</span>
-            `;
+            if (labelEl) labelEl.textContent = `# ${name}`;
+            if (iconEl) iconEl.className = `fas ${icon} channel-header-icon`;
         }
     }
 
     renderActiveNow() {
         const membersSidebar = document.getElementById('members-sidebar');
         const membersList = document.getElementById('members-list');
+        const membersCountEl = document.getElementById('members-count');
+        const membersOnlineEl = document.getElementById('members-online-count');
         if (!membersSidebar) return;
 
         if (this.isHomeView) {
             membersSidebar.classList.remove('collapsed');
+            if (membersCountEl) membersCountEl.textContent = '1';
+            if (membersOnlineEl) membersOnlineEl.textContent = '1';
+            const uname = this.currentUser?.username || 'User';
+            const letter = uname.charAt(0).toUpperCase();
             membersList.innerHTML = `
-                <div class="active-now-panel" style="width:100%;border:none;padding:16px">
-                    <h4 style="font-size:16px;font-weight:700;color:var(--text-primary);margin-bottom:16px">Active Now</h4>
-                    <div class="active-now-empty" style="text-align:center;padding:20px 16px">
-                        <p style="font-weight:600;color:var(--text-primary);margin-bottom:4px">It's quiet for now...</p>
-                        <p style="font-size:13px;color:var(--text-secondary)">When a friend starts an activity — like playing a game or hanging out on voice — we'll show it here!</p>
+                <div class="member-item">
+                    <div class="member-avatar online">
+                        <span>${this.escapeHtml(letter)}</span>
                     </div>
+                    <span class="member-name">${this.escapeHtml(uname)}</span>
                 </div>
             `;
         }
@@ -1122,6 +1140,8 @@ class LibertyApp {
         this.currentServer = server;
         const serverNameEl = document.getElementById('server-name');
         if (serverNameEl) serverNameEl.textContent = server.name;
+        const sidebarTitle = document.querySelector('.sidebar-direct-title');
+        if (sidebarTitle) sidebarTitle.textContent = server.name;
         const serverHeader = document.querySelector('.server-header');
         if (serverHeader) serverHeader.style.display = '';
         { const _b = document.getElementById('server-dropdown-btn'); if (_b) { _b.querySelector('i').className = 'fas fa-chevron-down'; _b.style.display = ''; } }
@@ -1131,8 +1151,10 @@ class LibertyApp {
         const channelList = document.getElementById('channel-list');
         if (channelList) channelList.style.display = '';
 
+        const rankingView = document.getElementById('ranking-view');
         const friendsView = document.getElementById('friends-view');
         const messagesContainer = document.getElementById('messages-container');
+        if (rankingView) rankingView.classList.add('hidden');
         if (friendsView) friendsView.classList.add('hidden');
         if (messagesContainer) messagesContainer.style.display = '';
 
@@ -2177,6 +2199,10 @@ class LibertyApp {
         if (this.members.length === 0) {
             container.innerHTML = '<div class="empty-state"><p class="empty-state-description" style="padding:16px">No members found</p></div>';
         }
+        const membersCountEl = document.getElementById('members-count');
+        const membersOnlineEl = document.getElementById('members-online-count');
+        if (membersCountEl) membersCountEl.textContent = String(this.members.length);
+        if (membersOnlineEl) membersOnlineEl.textContent = String(online.length);
     }
 
     createMemberElement(member) {
