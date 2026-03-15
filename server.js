@@ -8,8 +8,64 @@ import express from 'express';
 import helmet from 'helmet';
 import bcrypt from 'bcrypt';
 import { Server as SocketIOServer } from 'socket.io';
-import db from './db/index.js';
-import * as auth from './auth.js';
+import { Pool } from 'pg';
+import jwt from 'jsonwebtoken';
+import WebSocket, { WebSocketServer } from 'ws';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// --- db (inline para deploy sem pasta db/)
+function _dbGetUrl() {
+  return process.env.DATABASE_URL || '';
+}
+function _dbLoadMtlsOptions() {
+  try {
+    const CERT_PATH = path.join(__dirname, 'certificate.pem');
+    const raw = fs.readFileSync(CERT_PATH, 'utf8');
+    const keyMatch = raw.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]+?-----END (?:RSA )?PRIVATE KEY-----/);
+    const certMatch = raw.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
+    if (!keyMatch || !certMatch) return null;
+    return { rejectUnauthorized: false, key: keyMatch[0], cert: certMatch[0] };
+  } catch {
+    return null;
+  }
+}
+let _dbPool = null;
+let _dbConnected = false;
+async function _dbConnect() {
+  const rawUrl = _dbGetUrl();
+  if (!rawUrl || !rawUrl.startsWith('postgres')) {
+    console.warn('[LIBERTY] DATABASE_URL não definida — banco desativado');
+    return null;
+  }
+  if (!_dbPool) {
+    const isLocalhost = /@localhost[\s:]|@127\.0\.0\.1[\s:]/.test(rawUrl);
+    const poolConfig = { connectionString: rawUrl, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 15000 };
+    if (!isLocalhost) poolConfig.ssl = _dbLoadMtlsOptions() || { rejectUnauthorized: false };
+    _dbPool = new Pool(poolConfig);
+  }
+  try {
+    const client = await _dbPool.connect();
+    await client.query('SELECT 1');
+    client.release();
+    _dbConnected = true;
+    console.log('[LIBERTY] PostgreSQL conectado');
+    return _dbPool;
+  } catch (err) {
+    console.warn('[LIBERTY] PostgreSQL indisponível:', err.message);
+    return null;
+  }
+}
+const db = {
+  query(text, params) {
+    if (!_dbPool) throw new Error('Banco não configurado. Defina DATABASE_URL.');
+    return _dbPool.query(text, params);
+  },
+  connect: _dbConnect,
+  isConfigured: () => Boolean(_dbGetUrl()),
+  isConnected: () => _dbConnected && _dbPool,
+  getPool: () => _dbPool,
+};
 
 // Schema PostgreSQL inlined para deploy (evita dependência de db/init.js e db/schema.sql no runtime)
 const LIBERTY_SCHEMA_SQL = `
@@ -117,10 +173,126 @@ async function dbInit() {
   }
   console.log('[LIBERTY] Schema PostgreSQL aplicado (' + applied + ' statements)');
 }
-import * as ws from './ws.js';
 
-// Diretórios básicos
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// --- auth (inline para deploy sem auth.js)
+const _authSecret = process.env.JWT_SECRET || 'dev-secret-mudar-depois';
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  console.warn('[AUTH] Defina JWT_SECRET em produção.');
+}
+const auth = {
+  sign(user) {
+    return jwt.sign({ sub: user.id }, _authSecret, { expiresIn: '90d' });
+  },
+  verify(token) {
+    try {
+      const payload = jwt.verify(token, _authSecret);
+      return payload && payload.sub ? { sub: payload.sub } : null;
+    } catch {
+      return null;
+    }
+  },
+  middleware(req, res, next) {
+    const header = req.headers.authorization;
+    const bearerToken = header && header.startsWith('Bearer ') ? header.slice(7).trim() : null;
+    const xToken = (req.headers['x-auth-token'] || req.headers['X-Auth-Token'] || '').trim() || null;
+    const cookieToken = (req.cookies && req.cookies.liberty_token) || null;
+    const bodyToken = (req.body && (req.body.token || req.body.access_token)) ? String(req.body.token || req.body.access_token).trim() : null;
+    const queryToken = (req.query && (req.query.token || req.query.access_token)) ? String(req.query.token || req.query.access_token).trim() : null;
+    const token = cookieToken || bearerToken || xToken || bodyToken || queryToken;
+    if (token) {
+      const payload = auth.verify(token);
+      req.userId = payload ? payload.sub : null;
+    } else req.userId = null;
+    next();
+  },
+  requireAuth(req, res, next) {
+    if (!req.userId) return res.status(401).json({ message: 'Não autorizado' });
+    next();
+  },
+};
+
+// --- ws (inline para deploy sem ws.js)
+const _wsSubscriptions = new Map();
+const _wsUserConnections = new Map();
+function _wsAddUserConnection(userId, ws) {
+  if (!userId) return;
+  let set = _wsUserConnections.get(userId);
+  if (!set) { set = new Set(); _wsUserConnections.set(userId, set); }
+  set.add(ws);
+}
+function _wsRemoveUserConnection(userId, ws) {
+  const set = _wsUserConnections.get(userId);
+  if (set) { set.delete(ws); if (set.size === 0) _wsUserConnections.delete(userId); }
+}
+function _wsSubscribe(chatId, ws) {
+  if (!chatId) return;
+  let set = _wsSubscriptions.get(chatId);
+  if (!set) { set = new Set(); _wsSubscriptions.set(chatId, set); }
+  set.add(ws);
+}
+function _wsUnsubscribe(chatId, ws) {
+  const set = _wsSubscriptions.get(chatId);
+  if (set) { set.delete(ws); if (set.size === 0) _wsSubscriptions.delete(chatId); }
+}
+function _wsUnsubscribeAll(ws) {
+  _wsSubscriptions.forEach((set) => set.delete(ws));
+}
+function _wsSendToUser(userId, payload) {
+  const set = _wsUserConnections.get(userId);
+  if (!set) return;
+  const str = typeof payload === 'string' ? payload : JSON.stringify(payload);
+  set.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(str); });
+}
+const ws = {
+  emitMessage(message) {
+    const set = _wsSubscriptions.get(message.chat_id);
+    if (!set) return;
+    const payload = JSON.stringify({ type: 'message', data: message });
+    set.forEach((c) => { if (c.readyState === WebSocket.OPEN) c.send(payload); });
+  },
+  attach(server) {
+    const wss = new WebSocketServer({ server, path: '/ws' });
+    wss.on('connection', (wsClient, req) => {
+      const url = new URL(req.url || '', 'http://localhost');
+      const token = url.searchParams.get('token') || (req.headers['sec-websocket-protocol'] && req.headers['sec-websocket-protocol'].split(',').map(s => s.trim())[0]);
+      const payload = token ? auth.verify(token) : null;
+      const userId = payload ? payload.sub : null;
+      wsClient.userId = userId;
+      wsClient.subscribedChats = new Set();
+      _wsAddUserConnection(userId, wsClient);
+      wsClient.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          if (msg.type === 'subscribe' && msg.chat_id) {
+            wsClient.subscribedChats.add(msg.chat_id);
+            _wsSubscribe(msg.chat_id, wsClient);
+          } else if (msg.type === 'unsubscribe' && msg.chat_id) {
+            wsClient.subscribedChats.delete(msg.chat_id);
+            _wsUnsubscribe(msg.chat_id, wsClient);
+          } else if (msg.type === 'webrtc_offer' || msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice') {
+            const target = msg.target_user_id || msg.to;
+            if (target && msg.payload !== undefined) _wsSendToUser(target, { type: msg.type, from_user_id: userId, payload: msg.payload });
+          } else if (msg.type === 'stream_started') {
+            const target = msg.target_user_id || msg.to;
+            if (target) _wsSendToUser(target, { type: 'stream_started', from_user_id: userId, stream_type: msg.stream_type || 'screen' });
+          } else if (msg.type === 'stream_stopped') {
+            const target = msg.target_user_id || msg.to;
+            if (target) _wsSendToUser(target, { type: 'stream_stopped', from_user_id: userId });
+          }
+        } catch (_) {}
+      });
+      wsClient.on('close', () => {
+        _wsRemoveUserConnection(userId, wsClient);
+        wsClient.subscribedChats.forEach((chatId) => _wsUnsubscribe(chatId, wsClient));
+        _wsUnsubscribeAll(wsClient);
+      });
+    });
+    return wss;
+  },
+  subscribe: _wsSubscribe,
+  unsubscribe: _wsUnsubscribe,
+};
+
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const STATIC_DIR = path.join(__dirname, 'static');
