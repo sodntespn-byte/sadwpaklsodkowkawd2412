@@ -1,6 +1,7 @@
+DISPLAY_NAME=Liberty
 MAIN=server.js
+START=npm install --no-package-lock --no-audit --no-fund && node server.js
 MEMORY=256
 VERSION=recommended
-DISPLAY_NAME=Liberty
-# Force o ambiente a ser Node
-SUB_DOMAIN=liberty-chat
+HOST=0.0.0.0
+
