@@ -302,7 +302,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "'sha256-iNdzJueCLgGX4W5su4mORbOameseXUZO+P+Hm0wFzX0='"],
       connectSrc: ["'self'", "wss:", "ws:"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
@@ -1180,6 +1180,17 @@ async function start() {
       res.sendFile(faviconPath);
     } else {
       res.status(204).end();
+    }
+  });
+
+  // Logo — serve de static ou fallback SVG (evita 404 quando static não está no deploy)
+  const logoPath = path.join(STATIC_DIR, 'assets', 'logo.png');
+  const logoFallbackSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88" width="88" height="88"><rect width="88" height="88" fill="#FFD700"/><text x="44" y="52" font-family="Arial,sans-serif" font-size="24" font-weight="bold" fill="#1a1a1a" text-anchor="middle">L</text></svg>';
+  app.get('/assets/logo.png', (req, res) => {
+    if (fs.existsSync(logoPath)) {
+      res.sendFile(logoPath);
+    } else {
+      res.type('svg').send(logoFallbackSvg);
     }
   });
 
