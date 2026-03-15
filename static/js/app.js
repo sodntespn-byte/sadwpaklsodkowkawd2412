@@ -4,6 +4,19 @@
     const API_BASE = '/api/v1';
     const USERNAME_KEY = 'liberty_username';
 
+    // Fallback da logo (em JS para não usar inline onerror e evitar bloqueio CSP script-src-attr)
+    const LOGO_FALLBACK_SVG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 88 88"><rect width="88" height="88" fill="#FFD700"/><text x="44" y="52" font-family="Arial" font-size="24" font-weight="bold" fill="#1a1a1a" text-anchor="middle">L</text></svg>');
+    function setupLogoFallback() {
+        document.querySelectorAll('img[data-logo-fallback]').forEach(function (img) {
+            img.onerror = function () { this.onerror = null; this.src = LOGO_FALLBACK_SVG; };
+        });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupLogoFallback);
+    } else {
+        setupLogoFallback();
+    }
+
     let currentChannelId = null;
     let pollingTimer = null;
     let realtimeWs = null;
@@ -781,4 +794,5 @@
     // expõe para depuração manual, se necessário
     window.fetchMessages = fetchMessages;
 })();
+
 
