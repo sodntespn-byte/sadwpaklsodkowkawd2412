@@ -285,11 +285,13 @@ const MessageAPI = {
         return apiRequest(`/channels/${channelId}/messages${query ? '?' + query : ''}`);
     },
     
-    async create(roomOrChannelId, content, tts = false, embeds = []) {
+    async create(roomOrChannelId, content, tts = false, embeds = [], clientId = null) {
         const channelId = parseRoom(roomOrChannelId);
+        const body = { content: content || '', tts, embeds };
+        if (clientId != null) body.client_id = clientId;
         return apiRequest(`/channels/${channelId}/messages`, {
             method: 'POST',
-            body: { content: content || '', tts, embeds }
+            body
         });
     },
     

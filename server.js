@@ -1061,7 +1061,7 @@ async function start() {
   // Mensagens por canal: cache + persistência no DB (ensureMessageInDb)
   app.post('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
     const { channelId } = req.params;
-    const { content } = req.body || {};
+    const { content, client_id: clientId } = req.body || {};
     if (!content || !String(content).trim()) {
       return res.status(400).json({ message: 'content é obrigatório' });
     }
@@ -1102,7 +1102,9 @@ async function start() {
       await ensureMessageInDb(saved, chatId);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
-      return res.status(201).json({ success: true, message: saved });
+      const response = { success: true, message: saved };
+      if (clientId !== undefined) response.client_id = clientId;
+      return res.status(201).json(response);
     } catch (err) {
       console.error('[API] POST /api/v1/channels/:id/messages', err.message);
       return res.status(500).json({ message: err.message || 'Erro ao salvar' });

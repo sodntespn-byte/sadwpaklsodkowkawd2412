@@ -59,7 +59,7 @@
 .profile-card-role{display:flex;align-items:center;gap:4px;padding:2px 8px;background:var(--dark-gray);border-radius:var(--radius-full);font-size:11px;color:var(--text-secondary)}
 .profile-card-role .role-dot{width:8px;height:8px;border-radius:50%}
 .profile-card-modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:900;pointer-events:none}
-.profile-card-modal .profile-card-modal-inner{pointer-events:auto;width:320px;background:rgba(24,21,18,.97);backdrop-filter:blur(20px);border:1px solid rgba(255,215,0,.25);border-radius:16px;box-shadow:0 0 40px rgba(255,215,0,.15);padding:24px 20px;text-align:center}
+.profile-card-modal .profile-card-modal-inner{pointer-events:auto;width:320px;background:rgba(24,21,18,.97);backdrop-filter:blur(20px);border:1px solid rgba(255,215,0,.25);border-radius:1rem;box-shadow:0 0 40px rgba(255,215,0,.15);padding:24px 20px;text-align:center}
 .profile-card-trophy{color:var(--primary-yellow);font-size:24px;margin-bottom:8px;display:block}
 .profile-card-modal .profile-card-avatar-wrap{margin-bottom:12px}
 .profile-card-modal .profile-card-avatar{width:80px;height:80px;margin:0 auto;border-radius:50%;background:var(--dark-gray);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--text-secondary);border:3px solid rgba(255,215,0,.3);position:relative}
@@ -75,7 +75,7 @@
 .profile-card-close{width:100%;padding:10px 16px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text-primary);font-size:14px;cursor:pointer;font-family:inherit}
 .profile-card-close:hover{background:var(--medium-gray);border-color:var(--primary-yellow)}
 .profile-card-full{pointer-events:auto!important;align-items:center;justify-content:center;padding:24px}
-.profile-card-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);z-index:0}
+.profile-card-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:0;cursor:pointer}
 .profile-card-modal.profile-card-full{pointer-events:auto!important}
 .profile-card-full .profile-card-modal-inner{position:relative;z-index:1;display:flex;max-width:90vw;width:720px;max-height:85vh;overflow:hidden;border-radius:16px;text-align:left;padding:0}
 .profile-card-two-panels{background:rgba(24,21,18,.98);border:1px solid rgba(255,215,0,.2);box-shadow:0 0 60px rgba(255,215,0,.12)}
@@ -111,11 +111,11 @@
 .profile-card-tab-content{flex:1;overflow-y:auto;min-height:0}
 .profile-card-tab-content h4{font-size:12px;font-weight:600;color:var(--text-secondary);margin:0 0 8px}
 .profile-card-activity-empty{font-size:13px;color:var(--text-muted);margin:0}
-/* Player banner — perfil centralizado ao clicar no player */
-.player-banner-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:0;animation:playerBannerFadeIn .25s ease}
-.player-banner-card{position:relative;z-index:1;width:100%;max-width:420px;max-height:90vh;overflow:hidden;border-radius:20px;background:rgba(18,16,14,.98);border:1px solid rgba(255,215,0,.18);box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.03),0 0 60px rgba(255,215,0,.08);display:flex;flex-direction:column;animation:playerBannerScaleIn .3s var(--ease-out-expo)}
-@keyframes playerBannerFadeIn{from{opacity:0}to{opacity:1}}
-@keyframes playerBannerScaleIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
+/* Player banner — perfil modal centralizado, estilo Discord */
+.player-banner-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:0;cursor:pointer;animation:profileBackdropIn .2s ease-out}
+.player-banner-card{position:relative;z-index:1;width:100%;max-width:420px;max-height:90vh;overflow:hidden;border-radius:var(--radius-2xl, 1rem);background:rgba(18,16,14,.98);border:1px solid rgba(255,215,0,.15);box-shadow:0 25px 50px -12px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.04),0 0 80px rgba(255,215,0,.06);display:flex;flex-direction:column;animation:profileCardIn .28s cubic-bezier(0.16,1,0.3,1) forwards}
+@keyframes profileBackdropIn{from{opacity:0}to{opacity:1}}
+@keyframes profileCardIn{from{opacity:0;transform:scale(0.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
 .player-banner-banner{height:120px;background:linear-gradient(135deg,var(--primary-yellow) 0%,var(--dark-yellow) 50%,#b8860b 100%);background-size:cover;background-position:center;position:relative}
 .player-banner-banner::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(18,16,14,.6) 100%)}
 .player-banner-avatar-wrap{text-align:center;margin-top:-52px;position:relative;z-index:1;padding:0 24px}
@@ -456,6 +456,8 @@ class LibertyApp {
         this._emojiPicker = null;
         this._statusPicker = null;
         this._profileCard = null;
+        this._profileCardOpening = false;
+        this._profileJustOpened = false;
         this._serverDropdown = null;
         this._searchPanel = null;
         this._pinnedPanel = null;
@@ -869,7 +871,10 @@ class LibertyApp {
             if (this._contextMenu && !this._contextMenu.contains(e.target)) this.hideContextMenu();
             if (this._statusPicker && !this._statusPicker.contains(e.target) && !e.target.closest('.user-info')) this.hideStatusPicker();
             if (this._serverDropdown && !this._serverDropdown.contains(e.target) && !e.target.closest('.server-header')) this.hideServerDropdown();
-            if (this._profileCard && !this._profileCard.contains(e.target)) this.hideProfileCard();
+            if (this._profileCard && !this._profileCard.contains(e.target)) {
+                if (this._profileJustOpened) this._profileJustOpened = false;
+                else this.hideProfileCard();
+            }
             if (this._pinnedPanel && !this._pinnedPanel.contains(e.target) && !e.target.closest('#pinned-btn')) this.hidePinnedPanel();
             if (this._searchPanel && !this._searchPanel.contains(e.target) && !e.target.closest('#channel-search-input') && !e.target.closest('.channel-search-wrapper')) this.hideSearchPanel();
             if (this._emojiPicker && !this._emojiPicker.contains(e.target) && !e.target.closest('[data-tooltip="Emoji"]') && !e.target.closest('.message-actions')) this.hideEmojiPicker();
@@ -3936,7 +3941,9 @@ class LibertyApp {
     }
 
     async showProfileCard(member, e) {
+        if (e && e.stopPropagation) e.stopPropagation();
         this.hideProfileCard();
+        this._profileCardOpening = true;
         const user = member.user || member;
         let name = member.nickname || member.username || user.username || member.display_name || 'User';
         const userId = member.user_id || member.id || user.id || '';
@@ -3956,6 +3963,7 @@ class LibertyApp {
                 }
             } catch (_) {}
         }
+        if (!this._profileCardOpening) return;
         const letter = name.charAt(0).toUpperCase();
         const avatarText = name.length >= 2 ? name.slice(0, 2).toUpperCase() : letter;
         const tag = (member.username || user.username || name).replace(/\s/g, '');
@@ -4044,9 +4052,21 @@ class LibertyApp {
         overlay.style.display = 'flex';
         overlay.appendChild(card);
         this._profileCard = card;
+        this._profileCardOpening = false;
+        this._profileJustOpened = true;
+        setTimeout(() => { this._profileJustOpened = false; }, 0);
 
-        card.querySelector('.player-banner-backdrop').addEventListener('click', () => this.hideProfileCard());
-        card.querySelector('.player-banner-close-btn').addEventListener('click', () => this.hideProfileCard());
+        card.querySelector('.player-banner-backdrop').addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.hideProfileCard();
+        });
+        card.querySelector('.player-banner-close-btn').addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.hideProfileCard();
+        });
+        card.querySelector('.player-banner-card')?.addEventListener('click', (ev) => ev.stopPropagation());
 
         const msgBtn = card.querySelector('[data-action="message"]');
         const addBtn = card.querySelector('[data-action="addfriend"]');
@@ -4215,6 +4235,7 @@ class LibertyApp {
     }
 
     hideProfileCard() {
+        this._profileCardOpening = false;
         if (this._profileCard) {
             this._profileCard.remove();
             this._profileCard = null;
