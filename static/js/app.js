@@ -110,6 +110,35 @@
 .profile-card-tab-content{flex:1;overflow-y:auto;min-height:0}
 .profile-card-tab-content h4{font-size:12px;font-weight:600;color:var(--text-secondary);margin:0 0 8px}
 .profile-card-activity-empty{font-size:13px;color:var(--text-muted);margin:0}
+/* Player banner — perfil centralizado ao clicar no player */
+.player-banner-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:0;animation:playerBannerFadeIn .25s ease}
+.player-banner-card{position:relative;z-index:1;width:100%;max-width:420px;max-height:90vh;overflow:hidden;border-radius:20px;background:rgba(18,16,14,.98);border:1px solid rgba(255,215,0,.18);box-shadow:0 24px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.03),0 0 60px rgba(255,215,0,.08);display:flex;flex-direction:column;animation:playerBannerScaleIn .3s var(--ease-out-expo)}
+@keyframes playerBannerFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes playerBannerScaleIn{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:scale(1)}}
+.player-banner-banner{height:120px;background:linear-gradient(135deg,var(--primary-yellow) 0%,var(--dark-yellow) 50%,#b8860b 100%);background-size:cover;background-position:center;position:relative}
+.player-banner-banner::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 40%,rgba(18,16,14,.6) 100%)}
+.player-banner-avatar-wrap{text-align:center;margin-top:-52px;position:relative;z-index:1;padding:0 24px}
+.player-banner-avatar{width:100px;height:100px;margin:0 auto;border-radius:50%;border:4px solid rgba(18,16,14,.98);background:var(--dark-gray);display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;color:var(--text-secondary);overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.player-banner-avatar img{width:100%;height:100%;object-fit:cover}
+.player-banner-avatar .profile-card-online-dot{position:absolute;bottom:6px;right:6px;width:16px;height:16px;border-radius:50%;border:3px solid rgba(18,16,14,.98)}
+.player-banner-body{padding:16px 24px 24px;text-align:center;flex:1;overflow-y:auto}
+.player-banner-name{font-size:22px;font-weight:700;color:var(--text-primary);margin:0 0 4px;letter-spacing:-0.02em}
+.player-banner-tag{font-size:14px;color:var(--text-muted);margin:0 0 8px}
+.player-banner-status{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text-secondary);margin-bottom:14px}
+.player-banner-status .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.player-banner-desc{padding:12px 16px;background:rgba(255,255,255,.04);border-radius:12px;font-size:14px;color:var(--text-secondary);line-height:1.5;margin-bottom:20px;border:1px solid rgba(255,215,0,.06);min-height:48px}
+.player-banner-desc.empty{color:var(--text-muted);font-style:italic}
+.player-banner-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.player-banner-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:600;border:none;cursor:pointer;font-family:inherit;transition:all .2s}
+.player-banner-btn-msg{background:var(--primary-blue,#5865f2);color:#fff}
+.player-banner-btn-msg:hover:not(:disabled){filter:brightness(1.12);transform:translateY(-1px)}
+.player-banner-btn-icon{width:44px;height:44px;padding:0;justify-content:center;background:var(--dark-gray);border:1px solid rgba(255,255,255,.1);color:var(--text-primary)}
+.player-banner-btn-icon:hover:not(:disabled){border-color:var(--primary-yellow);color:var(--primary-yellow);background:rgba(255,215,0,.08)}
+.player-banner-close-btn{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.1);color:var(--text-primary);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;transition:all .2s}
+.player-banner-close-btn:hover{background:rgba(255,255,255,.12);color:var(--primary-yellow)}
+.player-banner-more{display:block;padding:12px 0 0;border-top:1px solid rgba(255,215,0,.06);text-align:left}
+.player-banner-more .profile-card-section{margin-top:12px;padding-top:12px}
+.player-banner-more .profile-card-section h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary);margin:0 0 8px}
 .settings-overlay{position:fixed;inset:0;background:var(--primary-black);z-index:3500;display:flex;animation:settingsFadeIn .25s var(--ease-out-expo)}
 @keyframes settingsFadeIn{from{opacity:0}to{opacity:1}}
 .settings-overlay .settings-sidebar{flex:0 0 auto;background:var(--secondary-black);display:flex;justify-content:flex-end;overflow-y:auto;min-width:218px;padding-left:max(20px,calc(50vw - 480px))}
@@ -3382,12 +3411,16 @@ class LibertyApp {
 
     showProfileCard(member, e) {
         this.hideProfileCard();
-        const name = member.nickname || member.username || member.display_name || 'User';
-        const userId = member.user_id || member.id || '';
-        const status = member.status || member.presence?.status || 'online';
+        const user = member.user || member;
+        const name = member.nickname || member.username || user.username || member.display_name || 'User';
+        const userId = member.user_id || member.id || user.id || '';
+        const status = member.status || user.status || member.presence?.status || 'online';
         const letter = name.charAt(0).toUpperCase();
         const avatarText = name.length >= 2 ? name.slice(0, 2).toUpperCase() : letter;
-        const tag = (member.username || name).replace(/\s/g, '');
+        const tag = (member.username || user.username || name).replace(/\s/g, '');
+        const avatarUrl = member.avatar_url || user.avatar_url || member.avatar || user.avatar || '';
+        const bannerUrl = member.banner_url || user.banner_url || member.banner || user.banner || '';
+        const description = member.description || user.description || member.bio || user.bio || '';
         const isSelf = this.currentUser && (String(this.currentUser.id) === String(userId) || this.currentUser.username === name);
         const isFriend = this.relationships && this.relationships.some(r => r.type === 1 && (r.user?.id === userId || r.user?.username === name));
         const pendingOut = this.relationships && this.relationships.some(r => r.type === 4 && (r.user?.id === userId || r.user?.username === name));
@@ -3397,53 +3430,60 @@ class LibertyApp {
             ? profileLinks.map((link) => `<a href="${this.escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="profile-link-item"><i class="fab ${link.type === 'github' ? 'fa-github' : 'fa-link'}"></i> ${this.escapeHtml(link.label || link.url)}</a>`).join('')
             : (isSelf ? '<p class="profile-links-empty">Nenhum link ainda. Adicione GitHub ou outros.</p>' : '<p class="profile-links-empty">Esta pessoa ainda não adicionou links.</p>');
 
+        const bannerStyle = bannerUrl ? `style="background-image:url(${this.escapeHtml(bannerUrl)})"` : '';
+        const avatarImg = avatarUrl ? `<img src="${this.escapeHtml(avatarUrl)}" alt="">` : '';
+        const descHtml = description ? this.escapeHtml(description) : 'Sem descrição';
+        const descClass = description ? '' : ' empty';
+
         const overlay = document.getElementById('modal-overlay');
         const card = document.createElement('div');
         card.className = 'profile-card profile-card-modal profile-card-full';
         card.dataset.profileUserId = userId;
         card.innerHTML = `
-            <div class="profile-card-backdrop" aria-hidden="true"></div>
-            <div class="profile-card-modal-inner profile-card-two-panels">
-                <button type="button" class="profile-card-close-btn" aria-label="Fechar"><i class="fas fa-times"></i></button>
-                <div class="profile-card-left">
-                    <div class="profile-card-banner-full"></div>
-                    <div class="profile-card-avatar-wrap-full">
-                        <div class="profile-card-avatar profile-card-avatar-full"><span>${avatarText}</span><span class="profile-card-online-dot ${status}"></span></div>
-                    </div>
-                    <h2 class="profile-card-display-name">${this.escapeHtml(name)}</h2>
-                    <p class="profile-card-tag">${this.escapeHtml(tag)}</p>
-                    <div class="profile-card-actions profile-card-actions-row">
-                        <button type="button" class="profile-card-btn profile-card-btn-msg" title="Mensagem" data-action="message"><i class="fas fa-comment"></i> Mensagem</button>
-                        <button type="button" class="profile-card-btn profile-card-btn-icon" title="Adicionar amigo" data-action="addfriend"><i class="fas fa-user-plus"></i></button>
-                        <button type="button" class="profile-card-btn profile-card-btn-icon" title="Mais" data-action="more"><i class="fas fa-ellipsis-h"></i></button>
-                    </div>
-                    <div class="profile-card-section profile-card-links">
-                        <h4>Links</h4>
-                        <div class="profile-links-list">${linksHtml}</div>
-                        ${isSelf ? '<div class="profile-links-actions"><button type="button" class="profile-card-link-add" data-action="add-link"><i class="fab fa-github"></i> Vincular GitHub</button><button type="button" class="profile-card-link-add secondary" data-action="add-link-generic"><i class="fas fa-link"></i> Adicionar link</button></div>' : ''}
-                    </div>
-                    <div class="profile-card-section">
-                        <h4>Nota (visível apenas para você)</h4>
-                        <textarea class="profile-card-note-input" placeholder="Adicionar nota..." maxlength="256" aria-label="Nota privada"></textarea>
-                    </div>
+            <div class="player-banner-backdrop" aria-hidden="true"></div>
+            <div class="player-banner-card">
+                <button type="button" class="player-banner-close-btn" aria-label="Fechar"><i class="fas fa-times"></i></button>
+                <div class="player-banner-banner" ${bannerStyle}></div>
+                <div class="player-banner-avatar-wrap">
+                    <div class="profile-card-avatar player-banner-avatar">${avatarImg}<span>${avatarImg ? '' : avatarText}</span><span class="profile-card-online-dot ${status}"></span></div>
                 </div>
-                <div class="profile-card-right">
-                    <div class="profile-card-tabs">
-                        <button type="button" class="profile-card-tab active" data-tab="activity">Atividade</button>
-                        <button type="button" class="profile-card-tab" data-tab="mutual">Amigos mútuos</button>
-                        <button type="button" class="profile-card-tab" data-tab="servers">Servidores mútuos</button>
+                <div class="player-banner-body">
+                    <h2 class="player-banner-name">${this.escapeHtml(name)}</h2>
+                    <p class="player-banner-tag">@${this.escapeHtml(tag)}</p>
+                    <div class="player-banner-status">
+                        <span class="status-dot ${status}"></span>
+                        <span>${status === 'online' ? 'Online' : status === 'idle' ? 'Ausente' : status === 'dnd' ? 'Ocupado' : 'Offline'}</span>
                     </div>
-                    <div class="profile-card-tab-content" data-tab-content="activity">
-                        <h4>Atividade atual</h4>
-                        <p class="profile-card-activity-empty">Nenhuma atividade no momento.</p>
+                    <p class="player-banner-desc${descClass}">${descHtml}</p>
+                    <div class="player-banner-actions">
+                        <button type="button" class="player-banner-btn player-banner-btn-msg" title="Mensagem" data-action="message"><i class="fas fa-comment"></i> Mensagem</button>
+                        <button type="button" class="player-banner-btn player-banner-btn-icon" title="Adicionar amigo" data-action="addfriend"><i class="fas fa-user-plus"></i></button>
+                        <button type="button" class="player-banner-btn player-banner-btn-icon" title="Mais" data-action="more"><i class="fas fa-ellipsis-h"></i></button>
                     </div>
-                    <div class="profile-card-tab-content hidden" data-tab-content="mutual">
-                        <h4>Amigos em comum</h4>
-                        <p class="profile-card-activity-empty">Nenhum amigo mútuo.</p>
-                    </div>
-                    <div class="profile-card-tab-content hidden" data-tab-content="servers">
-                        <h4>Servidores em comum</h4>
-                        <p class="profile-card-activity-empty">Nenhum servidor mútuo.</p>
+                    <div class="player-banner-more">
+                        <div class="profile-card-section profile-card-links">
+                            <h4>Links</h4>
+                            <div class="profile-links-list">${linksHtml}</div>
+                            ${isSelf ? '<div class="profile-links-actions"><button type="button" class="profile-card-link-add" data-action="add-link"><i class="fab fa-github"></i> Vincular GitHub</button><button type="button" class="profile-card-link-add secondary" data-action="add-link-generic"><i class="fas fa-link"></i> Adicionar link</button></div>' : ''}
+                        </div>
+                        <div class="profile-card-section">
+                            <h4>Nota (visível apenas para você)</h4>
+                            <textarea class="profile-card-note-input" placeholder="Adicionar nota..." maxlength="256" aria-label="Nota privada"></textarea>
+                        </div>
+                        <div class="profile-card-tabs">
+                            <button type="button" class="profile-card-tab active" data-tab="activity">Atividade</button>
+                            <button type="button" class="profile-card-tab" data-tab="mutual">Amigos mútuos</button>
+                            <button type="button" class="profile-card-tab" data-tab="servers">Servidores</button>
+                        </div>
+                        <div class="profile-card-tab-content" data-tab-content="activity">
+                            <p class="profile-card-activity-empty">Nenhuma atividade no momento.</p>
+                        </div>
+                        <div class="profile-card-tab-content hidden" data-tab-content="mutual">
+                            <p class="profile-card-activity-empty">Nenhum amigo mútuo.</p>
+                        </div>
+                        <div class="profile-card-tab-content hidden" data-tab-content="servers">
+                            <p class="profile-card-activity-empty">Nenhum servidor mútuo.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -3453,15 +3493,15 @@ class LibertyApp {
         overlay.appendChild(card);
         this._profileCard = card;
 
-        card.querySelector('.profile-card-backdrop').addEventListener('click', () => this.hideProfileCard());
-        card.querySelector('.profile-card-close-btn').addEventListener('click', () => this.hideProfileCard());
+        card.querySelector('.player-banner-backdrop').addEventListener('click', () => this.hideProfileCard());
+        card.querySelector('.player-banner-close-btn').addEventListener('click', () => this.hideProfileCard());
 
         const msgBtn = card.querySelector('[data-action="message"]');
         const addBtn = card.querySelector('[data-action="addfriend"]');
         const moreBtn = card.querySelector('[data-action="more"]');
 
         if (isSelf) {
-            msgBtn.closest('.profile-card-actions-row').querySelector('[data-action="message"]').style.display = 'none';
+            msgBtn.style.display = 'none';
             addBtn.style.display = 'none';
             moreBtn.style.display = 'none';
         } else {
@@ -3496,8 +3536,10 @@ class LibertyApp {
         });
 
         if (isSelf) {
-            card.querySelector('[data-action="add-link"]').addEventListener('click', () => this._profileAddLink(userId, 'github', 'GitHub', card));
-            card.querySelector('[data-action="add-link-generic"]').addEventListener('click', () => this._profileAddLink(userId, 'link', 'Link', card));
+            const addLinkBtn = card.querySelector('[data-action="add-link"]');
+            const addLinkGenericBtn = card.querySelector('[data-action="add-link-generic"]');
+            if (addLinkBtn) addLinkBtn.addEventListener('click', () => this._profileAddLink(userId, 'github', 'GitHub', card));
+            if (addLinkGenericBtn) addLinkGenericBtn.addEventListener('click', () => this._profileAddLink(userId, 'link', 'Link', card));
         }
     }
 
