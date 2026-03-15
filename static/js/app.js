@@ -2021,11 +2021,6 @@ class LibertyApp {
                             </div>
                         </div>
                     </div>
-                    <div class="ranking-footer">
-                        <i class="fas fa-lock" aria-hidden="true"></i>
-                        <span class="ranking-footer-encryption">End-to-end encryption</span>
-                        <span class="ranking-footer-badge">AES-GCM</span>
-                    </div>
                 </div>`;
             friendsList.innerHTML = html;
             friendsList.classList.add('ranking-container');
@@ -2865,7 +2860,6 @@ class LibertyApp {
                         <div class="welcome-icon"><i class="fas fa-hashtag"></i></div>
                         <h2 class="welcome-title">Bem-vindo a #${this.escapeHtml(this.currentChannel?.name || 'canal')}</h2>
                         <p class="welcome-description">Este é o início do canal.</p>
-                        <p class="welcome-encryption"><i class="fas fa-lock"></i> End-to-end encryption AES-GCM</p>
                     </div>
                 `;
                 return;
