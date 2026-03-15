@@ -11,8 +11,11 @@ class LibertyGateway {
         this.eventHandlers = new Map();
         this.messageQueue = [];
         this.reconnectAttempts = 0;
+        this.maxReconnectAttempts = 0;
         this.reconnectDelay = 1000;
         this.reconnectMaxDelay = 30000;
+        this._connectResolve = null;
+        this._connectReject = null;
     }
     
     connect() {
@@ -25,17 +28,21 @@ class LibertyGateway {
 
     _doConnect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws`;
+        const token = typeof API !== 'undefined' && API.Token ? API.Token.getAccessToken() : (localStorage.getItem('access_token') || '');
+        const wsUrl = token ? `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}` : `${protocol}//${window.location.host}/ws`;
+        
         try {
             this.ws = new WebSocket(wsUrl);
         } catch (e) {
             this._scheduleReconnect();
             return;
         }
+        
         this.ws.onopen = () => {
             this.connected = true;
             this.reconnectAttempts = 0;
         };
+        
         this.ws.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
@@ -44,36 +51,55 @@ class LibertyGateway {
                 console.error('[Gateway] Parse error:', error);
             }
         };
+        
         this.ws.onclose = () => {
             this.connected = false;
             this.authenticated = false;
             this.stopHeartbeat();
             this._scheduleReconnect();
         };
-        this.ws.onerror = () => { /* reconexão silenciosa em onclose */ };
+        
+        this.ws.onerror = () => {
+            // Silencioso: reconexão será feita em onclose
+        };
     }
 
     _scheduleReconnect() {
-        if (this.reconnectAttempts === 0) this.reconnectAttempts = 1;
-        const delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), this.reconnectMaxDelay);
+        if (this.reconnectAttempts === 0) {
+            this.reconnectAttempts = 1;
+        }
+        const delay = Math.min(
+            this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
+            this.reconnectMaxDelay
+        );
         this.reconnectAttempts++;
-        setTimeout(() => this._doConnect(), delay);
+        setTimeout(() => {
+            this._doConnect();
+        }, delay);
     }
     
     handleMessage(message, resolve, reject) {
-        const { op, d, t, s } = message;
-        
-        // Update sequence
-        if (s !== undefined) {
-            this.seq = s;
+        const { op, type, d, t, data, s } = message;
+        if (type === 'message' && data) {
+            this.emit('message', data);
+            return;
         }
+        if (type === 'stream_started' && message.from_user_id) {
+            this.emit('stream_started', { from_user_id: message.from_user_id, stream_type: message.stream_type });
+            return;
+        }
+        if (type === 'stream_stopped' && message.from_user_id) {
+            this.emit('stream_stopped', { from_user_id: message.from_user_id });
+            return;
+        }
+        
+        if (s !== undefined) this.seq = s;
         
         switch (op) {
             case 'hello':
-                // Server hello - start heartbeat (máx 30s para evitar 1006 na Square Cloud)
-                const interval = Math.min(Number(d.heartbeat_interval) || 30000, 30000);
-                this.startHeartbeat(interval);
-                console.log('[Gateway] Server version:', d.server_version, 'heartbeat:', interval + 'ms');
+                // Server hello - start heartbeat
+                this.startHeartbeat(d.heartbeat_interval);
+                console.log('[Gateway] Server version:', d.server_version);
                 
                 // Send authentication
                 const token = API.Token.getAccessToken();
@@ -121,15 +147,6 @@ class LibertyGateway {
                 
             case 'presence_update':
                 this.emit('presence', d);
-                break;
-            case 'friend_added':
-                this.emit('friend_added', d);
-                break;
-            case 'friendship_pending_sent':
-                this.emit('friendship_pending_sent', d);
-                break;
-            case 'friendship_accepted':
-                this.emit('friendship_accepted', d);
                 break;
                 
             case 'server_created':
@@ -191,20 +208,6 @@ class LibertyGateway {
             case 'error':
                 console.error('[Gateway] Server error:', d);
                 this.emit('error', d);
-                break;
-
-            case 'stream_started':
-                this.emit('stream_started', d || {});
-                break;
-            case 'stream_stopped':
-                this.emit('stream_stopped', d || {});
-                break;
-
-            case 'webrtc_offer':
-            case 'webrtc_answer':
-            case 'webrtc_ice':
-            case 'webrtc_reject':
-                this.emit(op, d);
                 break;
                 
             default:
@@ -280,14 +283,6 @@ class LibertyGateway {
     startTyping(channelId) {
         this.send('start_typing', { channel_id: channelId });
     }
-
-    subscribeChannel(chatId) {
-        if (chatId && this.connected) this.send('subscribe_channel', { chat_id: chatId });
-    }
-
-    unsubscribeChannel(chatId) {
-        if (chatId && this.connected) this.send('unsubscribe_channel', { chat_id: chatId });
-    }
     
     sendMessage(channelId, content, tts = false, embeds = []) {
         this.send('send_message', {
@@ -356,7 +351,3 @@ class LibertyGateway {
 
 // Create global gateway instance
 window.Gateway = new LibertyGateway();
-
-
-
-

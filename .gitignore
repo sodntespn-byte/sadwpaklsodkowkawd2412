@@ -1,7 +1,18 @@
-node_modules/
-target/
+# Rust - Ignora a pasta de compilação (binários pesados)
+/target
+**/*.rs.bk
 
-# Variáveis de ambiente — NUNCA commitar senhas
+# Node.js - Ignora as dependências (baixa-se com npm install)
+node_modules/
+npm-debug.log*
+
+# Segurança - NUNCA suba suas chaves e senhas
 .env
 .env.local
 .env.*.local
+certificate.pem
+
+# Sistema e Editores
+.DS_Store
+.vscode/
+.idea/

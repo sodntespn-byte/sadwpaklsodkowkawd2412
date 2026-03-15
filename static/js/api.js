@@ -2,38 +2,50 @@
 
 const API_BASE = '/api/v1';
 
-// Token management
+// Token management — aceita 'token', 'access_token' ou 'liberty_token' para compatibilidade
+function getStoredToken() {
+    return localStorage.getItem('token') || localStorage.getItem('access_token') || localStorage.getItem('liberty_token') || null;
+}
 const TokenManager = {
-    getAccessToken: () => localStorage.getItem('access_token'),
+    getAccessToken: getStoredToken,
     getRefreshToken: () => localStorage.getItem('refresh_token'),
     setTokens: (access, refresh) => {
-        localStorage.setItem('access_token', access);
-        localStorage.setItem('refresh_token', refresh);
+        if (access) {
+            localStorage.setItem('token', access);
+            localStorage.setItem('access_token', access);
+            localStorage.setItem('liberty_token', access);
+        }
+        localStorage.setItem('refresh_token', refresh || access || '');
     },
     clearTokens: () => {
+        localStorage.removeItem('token');
         localStorage.removeItem('access_token');
+        localStorage.removeItem('liberty_token');
         localStorage.removeItem('refresh_token');
     },
-    isAuthenticated: () => !!localStorage.getItem('access_token')
+    isAuthenticated: () => !!getStoredToken()
 };
 
-// API Request helper
+// API Request helper — sempre envia Authorization: Bearer quando houver token
 async function apiRequest(endpoint, options = {}) {
-    const token = TokenManager.getAccessToken();
-    
+    const token = getStoredToken();
     const config = {
         ...options,
+        credentials: 'include',
         headers: {
             'Content-Type': 'application/json',
-            ...(token && { 'Authorization': `Bearer ${token}` }),
+            ...(token && {
+                'Authorization': 'Bearer ' + token,
+                'X-Auth-Token': token
+            }),
             ...options.headers
         }
     };
-    
     if (options.body && typeof options.body === 'object') {
-        config.body = JSON.stringify(options.body);
+        const body = { ...options.body };
+        if (token && !body.token && !body.access_token) body.token = token;
+        config.body = JSON.stringify(body);
     }
-    
     const response = await fetch(`${API_BASE}${endpoint}`, config);
     
     // Handle token refresh on 401
@@ -44,6 +56,13 @@ async function apiRequest(endpoint, options = {}) {
             config.headers.Authorization = `Bearer ${TokenManager.getAccessToken()}`;
             return fetch(`${API_BASE}${endpoint}`, config);
         }
+    }
+    
+    if (response.status === 401) {
+        TokenManager.clearTokens();
+        try {
+            window.dispatchEvent(new CustomEvent('liberty:unauthorized'));
+        } catch (_) {}
     }
     
     if (!response.ok) {
@@ -58,21 +77,32 @@ async function apiRequest(endpoint, options = {}) {
     return response.json();
 }
 
-// Auth API
+// Auth API — cadastro só username; login com username e senha opcional
 const AuthAPI = {
-    async register(username) {
-        const data = await apiRequest('/auth/register', {
+    async register(username, email, password) {
+        const url = `${API_BASE}/auth/register`;
+        const res = await fetch(url, {
             method: 'POST',
-            body: { username }
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: username || undefined, email: email || undefined, password: password || undefined }),
         });
-        TokenManager.setTokens(data.access_token, data.refresh_token);
+        const data = await res.json().catch(() => ({ message: 'Resposta inválida do servidor (não-JSON)' }));
+        if (!res.ok) {
+            const msg = data.message || data.error || `HTTP ${res.status}`;
+            console.error('[LIBERTY] Erro no registro:', res.status, data);
+            throw new Error(msg);
+        }
+        if (data.access_token) {
+            TokenManager.setTokens(data.access_token, data.refresh_token || data.access_token);
+        }
         return data;
     },
     
-    async login(username) {
+    async login(username, password) {
         const data = await apiRequest('/auth/login', {
             method: 'POST',
-            body: { username }
+            body: { username: username || undefined, password: password || undefined }
         });
         TokenManager.setTokens(data.access_token, data.refresh_token);
         return data;
@@ -88,7 +118,7 @@ const AuthAPI = {
     
     async refresh() {
         const refreshToken = TokenManager.getRefreshToken();
-        if (!refreshToken) return false;
+        if (!refreshToken) return null;
         
         try {
             const data = await apiRequest('/auth/refresh', {
@@ -96,10 +126,10 @@ const AuthAPI = {
                 body: { refresh_token: refreshToken }
             });
             TokenManager.setTokens(data.access_token, data.refresh_token);
-            return true;
+            return data;
         } catch {
             TokenManager.clearTokens();
-            return false;
+            return null;
         }
     }
 };
@@ -282,6 +312,13 @@ const DMAPI = {
         });
     },
 
+    async createGroup(name, recipientIds) {
+        return apiRequest('/users/@me/channels', {
+            method: 'POST',
+            body: { name: name || null, recipient_ids: recipientIds }
+        });
+    },
+
     async getMessages(channelId, options = {}) {
         const params = new URLSearchParams();
         if (options.before) params.append('before', options.before);
@@ -294,13 +331,25 @@ const DMAPI = {
 // Friends/Relationships API
 const FriendAPI = {
     async list() {
-        return apiRequest('/relationships');
+        return apiRequest('/users/@me/relationships');
     },
-    
-    async add(username) {
-        return apiRequest('/relationships', {
+
+    async add(username, discriminator) {
+        return apiRequest('/users/@me/relationships', {
             method: 'POST',
-            body: { username }
+            body: { username, discriminator }
+        });
+    },
+
+    async accept(relationshipId) {
+        return apiRequest(`/users/@me/relationships/${relationshipId}`, {
+            method: 'PUT'
+        });
+    },
+
+    async remove(relationshipId) {
+        return apiRequest(`/users/@me/relationships/${relationshipId}`, {
+            method: 'DELETE'
         });
     }
 };
@@ -396,9 +445,18 @@ const RoleAPI = {
     }
 };
 
+// Helper para uso em app.js e outros: retorna headers com Bearer
+function getAuthHeaders() {
+    const token = getStoredToken();
+    if (!token) return {};
+    return { 'Authorization': 'Bearer ' + token };
+}
+
 // Export
 window.API = {
     Token: TokenManager,
+    getAuthHeaders: getAuthHeaders,
+    getStoredToken: getStoredToken,
     Auth: AuthAPI,
     User: UserAPI,
     Server: ServerAPI,
@@ -413,4 +471,3 @@ window.API = {
     Pin: PinAPI,
     Ban: BanAPI
 };
-

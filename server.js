@@ -411,13 +411,21 @@ async function getDefaultChatId() {
 }
 
 async function start() {
-  if (db.isConfigured()) {
+  const dbUrl = _dbGetUrl();
+  if (dbUrl && dbUrl.startsWith('postgres')) {
+    console.log('[LIBERTY] DATABASE_URL definida (env). Conectando…');
     try {
       await db.connect();
-      if (db.isConnected()) await dbInit();
+      if (db.isConnected()) {
+        await dbInit();
+      } else {
+        console.warn('[LIBERTY] Primeira conexão falhou; será tentado de novo na primeira requisição.');
+      }
     } catch (err) {
-      console.warn('[LIBERTY] Banco:', err.message);
+      console.warn('[LIBERTY] Banco na subida:', err.message);
     }
+  } else {
+    console.warn('[LIBERTY] DATABASE_URL não definida. Defina no ambiente (ex.: Square Cloud: Configurações → Environment) para registro/login.');
   }
 
   ws.attach(server);
@@ -1358,4 +1366,3 @@ start().catch((err) => {
   console.error('Falha ao iniciar:', err);
   process.exit(1);
 });
-
