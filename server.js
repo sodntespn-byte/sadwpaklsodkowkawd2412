@@ -1,303 +1,230 @@
-// Deploy Fix v3 - AES Backend Only
+// VERSION: CACHE_V1_STABLE
 import 'dotenv/config';
-import pathMod from 'path';
-import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import http from 'http';
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import bcrypt from 'bcrypt';
+import { Server as SocketIOServer } from 'socket.io';
 import db from './db/index.js';
+import { init as dbInit } from './db/init.js';
+import * as auth from './auth.js';
+import * as ws from './ws.js';
 
-// Banco: preferir DATABASE_URL do .env; fallback Neon (evite commitar senhas — use .env em produção)
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = 'postgresql://neondb_owner:npg_hA4T1qFgXSjp@ep-shy-bird-andk4mtt-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-}
-
-const ENCRYPTION_KEY_RAW = (process.env.ENCRYPTION_KEY || 'liberty-default-encryption-key-32chars').padEnd(
-  32,
-  '0'
-);
-const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_RAW.slice(0, 32));
-const IV_LENGTH = 16;
-
-function encrypt(text) {
-  try {
-    const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-    let encrypted = cipher.update(text, 'utf8', 'base64');
-    encrypted += cipher.final('base64');
-    return iv.toString('base64') + ':' + encrypted;
-  } catch (err) {
-    console.error('ERRO SQL:', err.message);
-    return text;
-  }
-}
-
-function decrypt(payload) {
-  try {
-    if (!payload || typeof payload !== 'string' || !payload.includes(':')) return payload;
-    const [ivStr, data] = payload.split(':');
-    const iv = Buffer.from(ivStr, 'base64');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', ENCRYPTION_KEY, iv);
-    let decrypted = decipher.update(data, 'base64', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch (err) {
-    console.error('ERRO SQL:', err.message);
-    return payload;
-  }
-}
-
-const __dirname = pathMod.dirname(fileURLToPath(import.meta.url));
+// Diretórios básicos
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
-const PORT = Number(process.env.PORT) || 80;
-const STATIC_DIR = pathMod.join(__dirname, 'static');
+const PORT = Number(process.env.PORT) || 3000;
+const STATIC_DIR = path.join(__dirname, 'static');
 
+// CSP: Socket.io servido localmente; conexões wss/ws permitidas; imagens externas (avatar URL)
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      connectSrc: ["'self'", "wss:", "ws:"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+    },
+  },
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 app.use(express.json());
+app.use(cookieParser());
+app.use(auth.middleware);
+
 const server = http.createServer(app);
 
-// Middleware de autenticação e JSON para rotas /api/*
-app.use(authMiddleware);
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) {
-    res.setHeader('Content-Type', 'application/json');
+// Chat "global" padrão usado pelo fluxo simplificado /api/messages (apenas cache do id, dados no DB)
+let defaultChatId = null;
+
+async function getDefaultChatId() {
+  if (!db.isConfigured() || !db.isConnected()) {
+    return null;
   }
-  next();
-});
 
-// Gateway WebSocket nativo (path /ws) — compatível com websocket.js do front
-const wss = new WebSocketServer({ server, path: '/ws' });
-console.log('Gateway rodando no path /ws');
-app.set('wss', wss);
-wss.on('connection', (ws, req) => {
+  if (defaultChatId) return defaultChatId;
 
-  // Enviar hello imediatamente para o front iniciar heartbeat e enviar authenticate
-  ws.send(
-    JSON.stringify({
-      op: 'hello',
-      d: { heartbeat_interval: 41250, server_version: '1.0.0' },
-    })
-  );
-
-  ws.on('message', async (raw) => {
-    try {
-      const msg = JSON.parse(raw.toString());
-      const { op, d } = msg;
-
-      if (op === 'authenticate' && d && d.token) {
-        const token = String(d.token).trim();
-        const userId = token.startsWith('liberty_') ? token.slice(8) : null;
-        if (!userId) {
-          ws.send(JSON.stringify({ op: 'auth_failed', d: { reason: 'Token inválido' } }));
-          return;
-        }
-        if (!db.isConnected() || !db.getPool()) {
-          ws.send(JSON.stringify({ op: 'auth_failed', d: { reason: 'Banco indisponível' } }));
-          return;
-        }
-        try {
-          const r = await db.getPool().query(
-            'SELECT id, COALESCE(username, nome) AS username, email FROM users WHERE id = $1',
-            [userId]
-          );
-          const row = r.rows[0];
-          if (!row) {
-            ws.send(JSON.stringify({ op: 'auth_failed', d: { reason: 'Usuário não encontrado' } }));
-            return;
-          }
-          const user = { id: String(row.id), username: row.username, email: row.email };
-          const session_id = `session_${row.id}_${Date.now()}`;
-          ws.userId = String(row.id);
-          ws.send(
-            JSON.stringify({
-              op: 'authenticated',
-              d: { session_id, user },
-            })
-          );
-          // console.log('[Gateway] Autenticado:', user.username);
-        } catch (err) {
-          console.error('[Gateway] Erro ao validar token:', err.message);
-          ws.send(JSON.stringify({ op: 'auth_failed', d: { reason: 'Erro ao validar token' } }));
-        }
-        return;
-      }
-
-      if (op === 'heartbeat' && d) {
-        ws.send(JSON.stringify({ op: 'heartbeat_ack', d: { seq: d.seq } }));
-        return;
-      }
-    } catch (err) {
-      console.error('[Gateway] Mensagem inválida:', err.message);
+  try {
+    // Tenta reaproveitar um chat existente com nome 'global-chat'
+    const existing = await db.query(
+      `SELECT id FROM chats WHERE name = $1 AND type = 'channel' ORDER BY created_at ASC LIMIT 1`,
+      ['global-chat']
+    );
+    if (existing.rows[0]?.id) {
+      defaultChatId = String(existing.rows[0].id);
+      return defaultChatId;
     }
-  });
 
-  ws.on('close', () => {
-    // WebSocket desconectado (silenciado)
-  });
-});
+    // Garante que existe ao menos um servidor para pendurar o chat
+    let serverId = null;
+    const s = await db.query(`SELECT id FROM servers ORDER BY created_at ASC LIMIT 1`);
+    if (s.rows[0]?.id) {
+      serverId = s.rows[0].id;
+    } else {
+      const insServer = await db.query(
+        `INSERT INTO servers (name) VALUES ($1) RETURNING id`,
+        ['Global Server']
+      );
+      serverId = insServer.rows[0].id;
+    }
 
-async function ensureTables() {
-  if (!db.isConnected()) return;
-  const pool = db.getPool();
-  if (!pool) return;
-  let client;
-  try {
-    client = await pool.connect();
-  } catch (e) {
-    console.error('[LIBERTY] Erro ao obter client para ensureTables:', e.message);
-    return;
-  }
-  try {
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        username VARCHAR(32) NOT NULL UNIQUE,
-        email VARCHAR(255),
-        password_hash VARCHAR(255),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-    `);
-    // Migrações: tabela users pode já existir com outro esquema (nome, username, etc.)
-    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nome VARCHAR(32)`);
-    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(32)`);
-    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255)`);
-    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`);
-    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now()`);
-    try {
-      await client.query(`UPDATE users SET username = nome WHERE (username IS NULL OR username = '') AND nome IS NOT NULL`);
-    } catch (e) { /* ignore */ }
-    try {
-      await client.query(`UPDATE users SET nome = username WHERE (nome IS NULL OR nome = '') AND username IS NOT NULL`);
-    } catch (e) { /* ignore */ }
-    try {
-      await client.query(`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL`);
-    } catch (e) { if (e.code !== '42701') console.warn('[LIBERTY] Migração password_hash:', e.message); }
-    try {
-      await client.query(`ALTER TABLE users ALTER COLUMN email DROP NOT NULL`);
-    } catch (e) { if (e.code !== '42701') console.warn('[LIBERTY] Migração email:', e.message); }
-    try {
-      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users (username)`);
-    } catch (e) { if (e.code !== '42P07') console.warn('[LIBERTY] Índice username:', e.message); }
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS servers (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(100) NOT NULL,
-        owner_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        region VARCHAR(50),
-        icon VARCHAR(255),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS chats (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(100),
-        type VARCHAR(20) NOT NULL DEFAULT 'channel',
-        server_id UUID REFERENCES servers(id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS chat_members (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        role VARCHAR(20) NOT NULL DEFAULT 'member',
-        joined_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        UNIQUE(chat_id, user_id)
-      );
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        chat_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        content TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-    `);
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS friendships (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        friend_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        UNIQUE(user_id, friend_id)
-      );
-    `);
-    console.log('[LIBERTY] Tabelas verificadas/criadas: users, servers, chats, chat_members, messages');
+    // Cria o chat padrão
+    const insChat = await db.query(
+      `INSERT INTO chats (name, type, server_id)
+       VALUES ($1, 'channel', $2)
+       RETURNING id`,
+      ['global-chat', serverId]
+    );
+    defaultChatId = String(insChat.rows[0].id);
+    return defaultChatId;
   } catch (err) {
-    console.error('[LIBERTY] Erro ao garantir tabelas:', err.message);
-  } finally {
-    client.release();
+    console.error('[MESSAGES] Erro ao garantir chat padrão:', err.message);
+    return null;
   }
-}
-
-function getUserIdFromAuth(req) {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) return null;
-  const token = header.slice(7).trim();
-  if (!token.startsWith('liberty_')) return null;
-  const id = token.slice(8).trim();
-  if (!id) return null;
-  return id;
-}
-
-/** Preenche req.user.id com o ID do usuário autenticado (token) para uso nas rotas. */
-function authMiddleware(req, res, next) {
-  const id = getUserIdFromAuth(req);
-  req.user = id ? { id } : null;
-  next();
 }
 
 async function start() {
   if (db.isConfigured()) {
-    console.log('[LIBERTY] Conectando ao banco...');
-    const connected = await db.connect();
-    if (connected) {
-      await ensureTables();
-      console.log('🚀 Banco de Dados conectado com sucesso!');
-    } else {
-      console.warn('[LIBERTY] Banco indisponível. Verifique DATABASE_URL e SSL.');
+    try {
+      await db.connect();
+      if (db.isConnected()) await dbInit();
+    } catch (err) {
+      console.warn('[LIBERTY] Banco:', err.message);
     }
   }
 
-  app.get('/api/health', (_req, res) => {
-    try {
-      res.json({
-        ok: true,
-        database: db.isConnected() ? 'connected' : 'disconnected',
-      });
-    } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+  ws.attach(server);
+  const io = new SocketIOServer(server, {
+    path: '/socket.io',
+    cors: { origin: '*' },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true,
+  });
+  app.locals.io = io;
+  app.locals.emitMessage = function (message) {
+    ws.emitMessage(message);
+    if (message && message.chat_id) {
+      io.to(message.chat_id).emit('message', { type: 'message', data: message });
     }
+  };
+
+  io.use((socket, next) => {
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    const payload = token ? auth.verify(token) : null;
+    socket.userId = payload ? payload.sub : null;
+    next();
+  });
+  io.on('connection', (socket) => {
+    socket.on('subscribe', (payload) => {
+      const chatId = payload && (payload.chat_id || payload.chatId);
+      if (chatId) socket.join(chatId);
+    });
+    socket.on('unsubscribe', (payload) => {
+      const chatId = payload && (payload.chat_id || payload.chatId);
+      if (chatId) socket.leave(chatId);
+    });
   });
 
+  // Garantir servidor 'Liberty' ownerless (owner_id NULL) e canal padrão
+  async function ensureLibertyServer() {
+    if (!db.isConnected()) return null;
+    const existing = await db.query(`SELECT id FROM servers WHERE name = $1 LIMIT 1`, ['Liberty']);
+    if (existing.rows[0]?.id) return String(existing.rows[0].id);
+    const ins = await db.query(
+      `INSERT INTO servers (name, owner_id) VALUES ($1, NULL) RETURNING id`,
+      ['Liberty']
+    );
+    const serverId = ins.rows[0].id;
+    await db.query(
+      `INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`,
+      [serverId]
+    );
+    return String(serverId);
+  }
+
+  async function ensureUserInLibertyServer(userId) {
+    if (!db.isConnected()) return;
+    const serverRow = await db.query(`SELECT id FROM servers WHERE name = $1 LIMIT 1`, ['Liberty']);
+    const serverId = serverRow.rows[0]?.id;
+    if (!serverId) return;
+    const chatRow = await db.query(
+      `SELECT id FROM chats WHERE server_id = $1::uuid AND type = 'channel' LIMIT 1`,
+      [serverId]
+    );
+    const chatId = chatRow.rows[0]?.id;
+    if (!chatId) return;
+    await db.query(
+      `INSERT INTO chat_members (chat_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (chat_id, user_id) DO NOTHING`,
+      [chatId, userId]
+    );
+  }
+
+  /** Resolve serverId + channelId (ex: liberty-main-server, general) para chat_id no DB */
+  async function getChatIdForServerAndChannel(serverId, channelId) {
+    if (!db.isConfigured() || !db.isConnected()) return null;
+    try {
+      await ensureLibertyServer();
+      const sid = (serverId || '').trim() || 'Liberty';
+      const cid = (channelId || '').trim() || 'general';
+      const r = await db.query(
+        `SELECT c.id FROM chats c
+         INNER JOIN servers s ON s.id = c.server_id
+         WHERE c.type = 'channel' AND c.name = $1
+           AND (s.id::text = $2 OR s.name = $2 OR (LOWER($2) = 'liberty-main-server' AND s.name = 'Liberty'))
+         LIMIT 1`,
+        [cid, sid]
+      );
+      if (r.rows[0]?.id) return String(r.rows[0].id);
+      return getDefaultChatId();
+    } catch (err) {
+      console.error('[MESSAGES] getChatIdForServerAndChannel:', err.message);
+      return getDefaultChatId();
+    }
+  }
+
+  // Registro: apenas username obrigatório; email e senha opcionais (senha pode ser definida depois nas configurações)
   app.post('/api/v1/auth/register', async (req, res) => {
-    if (!db.isConnected()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco de dados indisponível. Tente mais tarde.' });
     }
-    const pool = db.getPool();
-    if (!pool) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { username } = req.body || {};
+
+    const { username, email, password } = req.body || {};
     const name = username ? String(username).trim() : '';
     if (!name || name.length < 2) {
-      return res.status(400).json({ success: false, message: 'username é obrigatório (mín. 2 caracteres)' });
+      return res.status(400).json({ message: 'username é obrigatório (mín. 2 caracteres)' });
     }
+
     try {
-      const email = name.toLowerCase() + '@liberty.local';
-      const r = await pool.query(
-        `INSERT INTO users (id, nome, username, email, password_hash, created_at, updated_at)
-         VALUES (gen_random_uuid(), $1::varchar, $2::varchar, $3::varchar, NULL, now(), now())
-         RETURNING id, nome, username, email, created_at`,
-        [name, name, email]
+      await ensureLibertyServer();
+      const emailVal = email && String(email).trim() ? String(email).trim().toLowerCase() : null;
+      const password_hash = password && String(password).trim()
+        ? await bcrypt.hash(String(password).trim(), 10)
+        : null;
+      const r = await db.query(
+        `INSERT INTO users (username, email, password_hash)
+         VALUES ($1, $2, $3)
+         RETURNING id, username, email, created_at`,
+        [name, emailVal, password_hash]
       );
       const row = r.rows[0];
-      const user = { id: String(row.id), username: row.username ?? row.nome, email: row.email };
-      const access_token = `liberty_${row.id}`;
+      const user = { id: String(row.id), username: row.username, email: row.email };
+      await ensureUserInLibertyServer(row.id);
+      const access_token = auth.sign(user);
+      res.cookie('liberty_token', access_token, {
+        path: '/',
+        maxAge: 90 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax',
+        httpOnly: false,
+      });
+
       return res.status(201).json({
         success: true,
         user,
@@ -306,37 +233,47 @@ async function start() {
       });
     } catch (err) {
       if (err.code === '23505') {
-        return res.status(409).json({ success: false, message: 'Email ou nome de usuário já em uso' });
+        return res.status(409).json({ message: 'Nome de usuário (ou email) já em uso' });
       }
-      console.error('[LIBERTY] register', err.message);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao criar conta' });
+      console.error('[API] register', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao criar conta' });
     }
   });
 
+  // Login: username obrigatório; senha opcional (se usuário não tiver senha, login só com username)
   app.post('/api/v1/auth/login', async (req, res) => {
-    if (!db.isConnected()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco de dados indisponível.' });
     }
-    const pool = db.getPool();
-    if (!pool) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { username } = req.body || {};
+    const { username, password } = req.body || {};
     const name = username ? String(username).trim() : '';
     if (!name) {
-      return res.status(400).json({ success: false, message: 'username é obrigatório' });
+      return res.status(400).json({ message: 'username é obrigatório' });
     }
     try {
-      const r = await pool.query(
-        'SELECT id, nome, username, email, password_hash FROM users WHERE (username = $1 OR nome = $1)',
+      const r = await db.query(
+        `SELECT id, username, email, password_hash FROM users WHERE username = $1 LIMIT 1`,
         [name]
       );
       const row = r.rows[0];
       if (!row) {
-        return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
+        return res.status(401).json({ message: 'Usuário ou senha inválidos' });
       }
-      const user = { id: String(row.id), username: row.username ?? row.nome, email: row.email };
-      const access_token = `liberty_${row.id}`;
+      if (row.password_hash) {
+        if (!password || !(await bcrypt.compare(String(password), row.password_hash))) {
+          return res.status(401).json({ message: 'Usuário ou senha inválidos' });
+        }
+      }
+      await ensureLibertyServer();
+      await ensureUserInLibertyServer(row.id);
+      const user = { id: String(row.id), username: row.username, email: row.email };
+      const access_token = auth.sign(user);
+      res.cookie('liberty_token', access_token, {
+        path: '/',
+        maxAge: 90 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax',
+        httpOnly: false,
+      });
       return res.status(200).json({
         success: true,
         user,
@@ -344,609 +281,625 @@ async function start() {
         refresh_token: access_token,
       });
     } catch (err) {
-      console.error('[LIBERTY] login', err.message);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao fazer login' });
+      console.error('[API] login', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao fazer login' });
     }
   });
 
-  // Perfil: GET /api/v1/users/@me (api.js chama esta URL)
-  app.get('/api/v1/users/@me', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
+  // Mensagens: só DB; exige login (fluxo simplificado /api/messages)
+  app.post('/api/messages', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res
+        .status(503)
+        .json({ message: 'Banco de dados indisponível. Verifique DATABASE_URL no .env.' });
     }
-    if (!db.isConnected()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
+
+    const { content, author } = req.body || {};
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ message: 'content é obrigatório' });
     }
-    const pool = db.getPool();
-    if (!pool) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
+
+    const safeContent = String(content).trim().replace(/</g, '&lt;');
+    const userId = req.userId;
+
     try {
-      const r = await pool.query(
-        'SELECT id, nome, username, email FROM users WHERE id = $1',
-        [userId]
-      );
-      const row = r.rows[0];
-      if (!row) {
-        return res.status(401).json({ success: false, message: 'Usuário não encontrado' });
+      const chatId = await getDefaultChatId();
+      if (!chatId) {
+        return res
+          .status(503)
+          .json({ message: 'Chat padrão indisponível. Verifique a configuração do banco de dados.' });
       }
-      const user = { id: String(row.id), username: row.username ?? row.nome, email: row.email };
-      return res.status(200).json({ success: true, user });
-    } catch (err) {
-      console.error('[LIBERTY] /users/@me erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao obter usuário' });
-    }
-  });
 
-  // POST /api/v1/servers — criar servidor e canal padrão '#general'
-  app.post('/api/v1/servers', async (req, res) => {
-    const userId = getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { name, region, icon } = req.body || {};
-    if (!name || !String(name).trim()) {
-      return res.status(400).json({ success: false, message: 'name é obrigatório' });
-    }
-    const pool = db.getPool();
-    try {
-      const serverR = await pool.query(
-        `INSERT INTO servers (name, owner_id)
-         VALUES ($1, $2::uuid)
-         RETURNING id, name, owner_id, created_at`,
-        [String(name).trim(), userId]
+      const result = await db.query(
+        `INSERT INTO messages (content, chat_id, user_id)
+         VALUES ($1, $2, $3)
+         RETURNING id, content, created_at, user_id`,
+        [safeContent, chatId, userId]
       );
-      const serverRow = serverR.rows[0];
-      if (!serverRow) {
-        console.error('[LIBERTY] POST /servers: INSERT retornou nenhuma linha');
-        return res.status(500).json({ success: false, message: 'Erro ao criar servidor' });
+
+      const row = result.rows[0];
+      let username = (author && String(author).trim()) || 'User';
+      let avatarUrl = null;
+      if (userId) {
+        const u = await db.query(
+          'SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1',
+          [userId]
+        );
+        if (u.rows[0]) {
+          username = u.rows[0].username || username;
+          avatarUrl = u.rows[0].avatar_url || null;
+        }
       }
-      const serverId = serverRow.id;
-
-      const chatR = await pool.query(
-        `INSERT INTO chats (name, type, server_id)
-         VALUES ('general', 'channel', $1)
-         RETURNING id, name, type, server_id, created_at`,
-        [serverId]
-      );
-      const chatRow = chatR.rows[0];
-      await pool.query(
-        `INSERT INTO chat_members (chat_id, user_id, role)
-         VALUES ($1, $2, 'member')
-         ON CONFLICT (chat_id, user_id) DO NOTHING`,
-        [chatRow.id, userId]
-      );
-
-      const server = {
-        id: String(serverRow.id),
-        name: serverRow.name,
-        icon: null,
-        owner_id: String(serverRow.owner_id),
-        created_at: serverRow.created_at,
-        channels: [
-          {
-            id: String(chatRow.id),
-            name: chatRow.name,
-            type: chatRow.type,
-            channel_type: 'text',
-            server_id: String(serverId),
-            created_at: chatRow.created_at,
-          },
-        ],
+      const saved = {
+        id: String(row.id),
+        content: row.content,
+        author: username,
+        author_username: username,
+        username,
+        avatar_url: avatarUrl,
+        channelId: 'default-channel',
+        timestamp: row.created_at || new Date(),
       };
 
-      const wssInstance = req.app.get('wss');
-      if (wssInstance && wssInstance.clients) {
-        const payload = JSON.stringify({ op: 'server_created', d: { server } });
-        wssInstance.clients.forEach((client) => {
-          if (client.readyState === 1 && client.userId !== userId) client.send(payload);
-        });
+      const emit = req.app.locals.emitMessage;
+      if (emit && chatId) {
+        emit({ ...saved, chat_id: chatId });
       }
 
-      return res.status(201).json({ success: true, server });
+      return res.status(201).json({
+        id: saved.id,
+        content: saved.content,
+        author_username: username,
+        username,
+        avatar_url: avatarUrl,
+        created_at: new Date(saved.timestamp).toISOString(),
+      });
     } catch (err) {
-      console.error('[LIBERTY] POST /servers erro:', err);
-      console.error('[LIBERTY] POST /servers stack:', err.stack);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao criar servidor' });
+      console.error('[API] POST /api/messages erro:', err.message);
+      return res
+        .status(500)
+        .json({ message: err.message || 'Erro ao salvar mensagem no banco de dados' });
     }
   });
 
-  // GET /api/v1/servers — listar servidores do usuário (owner_id = token)
-  app.get('/api/v1/servers', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
+  app.get('/api/messages', async (_req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res
+        .status(503)
+        .json({ message: 'Banco de dados indisponível. Verifique DATABASE_URL no .env.' });
     }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const pool = db.getPool();
+
     try {
-      const r = await pool.query(
-        'SELECT id, name, owner_id, created_at FROM servers WHERE owner_id = $1::uuid ORDER BY created_at DESC',
-        [userId.trim()]
+      const chatId = await getDefaultChatId();
+      if (!chatId) {
+        // Sem chat padrão ainda: nenhuma mensagem persistida
+        return res.status(200).json([]);
+      }
+
+      const result = await db.query(
+        `SELECT m.id, m.content, m.created_at, m.user_id,
+                u.username AS author_username, u.avatar_url
+         FROM messages m
+         LEFT JOIN users u ON u.id = m.user_id
+         WHERE m.chat_id = $1
+         ORDER BY m.created_at ASC
+         LIMIT 50`,
+        [chatId]
+      );
+
+      const response = result.rows.map((row, index) => ({
+        id: row.id ? String(row.id) : String(index),
+        content: String(row.content || '').trim().replace(/</g, '&lt;'),
+        author_username: row.author_username || 'User',
+        username: row.author_username || 'User',
+        avatar_url: row.avatar_url || null,
+        created_at: new Date(row.created_at || Date.now()).toISOString(),
+      }));
+
+      return res.status(200).json(response);
+    } catch (err) {
+      console.error('[API] GET /api/messages erro:', err.message);
+      return res
+        .status(500)
+        .json({ message: err.message || 'Erro ao carregar mensagens do banco de dados' });
+    }
+  });
+
+  // POST /api/servers/:serverId/channels/:channelId/messages — exige login; persiste só no DB
+  app.post('/api/servers/:serverId/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco de dados indisponível.' });
+    }
+    const { content } = req.body || {};
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ message: 'content é obrigatório' });
+    }
+    const safeContent = String(content).trim().replace(/</g, '&lt;');
+    const userId = req.userId;
+    try {
+      const chatId = await getChatIdForServerAndChannel(req.params.serverId, req.params.channelId);
+      if (!chatId) {
+        return res.status(503).json({ message: 'Chat indisponível.' });
+      }
+      const result = await db.query(
+        `INSERT INTO messages (content, chat_id, user_id) VALUES ($1, $2, $3)
+         RETURNING id, content, created_at, user_id`,
+        [safeContent, chatId, userId]
+      );
+      const row = result.rows[0];
+      let username = 'User';
+      let avatarUrl = null;
+      const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
+      if (u.rows[0]) {
+        username = u.rows[0].username || username;
+        avatarUrl = u.rows[0].avatar_url || null;
+      }
+      const saved = {
+        id: String(row.id),
+        content: row.content,
+        author: username,
+        author_username: username,
+        username,
+        avatar_url: avatarUrl,
+        channelId: req.params.channelId,
+        timestamp: row.created_at || new Date(),
+      };
+      const emit = req.app.locals.emitMessage;
+      if (emit && chatId) emit({ ...saved, chat_id: chatId });
+      return res.status(201).json({
+        id: saved.id,
+        content: saved.content,
+        author_username: username,
+        username,
+        avatar_url: avatarUrl,
+        created_at: new Date(saved.timestamp).toISOString(),
+      });
+    } catch (err) {
+      console.error('[API] POST /api/servers/.../channels/.../messages erro:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao salvar mensagem' });
+    }
+  });
+
+  // Mensagens por canal (legacy): só DB
+  app.post('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
+    const { channelId } = req.params;
+    const { content } = req.body || {};
+    if (!content || !String(content).trim()) {
+      return res.status(400).json({ message: 'content é obrigatório' });
+    }
+    const safeContent = String(content).trim().replace(/</g, '&lt;');
+    const userId = req.userId;
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    try {
+      const chatId = await getChatIdForServerAndChannel(null, channelId) || await getDefaultChatId();
+      if (!chatId) return res.status(503).json({ message: 'Chat indisponível' });
+      const result = await db.query(
+        `INSERT INTO messages (content, chat_id, user_id) VALUES ($1, $2, $3)
+         RETURNING id, content, created_at, user_id`,
+        [safeContent, chatId, userId]
+      );
+      const row = result.rows[0];
+      let username = 'User';
+      const u = await db.query('SELECT username FROM users WHERE id = $1 LIMIT 1', [userId]);
+      if (u.rows[0]) username = u.rows[0].username || username;
+      const saved = {
+        id: String(row.id),
+        content: row.content,
+        author: username,
+        channelId,
+        timestamp: row.created_at || new Date(),
+      };
+      const emit = req.app.locals.emitMessage;
+      if (emit && chatId) emit({ ...saved, chat_id: chatId });
+      return res.status(201).json({ success: true, message: saved });
+    } catch (err) {
+      console.error('[API] POST /api/v1/channels/:id/messages', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao salvar' });
+    }
+  });
+
+  app.get('/api/v1/channels/:channelId/messages', async (req, res) => {
+    const { channelId } = req.params;
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    try {
+      const chatId = await getChatIdForServerAndChannel(null, channelId) || await getDefaultChatId();
+      if (!chatId) return res.status(200).json([]);
+      const result = await db.query(
+        `SELECT m.id, m.content, m.created_at, u.username AS author_username
+         FROM messages m LEFT JOIN users u ON u.id = m.user_id
+         WHERE m.chat_id = $1 ORDER BY m.created_at ASC LIMIT 100`,
+        [chatId]
+      );
+      const list = result.rows.map((row, i) => ({
+        id: row.id ? String(row.id) : String(i),
+        channel_id: channelId,
+        content: String(row.content || ''),
+        author_username: row.author_username || 'User',
+        created_at: new Date(row.created_at).toISOString(),
+      }));
+      return res.status(200).json(list);
+    } catch (err) {
+      console.error('[API] GET /api/v1/channels/:id/messages', err.message);
+      return res.status(500).json({ message: err.message || 'Erro' });
+    }
+  });
+
+  // GET /api/v1/servers — lista de servidores do usuário (autenticado)
+  app.get('/api/v1/servers', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    try {
+      const userId = req.userId;
+      const r = await db.query(
+        `SELECT DISTINCT s.id, s.name, s.owner_id, s.created_at
+         FROM servers s
+         LEFT JOIN chats c ON c.server_id = s.id
+         LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $1::uuid
+         WHERE s.owner_id = $1::uuid OR cm.user_id = $1::uuid
+         ORDER BY s.created_at ASC`,
+        [userId]
       );
       const servers = r.rows.map((row) => ({
         id: String(row.id),
         name: row.name,
-        icon: row.icon ?? null,
         owner_id: row.owner_id ? String(row.owner_id) : null,
         created_at: row.created_at,
       }));
       return res.status(200).json(servers);
     } catch (err) {
-      console.error('[LIBERTY] GET /servers', err.message);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao listar servidores' });
-    }
-  });
-
-  // GET /api/v1/servers/:serverId — detalhes do servidor + canais
-  app.get('/api/v1/servers/:serverId', async (req, res) => {
-    const userId = getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { serverId } = req.params;
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!serverId || !uuidRegex.test(serverId)) {
-      return res.status(400).json({ success: false, message: 'serverId inválido (esperado UUID)' });
-    }
-    const pool = db.getPool();
-    try {
-      const serverR = await pool.query(
-        'SELECT id, name, owner_id, created_at FROM servers WHERE id = $1::uuid',
-        [serverId]
-      );
-      const serverRow = serverR.rows[0];
-      if (!serverRow) {
-        return res.status(404).json({ success: false, message: 'Servidor não encontrado' });
-      }
-      const channelsR = await pool.query(
-        'SELECT id, name, type, server_id, created_at FROM chats WHERE server_id = $1::uuid ORDER BY created_at ASC',
-        [serverId]
-      );
-      const channels = channelsR.rows.map((row) => ({
-        id: String(row.id),
-        name: row.name,
-        type: row.type,
-        channel_type: row.type === 'channel' ? 'text' : row.type,
-        server_id: String(row.server_id),
-        created_at: row.created_at,
-      }));
-      const ownerId = serverRow.owner_id ? String(serverRow.owner_id) : null;
-      const membersR = await pool.query(
-        `SELECT DISTINCT u.id, COALESCE(u.username, u.nome) AS username
-         FROM users u
-         WHERE u.id IN (
-           SELECT user_id FROM chat_members WHERE chat_id IN (SELECT id FROM chats WHERE server_id = $1::uuid)
-           UNION
-           SELECT owner_id FROM servers WHERE id = $1::uuid AND owner_id IS NOT NULL
-         )
-         ORDER BY COALESCE(u.username, u.nome) ASC`,
-        [serverId]
-      );
-      const members = membersR.rows.map((row) => ({
-        user_id: String(row.id),
-        user: { id: String(row.id), username: row.username },
-        username: row.username,
-        role: ownerId && String(row.id) === ownerId ? 'owner' : 'member',
-      }));
-      const server = {
-        id: String(serverRow.id),
-        name: serverRow.name,
-        icon: null,
-        owner_id: serverRow.owner_id ? String(serverRow.owner_id) : null,
-        created_at: serverRow.created_at,
-      };
-      return res.status(200).json({ server, channels, members });
-    } catch (err) {
-      console.error('[LIBERTY] GET /servers/:serverId erro:', err);
-      console.error('[LIBERTY] GET /servers/:serverId stack:', err.stack);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao carregar servidor' });
-    }
-  });
-
-  // GET /api/v1/servers/:serverId/channels — lista de canais (inclui #geral / #general)
-  app.get('/api/v1/servers/:serverId/channels', async (req, res) => {
-    const userId = getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { serverId } = req.params;
-    const pool = db.getPool();
-    try {
-      const r = await pool.query(
-        'SELECT id, name, type, server_id, created_at FROM chats WHERE server_id = $1::uuid ORDER BY created_at ASC',
-        [serverId]
-      );
-      const channels = r.rows.map((row) => ({
-        id: String(row.id),
-        name: row.name,
-        type: row.type,
-        channel_type: row.type === 'channel' ? 'text' : row.type,
-        server_id: String(row.server_id),
-        created_at: row.created_at,
-      }));
-      if (channels.length === 0) {
-        const serverR = await pool.query('SELECT id FROM servers WHERE id = $1::uuid', [serverId]);
-        if (serverR.rows[0] && serverR.rows[0].id) {
-          const ins = await pool.query(
-            `INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id, name, type, server_id, created_at`,
-            [serverId]
-          );
-          const row = ins.rows[0];
-          channels.push({
+      if (err.message && err.message.includes('does not exist')) {
+        try {
+          await dbInit();
+          const r = await db.query(`SELECT id, name, owner_id, created_at FROM servers ORDER BY created_at ASC`);
+          const servers = r.rows.map((row) => ({
             id: String(row.id),
             name: row.name,
-            type: row.type,
-            channel_type: 'text',
-            server_id: String(row.server_id),
+            owner_id: row.owner_id ? String(row.owner_id) : null,
             created_at: row.created_at,
+          }));
+          return res.status(200).json(servers);
+        } catch (e) {
+          console.error('[API] GET /api/v1/servers (após init):', e.message);
+          return res.status(500).json({ message: e.message || 'Erro ao listar servidores' });
+        }
+      }
+      console.error('[API] GET /api/v1/servers:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao listar servidores' });
+    }
+  });
+
+  // POST /api/v1/servers — criar servidor (autenticado)
+  app.post('/api/v1/servers', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const { name, region } = req.body || {};
+    const serverName = (name && String(name).trim()) || 'Novo servidor';
+    const userId = req.userId;
+    try {
+      const ins = await db.query(
+        `INSERT INTO servers (name, owner_id) VALUES ($1, $2::uuid) RETURNING id, name, owner_id, created_at`,
+        [serverName, userId]
+      );
+      const row = ins.rows[0];
+      const server = {
+        id: String(row.id),
+        name: row.name,
+        owner_id: String(row.owner_id),
+        created_at: row.created_at,
+      };
+      const ch = await db.query(
+        `INSERT INTO chats (name, type, server_id) VALUES ($1, 'channel', $2::uuid) RETURNING id`,
+        ['general', row.id]
+      );
+      const generalChatId = ch.rows[0].id;
+      await db.query(
+        `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT (chat_id, user_id) DO NOTHING`,
+        [generalChatId, userId]
+      );
+      return res.status(201).json({ server });
+    } catch (err) {
+      if (err.message && err.message.includes('does not exist')) {
+        try {
+          await dbInit();
+          const ins = await db.query(
+            `INSERT INTO servers (name, owner_id) VALUES ($1, $2::uuid) RETURNING id, name, owner_id, created_at`,
+            [serverName, userId]
+          );
+          const row = ins.rows[0];
+          const ch = await db.query(
+            `INSERT INTO chats (name, type, server_id) VALUES ($1, 'channel', $2::uuid) RETURNING id`,
+            ['general', row.id]
+          );
+          const generalChatId = ch.rows[0].id;
+          await db.query(
+            `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT (chat_id, user_id) DO NOTHING`,
+            [generalChatId, userId]
+          );
+          return res.status(201).json({
+            server: {
+              id: String(row.id),
+              name: row.name,
+              owner_id: String(row.owner_id),
+              created_at: row.created_at,
+            },
+          });
+        } catch (e) {
+          console.error('[API] POST /api/v1/servers (após init):', e.message);
+          return res.status(500).json({ message: e.message || 'Erro ao criar servidor' });
+        }
+      }
+      console.error('[API] POST /api/v1/servers:', err.message);
+      return res.status(500).json({ message: err.message || 'Erro ao criar servidor' });
+    }
+  });
+
+  // GET /api/v1/default-chat — ID do chat padrão (para o cliente inscrever no WebSocket)
+  app.get('/api/v1/default-chat', async (_req, res) => {
+    try {
+      const chatId = await getDefaultChatId();
+      if (!chatId) return res.status(404).json({ message: 'Chat padrão indisponível' });
+      return res.status(200).json({ chat_id: chatId });
+    } catch (err) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/v1/users/@me/channels — DMs e grupos do usuário
+  app.get('/api/v1/users/@me/channels', auth.requireAuth, async (req, res) => {
+    const userId = req.userId;
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    try {
+      const channels = [];
+
+      const dmChats = await db.query(
+        `SELECT c.id AS chat_id FROM chats c
+         INNER JOIN chat_members cm ON cm.chat_id = c.id
+         WHERE c.type = 'dm' AND cm.user_id = $1::uuid`,
+        [userId]
+      );
+      for (const row of dmChats.rows) {
+        const other = await db.query(
+          `SELECT u.id, u.username FROM chat_members cm
+           INNER JOIN users u ON u.id = cm.user_id
+           WHERE cm.chat_id = $1::uuid AND cm.user_id != $2::uuid`,
+          [row.chat_id, userId]
+        );
+        const u = other.rows[0];
+        if (u) {
+          channels.push({
+            id: String(row.chat_id),
+            type: 'dm',
+            name: null,
+            recipients: [{ id: String(u.id), username: u.username }],
           });
         }
       }
+
+      const groupChats = await db.query(
+        `SELECT c.id AS chat_id, c.name FROM chats c
+         INNER JOIN group_members gm ON gm.chat_id = c.id
+         WHERE c.type = 'group_dm' AND gm.user_id = $1::uuid`,
+        [userId]
+      );
+      for (const row of groupChats.rows) {
+        const members = await db.query(
+          `SELECT u.id, u.username FROM group_members gm
+           INNER JOIN users u ON u.id = gm.user_id
+           WHERE gm.chat_id = $1::uuid`,
+          [row.chat_id]
+        );
+        channels.push({
+          id: String(row.chat_id),
+          type: 'group_dm',
+          name: row.name || members.rows.map((m) => m.username).join(', '),
+          recipients: members.rows.map((m) => ({ id: String(m.id), username: m.username })),
+        });
+      }
+
       return res.status(200).json(channels);
     } catch (err) {
-      console.error('[LIBERTY] GET /servers/:serverId/channels erro:', err);
-      console.error('[LIBERTY] GET /servers/:serverId/channels stack:', err.stack);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao listar canais' });
+      console.error('[LIBERTY] GET @me/channels', err);
+      return res.status(500).json({ message: err.message || 'Erro ao listar canais' });
     }
   });
 
-  // GET /api/v1/channels/:channelId/messages — histórico em ordem cronológica (channel_id)
-  app.get('/api/v1/channels/:channelId/messages', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
+  // POST /api/v1/users/@me/channels — criar DM ou grupo (recipient_id OU recipient_ids[])
+  app.post('/api/v1/users/@me/channels', auth.requireAuth, async (req, res) => {
+    const userId = req.userId;
+    const body = req.body || {};
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
     }
-    if (!db.isConnected()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
+
+    const recipientIds = Array.isArray(body.recipient_ids) ? body.recipient_ids.filter(Boolean).map(String) : [];
+    const singleId = body.recipient_id ? String(body.recipient_id).trim() : null;
+
+    if (recipientIds.length > 1) {
+      const name = (body.name && String(body.name).trim()) || null;
+      try {
+        const ins = await db.query(
+          `INSERT INTO chats (name, type, server_id) VALUES ($1, 'group_dm', NULL) RETURNING id`,
+          [name]
+        );
+        const chatId = ins.rows[0].id;
+        const allIds = [userId, ...recipientIds];
+        for (const uid of allIds) {
+          await db.query(
+            `INSERT INTO group_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid) ON CONFLICT (chat_id, user_id) DO NOTHING`,
+            [chatId, uid]
+          );
+        }
+        const members = await db.query(
+          `SELECT u.id, u.username FROM group_members gm
+           INNER JOIN users u ON u.id = gm.user_id
+           WHERE gm.chat_id = $1::uuid`,
+          [chatId]
+        );
+        return res.status(201).json({
+          id: String(chatId),
+          type: 'group_dm',
+          name: name || members.rows.map((m) => m.username).join(', '),
+          recipients: members.rows.map((m) => ({ id: String(m.id), username: m.username })),
+        });
+      } catch (err) {
+        console.error('[LIBERTY] POST @me/channels group', err);
+        return res.status(500).json({ message: err.message || 'Erro ao criar grupo' });
+      }
     }
-    const { channelId } = req.params;
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
+
+    if (singleId && singleId !== userId) {
+      try {
+        const existing = await db.query(
+          `SELECT c.id FROM chats c
+           WHERE c.type = 'dm' AND (SELECT COUNT(*) FROM chat_members WHERE chat_id = c.id) = 2
+           AND EXISTS (SELECT 1 FROM chat_members WHERE chat_id = c.id AND user_id = $1::uuid)
+           AND EXISTS (SELECT 1 FROM chat_members WHERE chat_id = c.id AND user_id = $2::uuid)`,
+          [userId, singleId]
+        );
+        if (existing.rows[0]) {
+          const chatId = existing.rows[0].id;
+          const u = await db.query('SELECT id, username FROM users WHERE id = $1::uuid', [singleId]);
+          const username = u.rows[0]?.username || 'User';
+          return res.status(200).json({
+            id: String(chatId),
+            type: 'dm',
+            name: null,
+            recipients: [{ id: singleId, username }],
+          });
+        }
+        const ins = await db.query(
+          `INSERT INTO chats (name, type, server_id) VALUES (NULL, 'dm', NULL) RETURNING id`,
+          []
+        );
+        const chatId = ins.rows[0].id;
+        await db.query(
+          `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid), ($1::uuid, $3::uuid)`,
+          [chatId, userId, singleId]
+        );
+        const u = await db.query('SELECT id, username FROM users WHERE id = $1::uuid', [singleId]);
+        const username = u.rows[0]?.username || 'User';
+        return res.status(201).json({
+          id: String(chatId),
+          type: 'dm',
+          name: null,
+          recipients: [{ id: singleId, username }],
+        });
+      } catch (err) {
+        console.error('[LIBERTY] POST @me/channels dm', err);
+        return res.status(500).json({ message: err.message || 'Erro ao criar DM' });
+      }
+    }
+
+    return res.status(400).json({ message: 'Envie recipient_id (DM) ou recipient_ids (array com 2+) para grupo' });
+  });
+
+  // GET /api/v1/users/me — perfil do usuário autenticado (inclui avatar_url)
+  app.get('/api/v1/users/me', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
     try {
       const r = await db.query(
-        'SELECT * FROM messages WHERE channel_id = $1::uuid ORDER BY created_at ASC LIMIT $2',
-        [channelId, limit]
-      );
-      const messages = r.rows.map((row) => ({
-        ...row,
-        id: String(row.id),
-        channel_id: String(row.channel_id),
-        author_id: row.author_id ? String(row.author_id) : null,
-        content: decrypt(row.content),
-      }));
-      return res.status(200).json(messages);
-    } catch (err) {
-      console.error('ERRO SQL:', err.message);
-      console.error('ERRO CRÍTICO NO NEON (GET messages):', err.message, err.stack);
-      console.error('[LIBERTY] GET /channels/:channelId/messages erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao carregar mensagens' });
-    }
-  });
-
-  // POST /api/v1/channels/:channelId/messages — cria mensagem persistente no Neon (content, channel_id, author_id)
-  app.post('/api/v1/channels/:channelId/messages', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { channelId } = req.params;
-    const { content } = req.body || {};
-    if (!content || !String(content).trim()) {
-      return res.status(400).json({ success: false, message: 'content é obrigatório' });
-    }
-    console.log('Tentando salvar mensagem no canal:', channelId);
-    try {
-      const encryptedContent = encrypt(String(content).trim());
-      const insert = await db.query(
-        'INSERT INTO messages (content, channel_id, author_id) VALUES ($1, $2, $3) RETURNING *',
-        [encryptedContent, channelId, userId]
-      );
-      const row = insert.rows[0];
-      const userR = await db.query('SELECT COALESCE(username, nome) AS username FROM users WHERE id = $1', [row.author_id]);
-      const username = userR.rows[0]?.username || 'User';
-      const message = {
-        id: String(row.id),
-        channel_id: String(row.channel_id),
-        author_id: row.author_id ? String(row.author_id) : null,
-        author_username: username,
-        author: row.author_id ? { id: String(row.author_id), username } : null,
-        content: decrypt(row.content),
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-      };
-      console.log('Mensagem guardada no DB:', row.content);
-      return res.status(201).json(message);
-    } catch (err) {
-      console.error('ERRO SQL:', err.message);
-      console.error('ERRO CRÍTICO NO NEON:', err.message, err.stack);
-      console.error('[LIBERTY] POST /channels/:channelId/messages erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao salvar mensagem' });
-    }
-  });
-
-  // DELETE /api/v1/messages/:id — remove mensagem se for do autor e notifica via WebSocket
-  app.delete('/api/v1/messages/:id', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { id } = req.params;
-    const pool = db.getPool();
-    try {
-      const r = await pool.query(
-        'DELETE FROM messages WHERE id = $1::uuid AND author_id = $2::uuid RETURNING channel_id',
-        [id, userId]
+        'SELECT id, username, email, avatar_url, created_at FROM users WHERE id = $1 LIMIT 1',
+        [req.userId]
       );
       const row = r.rows[0];
-      if (!row) {
-        return res.status(404).json({ success: false, message: 'Mensagem não encontrada ou não é sua.' });
-      }
-
-      const wssInstance = req.app.get('wss');
-      if (wssInstance && wssInstance.clients) {
-        const payload = JSON.stringify({
-          op: 'message_deleted',
-          d: { message_id: id },
-        });
-        wssInstance.clients.forEach((client) => {
-          if (client.readyState === 1) {
-            client.send(payload);
-          }
-        });
-      }
-
-      return res.status(200).json({ success: true });
-    } catch (err) {
-      console.error('ERRO SQL:', err.message);
-      console.error('[LIBERTY] DELETE /messages/:id erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao deletar mensagem' });
-    }
-  });
-
-  // GET /api/v1/servers/:serverId/members — membros do servidor (owner + membros dos canais)
-  app.get('/api/v1/servers/:serverId/members', async (req, res) => {
-    const userId = getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { serverId } = req.params;
-    const pool = db.getPool();
-    try {
-      const serverR = await pool.query(
-        'SELECT owner_id FROM servers WHERE id = $1::uuid',
-        [serverId]
-      );
-      const ownerId = serverR.rows[0]?.owner_id ? String(serverR.rows[0].owner_id) : null;
-      const r = await pool.query(
-        `SELECT DISTINCT u.id, COALESCE(u.username, u.nome) AS username
-         FROM users u
-         WHERE u.id IN (
-           SELECT user_id FROM chat_members WHERE chat_id IN (SELECT id FROM chats WHERE server_id = $1::uuid)
-           UNION
-           SELECT owner_id FROM servers WHERE id = $1::uuid AND owner_id IS NOT NULL
-         )
-         ORDER BY COALESCE(u.username, u.nome) ASC`,
-        [serverId]
-      );
-      const members = r.rows.map((row) => ({
-        user_id: String(row.id),
-        user: { id: String(row.id), username: row.username },
-        username: row.username,
-        role: ownerId && String(row.id) === ownerId ? 'owner' : 'member',
-      }));
-      return res.status(200).json(members);
-    } catch (err) {
-      console.error('[LIBERTY] GET /servers/:serverId/members erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao listar membros' });
-    }
-  });
-
-  // GET /api/v1/relationships/pending — pedidos pendentes recebidos
-  app.get('/api/v1/relationships/pending', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const pool = db.getPool();
-    try {
-      const r = await pool.query(
-        `SELECT f.id, u.id AS user_id, COALESCE(u.username, u.nome) AS username
-         FROM friendships f
-         JOIN users u ON u.id = f.user_id
-         WHERE f.friend_id = $1::uuid AND f.status = 'pending'
-         ORDER BY f.created_at ASC`,
-        [userId]
-      );
-      return res.status(200).json(r.rows);
-    } catch (err) {
-      console.error('ERRO SQL:', err.message);
-      console.error('[LIBERTY] GET /relationships/pending erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao listar pendentes' });
-    }
-  });
-
-  // PATCH /api/v1/relationships/:id/accept — aceitar pedido pendente
-  app.patch('/api/v1/relationships/:id/accept', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { id } = req.params;
-    const pool = db.getPool();
-    try {
-      const relR = await pool.query(
-        `SELECT user_id, friend_id, status
-         FROM friendships
-         WHERE id = $1::uuid AND friend_id = $2::uuid`,
-        [id, userId]
-      );
-      const rel = relR.rows[0];
-      if (!rel || rel.status !== 'pending') {
-        return res.status(404).json({ success: false, message: 'Pedido não encontrado ou já tratado' });
-      }
-
-      await pool.query(
-        `UPDATE friendships SET status = 'accepted' WHERE id = $1::uuid`,
-        [id]
-      );
-
-      await pool.query(
-        `INSERT INTO friendships (user_id, friend_id, status)
-         VALUES ($1::uuid, $2::uuid, 'accepted')
-         ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'accepted'`,
-        [userId, rel.user_id]
-      );
-
-      return res.status(200).json({ success: true });
-    } catch (err) {
-      console.error('[LIBERTY] PATCH /relationships/:id/accept erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao aceitar pedido' });
-    }
-  });
-
-  // POST /api/v1/relationships — adicionar amigo por username
-  app.post('/api/v1/relationships', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const { username } = req.body || {};
-    if (!username || !String(username).trim()) {
-      return res.status(400).json({ success: false, message: 'username é obrigatório' });
-    }
-    const pool = db.getPool();
-    try {
-      const userR = await pool.query(
-        'SELECT id, COALESCE(username, nome) AS username FROM users WHERE (username = $1 OR nome = $1)',
-        [String(username).trim()]
-      );
-      const friendRow = userR.rows[0];
-      if (!friendRow) {
-        return res.status(404).json({ success: false, message: 'Usuário não encontrado' });
-      }
-      const friendId = String(friendRow.id);
-      if (friendId === userId) {
-        return res.status(400).json({ success: false, message: 'Você não pode adicionar a si mesmo.' });
-      }
-      // Pedido pendente (apenas um registro, status 'pending')
-      await pool.query(
-        `INSERT INTO friendships (user_id, friend_id, status)
-         VALUES ($1::uuid, $2::uuid, 'pending')
-         ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'pending'`,
-        [userId, friendId]
-      );
-
-      const friend = { id: friendId, username: friendRow.username };
-
-      // Notificar o outro usuário em tempo real, se estiver online
-      const wssInstance = req.app.get('wss');
-      if (wssInstance && wssInstance.clients) {
-        const payload = JSON.stringify({
-          op: 'friend_added',
-          d: { user: { id: userId, username: req.currentUserUsername || null } },
-        });
-        wssInstance.clients.forEach((client) => {
-          if (client.readyState === 1 && client.userId === friendId) {
-            client.send(payload);
-          }
-        });
-      }
-
-      return res.status(201).json({ success: true, friend });
-    } catch (err) {
-      console.error('[LIBERTY] POST /relationships erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao adicionar amigo' });
-    }
-  });
-
-  // GET /api/v1/relationships — lista de amigos
-  app.get('/api/v1/relationships', async (req, res) => {
-    const userId = req.user?.id || getUserIdFromAuth(req);
-    if (!userId) {
-      return res.status(401).json({ success: false, message: 'Não autorizado' });
-    }
-    if (!db.isConnected() || !db.getPool()) {
-      return res.status(503).json({ success: false, message: 'Banco de dados indisponível. Tente mais tarde.' });
-    }
-    const pool = db.getPool();
-    try {
-      const r = await pool.query(
-        `SELECT u.id, COALESCE(u.username, u.nome) AS username
-         FROM friendships f
-         JOIN users u ON u.id = f.friend_id
-         WHERE f.user_id = $1::uuid AND f.status = 'accepted'
-         ORDER BY COALESCE(u.username, u.nome) ASC`,
-        [userId]
-      );
-      const friends = r.rows.map((row) => ({
+      if (!row) return res.status(404).json({ message: 'Usuário não encontrado' });
+      return res.status(200).json({
         id: String(row.id),
         username: row.username,
-      }));
-      return res.status(200).json(friends);
+        email: row.email || null,
+        avatar_url: row.avatar_url || null,
+        created_at: row.created_at,
+      });
     } catch (err) {
-      console.error('[LIBERTY] GET /relationships erro:', err);
-      return res.status(500).json({ success: false, message: err.message || 'Erro ao listar amigos' });
+      console.error('[LIBERTY] GET /users/me', err);
+      return res.status(500).json({ message: err.message || 'Erro ao buscar perfil' });
     }
   });
 
-  app.use(express.static(STATIC_DIR, { index: 'index.html' }));
-  app.get('*', (_req, res) => {
+  // PATCH /api/v1/users/me — atualizar perfil (avatar_url por URL)
+  app.patch('/api/v1/users/me', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const { avatar_url } = req.body || {};
+    const url = avatar_url != null ? String(avatar_url).trim() : null;
+    if (url !== null && url.length > 0 && !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: 'avatar_url deve ser uma URL (http ou https)' });
+    }
     try {
-      res.sendFile(pathMod.join(STATIC_DIR, 'index.html'));
+      await db.query(
+        'UPDATE users SET avatar_url = $1 WHERE id = $2',
+        [url || null, req.userId]
+      );
+      const r = await db.query(
+        'SELECT id, username, email, avatar_url FROM users WHERE id = $1 LIMIT 1',
+        [req.userId]
+      );
+      const row = r.rows[0];
+      return res.status(200).json({
+        id: String(row.id),
+        username: row.username,
+        email: row.email || null,
+        avatar_url: row.avatar_url || null,
+      });
     } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+      console.error('[LIBERTY] PATCH /users/me', err);
+      return res.status(500).json({ message: err.message || 'Erro ao atualizar perfil' });
     }
   });
+
+  // GET /api/v1/users/@me/relationships — lista de amigos (para modal de grupo)
+  app.get('/api/v1/users/@me/relationships', auth.requireAuth, async (req, res) => {
+    const userId = req.userId;
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    try {
+      const r = await db.query(
+        `SELECT u.id, u.username FROM users u
+         INNER JOIN friendships f ON (f.friend_id = u.id AND f.user_id = $1::uuid) OR (f.user_id = u.id AND f.friend_id = $2::uuid)
+         WHERE f.status = 'accepted' AND u.id != $3::uuid`,
+        [userId, userId, userId]
+      );
+      const list = r.rows.map((row) => ({ id: String(row.id), username: row.username }));
+      return res.status(200).json(list);
+    } catch (err) {
+      console.error('[LIBERTY] GET @me/relationships', err);
+      return res.status(500).json({ message: err.message || 'Erro ao listar amigos' });
+    }
+  });
+
+  // Favicon — evita 404 nos logs
+  app.get('/favicon.ico', (req, res) => {
+    const faviconPath = path.join(STATIC_DIR, 'favicon.ico');
+    if (fs.existsSync(faviconPath)) {
+      res.sendFile(faviconPath);
+    } else {
+      res.status(204).end();
+    }
+  });
+
+  // Static + rota raiz
+  app.use(express.static(STATIC_DIR));
+  app.get('/', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`LIBERTY listening on port ${PORT}`);
-    if (db.isConnected()) console.log('PostgreSQL: conectado');
-    else if (db.isConfigured()) console.log('PostgreSQL: indisponível');
-    else console.log('PostgreSQL: defina DATABASE_URL no .env');
   });
 }
 
 start().catch((err) => {
   console.error('Falha ao iniciar:', err);
   process.exit(1);
-});
-
-// Tratamento global de erros não capturados para evitar que o processo morra silenciosamente
-process.on('uncaughtException', (err) => {
-  console.error('[GLOBAL] uncaughtException:', err);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('[GLOBAL] unhandledRejection:', reason);
 });
 

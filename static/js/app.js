@@ -426,10 +426,12 @@ class LibertyApp {
         if (countEl) countEl.textContent = '0/5.000';
 
         // Members toggle
-        document.getElementById('toggle-members-btn').addEventListener('click', () => this.toggleMembers());
+        const toggleMembersBtn = document.getElementById('toggle-members-btn');
+        if (toggleMembersBtn) toggleMembersBtn.addEventListener('click', () => this.toggleMembers());
 
-        // Server header dropdown
-        document.querySelector('.server-header').addEventListener('click', e => {
+        // Server header dropdown (pode não existir na sidebar redesign)
+        const serverHeader = document.querySelector('.server-header');
+        if (serverHeader) serverHeader.addEventListener('click', e => {
             if (!this.isHomeView) this.toggleServerDropdown(e);
         });
 
