@@ -240,7 +240,8 @@
 .dm-list-item{display:flex;align-items:center;gap:12px;padding:6px 8px;margin:1px 8px;border-radius:var(--radius-md);cursor:pointer;transition:background .15s}
 .dm-list-item:hover{background:rgba(255,255,255,.04)}
 .dm-list-item.active{background:rgba(255,255,255,.06)}
-.dm-list-item-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;position:relative;flex-shrink:0}
+.dm-list-item-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;position:relative;flex-shrink:0;overflow:hidden}
+.dm-list-item-avatar img{width:100%;height:100%;object-fit:cover}
 .dm-list-item-avatar span{line-height:1}
 .dm-list-item-avatar::after{content:'';position:absolute;bottom:-2px;right:-2px;width:12px;height:12px;border-radius:50%;border:3px solid var(--secondary-black);box-sizing:border-box}
 .dm-list-item-avatar.online::after{background:var(--status-online)}
@@ -303,12 +304,12 @@
 .message-edit-actions a:hover{text-decoration:underline}
 .server-dropdown{position:absolute;top:calc(var(--header-height) + 2px);left:0;width:220px;background:rgba(24,21,18,.96);backdrop-filter:blur(20px);border:1px solid rgba(255,215,0,.12);border-radius:var(--radius-lg);box-shadow:var(--glass-shadow);z-index:200;padding:6px 0;animation:contextMenuIn .15s var(--ease-out-expo)}
 .btn-icon.muted{color:var(--error)!important;background:rgba(229,57,53,.12)!important}
-.friends-header-tabs{display:flex;gap:4px;align-items:center}
-.friends-header-tab{padding:4px 10px;border-radius:var(--radius-md);background:transparent;border:none;font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
+.friends-header-tabs{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.friends-header-tab{padding:6px 12px;border-radius:var(--radius-md);background:transparent;border:none;font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .15s;font-family:inherit;white-space:nowrap}
 .friends-header-tab:hover{background:var(--dark-gray);color:var(--text-primary)}
-.friends-header-tab.active{background:var(--medium-gray);color:var(--text-primary)}
-.friends-header-tab.add-friend{background:rgba(67,160,71,.15);color:var(--status-online)}
-.friends-header-tab.add-friend:hover{background:rgba(67,160,71,.25)}
+.friends-header-tab.active{background:rgba(255,215,0,.2);color:var(--primary-yellow)}
+.friends-header-tab.add-friend{background:transparent;color:var(--text-secondary)}
+.friends-header-tab.add-friend:hover,.friends-header-tab.add-friend.active{background:var(--primary-yellow);color:#000}
 .friends-search-wrapper{padding:8px 16px}
 .friends-search-wrapper input{width:100%;padding:8px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit}
 .friends-search-wrapper input:focus{outline:none;border-color:var(--primary-yellow)}
@@ -613,17 +614,26 @@ class LibertyApp {
 
         // Message input
         const msgInput = document.getElementById('message-input');
+        const charCountEl = document.getElementById('message-char-count');
+        const sendBtn = document.getElementById('send-message-btn');
+        const updateCharCount = () => {
+            if (charCountEl && msgInput) charCountEl.textContent = `${msgInput.value.length} / 5.000`;
+            if (sendBtn) sendBtn.disabled = !(msgInput && msgInput.value.trim());
+        };
         if (msgInput) {
             msgInput.addEventListener('keydown', e => {
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.handleSendMessage(); }
             });
             msgInput.addEventListener('input', () => {
+                updateCharCount();
                 this.autoResizeTextarea(msgInput);
                 if (!this._typingDebounce) this.handleTyping();
                 clearTimeout(this._typingDebounce);
                 this._typingDebounce = setTimeout(() => { this._typingDebounce = null; }, 2000);
             });
         }
+        if (sendBtn) sendBtn.addEventListener('click', () => this.handleSendMessage());
+        updateCharCount();
 
         // Members toggle
         document.getElementById('toggle-members-btn')?.addEventListener('click', () => this.toggleMembers());
@@ -682,21 +692,25 @@ class LibertyApp {
         }
 
         // Input action buttons
-        const attachBtn = document.getElementById('attach-btn') || document.querySelector('.message-input-wrapper [data-tooltip="Attach"]');
-        const giftBtn = document.querySelector('.input-actions [data-tooltip="Gift"]');
-        const gifBtn = document.querySelector('.input-actions [data-tooltip="GIF"]');
-        const stickersBtn = document.querySelector('.input-actions [data-tooltip="Stickers"]');
+        const attachBtn = document.getElementById('attach-btn') || document.querySelector('.message-input-wrapper [data-tooltip="Anexar"]');
         const emojiBtn = document.getElementById('emoji-btn') || document.querySelector('.input-actions [data-tooltip="Emoji"]');
         if (attachBtn) attachBtn.addEventListener('click', () => this._openFilePicker());
-        if (giftBtn) giftBtn.addEventListener('click', () => this.showToast('LIBERTY Premium — Unlock gifts and more!', 'info'));
-        if (gifBtn) gifBtn.addEventListener('click', () => this.showToast('GIF picker — coming in a future update!', 'info'));
-        if (stickersBtn) stickersBtn.addEventListener('click', () => this.showToast('Stickers — coming in a future update!', 'info'));
         if (emojiBtn) emojiBtn.addEventListener('click', e => {
             this.showEmojiPicker(emojiBtn, emoji => {
                 const input = document.getElementById('message-input');
                 input.value += emoji;
                 input.focus();
             });
+        });
+
+        // Delegated click: botão de chamada no DM (funciona mesmo se o listener direto não tiver sido ligado)
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('#voice-call-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                this._startVoiceCallIfDM();
+                return;
+            }
         });
 
         // Global click to close popups
@@ -771,16 +785,17 @@ class LibertyApp {
         if (!this.gateway) return;
         const g = this.gateway;
         g.on('message', msg => {
-            const chId = msg.channel_id || msg.channelId;
+            const chId = msg.channel_id || msg.channelId || msg.chat_id;
             const normalized = {
                 ...msg,
                 author_username: msg.author_username || msg.author,
                 created_at: msg.created_at || msg.timestamp,
             };
-            if (chId === this.currentChannel?.id) {
+            const isCurrentChannel = chId && this.currentChannel?.id && (String(chId) === String(this.currentChannel.id));
+            if (isCurrentChannel) {
                 this.addMessage(normalized, true);
                 this.scrollToBottom();
-            } else {
+            } else if (chId) {
                 this.unreadChannels.add(chId);
                 this._updateChannelUnread(chId, true);
             }
@@ -825,7 +840,7 @@ class LibertyApp {
             if (this.isHomeView) {
                 const dmList = document.getElementById('dm-list');
                 const navArea = document.querySelector('.home-nav');
-                if (dmList) { dmList.innerHTML = ''; this._loadDMList(dmList, navArea); }
+                if (dmList) { dmList.innerHTML = ''; this._loadDMList(dmList, navArea, { mergeFriends: true }); }
             }
         });
         g.on('friend_added', (data) => {
@@ -845,6 +860,14 @@ class LibertyApp {
             this.loadFriends().catch(() => {});
             if (document.getElementById('friends-view')?.classList.contains('hidden') === false) {
                 this.renderFriendsView('all').catch(() => {});
+            }
+            // Atualizar lista de Direct Messages para o novo amigo aparecer (com merge de amigos sem DM)
+            const homeContainer = document.getElementById('home-sidebar-content');
+            const dmList = homeContainer && homeContainer.querySelector('#dm-list');
+            const navArea = homeContainer && homeContainer.querySelector('.home-nav');
+            if (dmList) {
+                dmList.innerHTML = '';
+                this._loadDMList(dmList, navArea, { mergeFriends: true });
             }
         });
         this._setupVoiceCallHandlers();
@@ -1043,6 +1066,66 @@ class LibertyApp {
         if (from && this.gateway) if (this.gateway) this.gateway.send('webrtc_reject', { target_user_id: from });
     }
 
+    async _startVoiceCallIfDM() {
+        if (!this.currentUser?.id) {
+            this.showToast('Faça login para iniciar uma chamada.', 'error');
+            return;
+        }
+        if (!this.gateway) {
+            this.showToast('Ligação ao servidor indisponível. Tente recarregar a página.', 'error');
+            return;
+        }
+        const ch = this.currentChannel;
+        const isDMOrGroup = ch && (ch.type === 'dm' || ch.type === 'group_dm') && !ch.server_id;
+        const others = (ch?.recipients || []).filter((r) => r.id !== this.currentUser.id);
+        const targetId = others[0]?.id || null;
+        if (!isDMOrGroup || !targetId) {
+            this.showToast('Abra uma DM com alguém para ligar.', 'error');
+            return;
+        }
+        const voiceView = document.getElementById('voice-call-view');
+        try {
+            this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+        } catch (e) {
+            this.showToast('Permissão de câmara/microfone negada ou indisponível.', 'error');
+            return;
+        }
+        this._voiceCallState.targetUserId = targetId;
+        this._voiceCallState.videoEnabled = true;
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        this._voiceCallState.stream.getTracks().forEach((track) => pc.addTrack(track, this._voiceCallState.stream));
+        pc.ontrack = (e) => this._attachRemoteTrack(e);
+        pc.onicecandidate = (e) => {
+            if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: e.candidate });
+        };
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                this._webrtcClearRemote();
+                const vv = document.getElementById('voice-call-view');
+                if (vv) vv.classList.add('hidden');
+                const localV = document.getElementById('webrtc-local-video');
+                if (localV) localV.srcObject = null;
+            }
+        };
+        this._voiceCallState.pc = pc;
+        pc.createOffer()
+            .then((offer) => pc.setLocalDescription(offer))
+            .then(() => { if (this.gateway) this.gateway.send('webrtc_offer', { target_user_id: this._voiceCallState.targetUserId, payload: pc.localDescription }); })
+            .catch((err) => console.error('Voice offer error', err));
+        if (voiceView) voiceView.classList.remove('hidden');
+        this._webrtcClearRemote();
+        const localV = document.getElementById('webrtc-local-video');
+        if (localV) localV.srcObject = this._voiceCallState.stream;
+        const titleEl = document.getElementById('voice-call-channel-name');
+        const other = (this.currentChannel?.recipients || []).find((r) => r.id === targetId);
+        if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
+        this._updateVoiceCallParticipantsBar();
+        this._updateWebrtcControlButtons();
+        if (typeof API !== 'undefined' && API.Call) {
+            API.Call.start(targetId, ch?.id).then((r) => { if (r && r.id) this._voiceCallState.callId = r.id; }).catch(() => {});
+        }
+    }
+
     _setupVoiceCallButton() {
         const btn = document.getElementById('voice-call-btn');
         const voiceView = document.getElementById('voice-call-view');
@@ -1085,60 +1168,7 @@ class LibertyApp {
                 videoBtn.querySelector('span').textContent = 'Vídeo';
             }
         };
-        btn.addEventListener('click', async () => {
-            if (!this.currentUser?.id) {
-                this.showToast('Faça login para iniciar uma chamada.', 'error');
-                return;
-            }
-            const ch = this.currentChannel;
-            const isDMOrGroup = ch && (ch.type === 'dm' || ch.type === 'group_dm') && !ch.server_id;
-            const others = (ch?.recipients || []).filter((r) => r.id !== this.currentUser.id);
-            const targetId = others[0]?.id || null;
-            if (!isDMOrGroup || !targetId) {
-                this.showToast('Abra uma DM com alguém para ligar.', 'error');
-                return;
-            }
-            try {
-                this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-            } catch (e) {
-                this.showToast('Permissão de câmara/microfone negada ou indisponível.', 'error');
-                return;
-            }
-            this._voiceCallState.targetUserId = targetId;
-            this._voiceCallState.videoEnabled = true;
-            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            this._voiceCallState.stream.getTracks().forEach((track) => pc.addTrack(track, this._voiceCallState.stream));
-            pc.ontrack = (e) => this._attachRemoteTrack(e);
-            pc.onicecandidate = (e) => {
-                if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: e.candidate });
-            };
-            pc.onconnectionstatechange = () => {
-                if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-                    this._webrtcClearRemote();
-                    const voiceView = document.getElementById('voice-call-view');
-                    if (voiceView) voiceView.classList.add('hidden');
-                    const localV = document.getElementById('webrtc-local-video');
-                    if (localV) localV.srcObject = null;
-                }
-            };
-            this._voiceCallState.pc = pc;
-            pc.createOffer()
-                .then((offer) => pc.setLocalDescription(offer))
-                .then(() => { if (this.gateway) this.gateway.send('webrtc_offer', { target_user_id: this._voiceCallState.targetUserId, payload: pc.localDescription }); })
-                .catch((err) => console.error('Voice offer error', err));
-            if (voiceView) voiceView.classList.remove('hidden');
-            this._webrtcClearRemote();
-            const localV = document.getElementById('webrtc-local-video');
-            if (localV) localV.srcObject = this._voiceCallState.stream;
-            const titleEl = document.getElementById('voice-call-channel-name');
-            const other = (this.currentChannel?.recipients || []).find((r) => r.id === targetId);
-            if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
-            this._updateVoiceCallParticipantsBar();
-            this._updateWebrtcControlButtons();
-            if (typeof API !== 'undefined' && API.Call) {
-                API.Call.start(targetId, ch?.id).then((r) => { if (r && r.id) this._voiceCallState.callId = r.id; }).catch(() => {});
-            }
-        });
+        // O clique em "Chamada" é tratado por delegação em document (init) para funcionar sempre
         if (disconnectBtn) disconnectBtn.addEventListener('click', closeVoiceCall);
         if (muteBtn) muteBtn.addEventListener('click', () => {
             if (this._voiceCallState.stream) {
@@ -1415,7 +1445,7 @@ class LibertyApp {
 
         if (dmList) {
             dmList.innerHTML = '';
-            this._loadDMList(dmList, navArea);
+            this._loadDMList(dmList, navArea, { mergeFriends: true });
         }
 
         if (!this._createGroupModalSetup) {
@@ -1470,12 +1500,29 @@ class LibertyApp {
         }
     }
 
-    async _loadDMList(dmList, navArea) {
+    async _loadDMList(dmList, navArea, options = {}) {
         const avatarColors = ['#5865F2','#57F287','#FEE75C','#EB459E','#ED4245','#3BA55D','#FAA61A','#9B59B6','#E67E22','#1ABC9C'];
         let list = [];
         try {
             const raw = await API.DM.list();
             list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.channels) ? raw.channels : []);
+            if (options.mergeFriends) {
+                try {
+                    const relationships = await API.Friend.list();
+                    const accepted = Array.isArray(relationships) ? relationships.filter((r) => r.type === 1) : [];
+                    const existingIds = new Set(list.map((c) => c.recipients?.[0]?.id).filter(Boolean));
+                    for (const rel of accepted) {
+                        const uid = rel.user?.id;
+                        if (!uid || existingIds.has(uid)) continue;
+                        list.push({
+                            type: 'dm',
+                            id: null,
+                            recipients: [{ id: uid, username: rel.user?.username || 'User', avatar_url: rel.user?.avatar_url || null, avatar: rel.user?.avatar_url || null }],
+                        });
+                        existingIds.add(uid);
+                    }
+                } catch (_) {}
+            }
             this.dmChannels = list;
         } catch (err) {
             this.dmChannels = [];
@@ -1497,10 +1544,14 @@ class LibertyApp {
             if (recipient.id) item.dataset.recipientId = recipient.id;
             const letter = displayName.charAt(0).toUpperCase();
             const bgColor = avatarColors[idx % avatarColors.length];
+            const avatarSrc = recipient.avatar_url || recipient.avatar || null;
             const hasUnread = dm.id && this.unreadChannels.has(dm.id);
             if (hasUnread) item.classList.add('dm-list-item-unread');
+            const avatarHtml = avatarSrc
+                ? `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;color:#fff">${letter}</span>`
+                : `<span style="color:#fff">${letter}</span>`;
             item.innerHTML = `
-                <div class="dm-list-item-avatar ${recipient.status || 'offline'}" style="background:${bgColor}"><span style="color:#fff">${letter}</span></div>
+                <div class="dm-list-item-avatar ${recipient.status || 'offline'}" style="background:${avatarSrc ? 'var(--dark-gray)' : bgColor}">${avatarHtml}</div>
                 <div class="dm-list-item-info">
                     <div class="dm-list-item-name">${this.escapeHtml(displayName)}</div>
                     <div class="dm-list-item-msg"></div>
@@ -1677,7 +1728,7 @@ class LibertyApp {
                 const navArea = document.querySelector('.home-nav');
                 if (dmList) {
                     dmList.innerHTML = '';
-                    this._loadDMList(dmList, navArea);
+                    this._loadDMList(dmList, navArea, { mergeFriends: true });
                 }
                 this.showToast('Group created.', 'success');
             } catch (err) {
@@ -1727,11 +1778,11 @@ class LibertyApp {
             const online = friends.filter(f => f.user?.status !== 'offline');
             bodyHtml += `<div style="${headerStyle}">Online — ${online.length}</div>`;
             online.forEach(f => { bodyHtml += this._friendItemHtml(f); });
-            if (online.length === 0) bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">No friends online</div>';
+            if (online.length === 0) bodyHtml += '<div class="friends-empty-state"><span class="friends-empty-icon" aria-hidden="true"><i class="fas fa-user-friends"></i></span><p class="friends-empty-text">Nenhum amigo ainda</p><button type="button" class="btn btn-primary friends-add-btn" data-htab="add">Adicionar amigo</button></div>';
         } else if (tab === 'all') {
-            bodyHtml += `<div style="${headerStyle}">All Friends — ${friends.length}</div>`;
+            bodyHtml += `<div style="${headerStyle}">Todos — ${friends.length}</div>`;
             friends.forEach(f => { bodyHtml += this._friendItemHtml(f); });
-            if (friends.length === 0) bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">No friends yet. Add some!</div>';
+            if (friends.length === 0) bodyHtml += '<div class="friends-empty-state"><span class="friends-empty-icon" aria-hidden="true"><i class="fas fa-user-friends"></i></span><p class="friends-empty-text">Nenhum amigo ainda</p><button type="button" class="btn btn-primary friends-add-btn" data-htab="add">Adicionar amigo</button></div>';
         } else if (tab === 'pending') {
             bodyHtml += `<div style="${headerStyle}">Pendentes — ${pending.length}</div>`;
             pending.forEach(p => {
@@ -1789,6 +1840,13 @@ class LibertyApp {
         }
 
         if (friendsList) friendsList.innerHTML = bodyHtml;
+
+        friendsList?.querySelectorAll('.friends-add-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.renderFriendsView('add');
+                this._updateChannelHeaderForContext();
+            });
+        });
 
         const addBtn = friendsView.querySelector('#send-friend-request-btn');
         if (addBtn) {
@@ -2014,7 +2072,7 @@ class LibertyApp {
             const recipient = (this.currentChannel?.recipients || [])[0] || {};
             const name = recipient.username || this.currentChannel?.name || 'DM';
             const status = recipient.status || 'offline';
-            const avatar = recipient.avatar || null;
+            const avatar = recipient.avatar_url || recipient.avatar || null;
             const initial = name.charAt(0).toUpperCase();
             info.innerHTML = `
                 <div class="dm-header-avatar ${status}" aria-hidden="true">${avatar ? `<img src="${this.escapeHtml(avatar)}" alt="">` : `<span>${this.escapeHtml(initial)}</span>`}</div>
@@ -2042,7 +2100,7 @@ class LibertyApp {
                     <button class="friends-header-tab ${tab === 'pending' ? 'active' : ''}" data-htab="pending">Pendentes</button>
                     <button class="friends-header-tab ${tab === 'invites' ? 'active' : ''}" data-htab="invites">Convites recebidos</button>
                     <button class="friends-header-tab ${tab === 'blocked' ? 'active' : ''}" data-htab="blocked">Bloqueados</button>
-                    <button class="friends-header-tab add-friend ${tab === 'add' ? 'active' : ''}" data-htab="add">Add Friend</button>
+                    <button class="friends-header-tab add-friend ${tab === 'add' ? 'active' : ''}" data-htab="add">Adicionar amigo</button>
                 </div>
             `;
             info.querySelectorAll('.friends-header-tab').forEach(btn => {
@@ -2820,6 +2878,7 @@ class LibertyApp {
 
     addMessage(message, scroll = true) {
         const container = document.getElementById('messages-list');
+        if (!container) return;
         const welcomeEl = container.querySelector('.welcome-message');
         if (welcomeEl && !container.querySelector('.message-group')) welcomeEl.style.display = 'none';
 
@@ -2829,7 +2888,7 @@ class LibertyApp {
         const isToday = time.toDateString() === new Date().toDateString();
         const headerTimeStr = isToday ? timeStr : `${dateStr} ${timeStr}`;
         const authorName = message.author?.username || message.author_username || message.username || this.currentUser?.username || 'User';
-        const authorAvatar = message.author?.avatar || message.avatar || null;
+        const authorAvatar = message.avatar_url || message.author?.avatar || message.author?.avatar_url || message.avatar || null;
         const avatarLetter = authorName.charAt(0).toUpperCase();
         const isSelf = this.currentUser && (message.author?.id === this.currentUser.id || message.author_id === this.currentUser.id);
 
@@ -3086,14 +3145,15 @@ class LibertyApp {
         this.cancelReply();
         try {
             const res = await API.Message.create(channelId, content);
-            const msg = res?.message;
+            const msg = res?.message || res?.data?.message || (res && res.id ? res : null);
             if (msg) {
                 const normalized = {
                     id: msg.id,
-                    content: msg.content,
-                    author_username: msg.author_username || msg.author,
-                    author_id: msg.author_id,
-                    created_at: msg.created_at || msg.timestamp,
+                    content: msg.content ?? content,
+                    author_username: msg.author_username || msg.author || this.currentUser?.username,
+                    author_id: msg.author_id || this.currentUser?.id,
+                    created_at: msg.created_at || msg.timestamp || new Date().toISOString(),
+                    avatar_url: msg.avatar_url || null,
                 };
                 this.addMessage(normalized, true);
                 this.scrollToBottom();

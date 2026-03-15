@@ -916,10 +916,14 @@ async function start() {
       }
       if (!chatId) chatId = String(channelId);
       let username = 'User';
+      let avatarUrl = null;
       if (db.isConfigured() && db.isConnected()) {
         try {
-          const u = await db.query('SELECT username FROM users WHERE id = $1 LIMIT 1', [userId]);
-          if (u.rows[0]) username = u.rows[0].username || username;
+          const u = await db.query('SELECT username, avatar_url FROM users WHERE id = $1 LIMIT 1', [userId]);
+          if (u.rows[0]) {
+            username = u.rows[0].username || username;
+            avatarUrl = u.rows[0].avatar_url || null;
+          }
         } catch (_) {}
       }
       const createdAt = new Date();
@@ -929,6 +933,7 @@ async function start() {
         author: username,
         author_username: username,
         author_id: String(userId),
+        avatar_url: avatarUrl,
         channelId,
         channel_id: chatId,
         chat_id: chatId,
@@ -955,14 +960,26 @@ async function start() {
       }
       if (!chatId) chatId = String(channelId);
       const cached = getCachedMessages(chatId);
-      const list = cached.map((m) => ({
+      let list = cached.map((m) => ({
         id: m.id,
         channel_id: channelId,
         content: String(m.content || ''),
         author_id: m.author_id || null,
         author_username: m.author_username || m.author || 'User',
+        avatar_url: m.avatar_url || null,
         created_at: (m.created_at instanceof Date ? m.created_at : new Date(m.created_at)).toISOString(),
       }));
+      if (db.isConfigured() && db.isConnected() && list.length > 0) {
+        const authorIds = [...new Set(list.map((m) => m.author_id).filter(Boolean))];
+        if (authorIds.length > 0) {
+          try {
+            const placeholders = authorIds.map((_, i) => `$${i + 1}::uuid`).join(',');
+            const r = await db.query(`SELECT id, avatar_url FROM users WHERE id IN (${placeholders})`, authorIds);
+            const avatarByAuthor = Object.fromEntries((r.rows || []).map((row) => [String(row.id), row.avatar_url || null]));
+            list = list.map((m) => ({ ...m, avatar_url: (m.author_id && avatarByAuthor[m.author_id]) || m.avatar_url }));
+          } catch (_) {}
+        }
+      }
       return res.status(200).json(list);
     } catch (err) {
       console.error('[API] GET /api/v1/channels/:id/messages', err.message);
@@ -1253,7 +1270,7 @@ async function start() {
       );
       for (const row of dmChats.rows) {
         const other = await db.query(
-          `SELECT u.id, u.username FROM chat_members cm
+          `SELECT u.id, u.username, u.avatar_url FROM chat_members cm
            INNER JOIN users u ON u.id = cm.user_id
            WHERE cm.chat_id = $1::uuid AND cm.user_id != $2::uuid`,
           [row.chat_id, userId]
@@ -1264,7 +1281,7 @@ async function start() {
             id: String(row.chat_id),
             type: 'dm',
             name: null,
-            recipients: [{ id: String(u.id), username: u.username }],
+            recipients: [{ id: String(u.id), username: u.username, avatar_url: u.avatar_url || null, avatar: u.avatar_url || null }],
           });
         }
       }
@@ -1277,7 +1294,7 @@ async function start() {
       );
       for (const row of groupChats.rows) {
         const members = await db.query(
-          `SELECT u.id, u.username FROM group_members gm
+          `SELECT u.id, u.username, u.avatar_url FROM group_members gm
            INNER JOIN users u ON u.id = gm.user_id
            WHERE gm.chat_id = $1::uuid`,
           [row.chat_id]
@@ -1286,7 +1303,7 @@ async function start() {
           id: String(row.chat_id),
           type: 'group_dm',
           name: row.name || members.rows.map((m) => m.username).join(', '),
-          recipients: members.rows.map((m) => ({ id: String(m.id), username: m.username })),
+          recipients: members.rows.map((m) => ({ id: String(m.id), username: m.username, avatar_url: m.avatar_url || null, avatar: m.avatar_url || null })),
         });
       }
 
@@ -1324,7 +1341,7 @@ async function start() {
           );
         }
         const members = await db.query(
-          `SELECT u.id, u.username FROM group_members gm
+          `SELECT u.id, u.username, u.avatar_url FROM group_members gm
            INNER JOIN users u ON u.id = gm.user_id
            WHERE gm.chat_id = $1::uuid`,
           [chatId]
@@ -1333,7 +1350,7 @@ async function start() {
           id: String(chatId),
           type: 'group_dm',
           name: name || members.rows.map((m) => m.username).join(', '),
-          recipients: members.rows.map((m) => ({ id: String(m.id), username: m.username })),
+          recipients: members.rows.map((m) => ({ id: String(m.id), username: m.username, avatar_url: m.avatar_url || null, avatar: m.avatar_url || null })),
         });
       } catch (err) {
         console.error('[LIBERTY] POST @me/channels group', err);
@@ -1352,13 +1369,14 @@ async function start() {
         );
         if (existing.rows[0]) {
           const chatId = existing.rows[0].id;
-          const u = await db.query('SELECT id, username FROM users WHERE id = $1::uuid', [singleId]);
+          const u = await db.query('SELECT id, username, avatar_url FROM users WHERE id = $1::uuid', [singleId]);
           const username = u.rows[0]?.username || 'User';
+          const avatarUrl = u.rows[0]?.avatar_url || null;
           return res.status(200).json({
             id: String(chatId),
             type: 'dm',
             name: null,
-            recipients: [{ id: singleId, username }],
+            recipients: [{ id: singleId, username, avatar_url: avatarUrl, avatar: avatarUrl }],
           });
         }
         const ins = await db.query(
@@ -1370,13 +1388,14 @@ async function start() {
           `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid), ($1::uuid, $3::uuid)`,
           [chatId, userId, singleId]
         );
-        const u = await db.query('SELECT id, username FROM users WHERE id = $1::uuid', [singleId]);
+        const u = await db.query('SELECT id, username, avatar_url FROM users WHERE id = $1::uuid', [singleId]);
         const username = u.rows[0]?.username || 'User';
+        const avatarUrl = u.rows[0]?.avatar_url || null;
         return res.status(201).json({
           id: String(chatId),
           type: 'dm',
           name: null,
-          recipients: [{ id: singleId, username }],
+          recipients: [{ id: singleId, username, avatar_url: avatarUrl, avatar: avatarUrl }],
         });
       } catch (err) {
         console.error('[LIBERTY] POST @me/channels dm', err);

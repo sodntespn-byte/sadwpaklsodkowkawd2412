@@ -6,19 +6,19 @@
    ========================================= */
 
 :root {
-    /* ── Identidade Visual (NÃO ALTERAR) ── */
-    --primary-yellow:   #FFD700;   /* Ouro puro — acento principal */
-    --secondary-yellow: #FFC107;   /* Âmbar — energia / avisos */
-    --light-yellow:     #FFEB3B;   /* Amarelo claro — hover/glow */
-    --dark-yellow:      #FF9800;   /* Laranja-ouro — gradiente base */
+    /* ── Identidade Visual LIBERTY (preto + amarelo, sem estilo Discord) ── */
+    --primary-yellow:   #FFD700;   /* Amarelo vibrante — acento único */
+    --secondary-yellow: #FFC107;   /* Âmbar — hover botões */
+    --light-yellow:     #FFEB3B;   /* Amarelo claro — glow */
+    --dark-yellow:      #E6C200;   /* Amarelo escuro — gradiente */
 
-    /* ── Fundo (60%) — Pretos quentes, não frios ── */
-    --primary-black:    #0D0B09;   /* Preto quente (base) */
-    --secondary-black:  #181512;   /* Cinza-preto quente (sidebars) */
-    --dark-gray:        #272320;   /* Cinza escuro (hover, inputs) */
-    --medium-gray:      #3A3530;   /* Cinza médio (ativo, focus) */
-    --light-gray:       #7A7470;   /* Cinza claro (ícones, placeholders) */
-    --lighter-gray:     #A8A4A0;   /* Cinza mais claro (texto secundário) */
+    /* ── Fundo: preto puro (#000) como nas referências ── */
+    --primary-black:    #000000;   /* Preto base */
+    --secondary-black:  #0a0a0a;   /* Sidebars */
+    --dark-gray:        #1a1a1a;   /* Hover, inputs */
+    --medium-gray:      #252525;   /* Ativo, focus */
+    --light-gray:       #6b6b6b;   /* Ícones secundários */
+    --lighter-gray:     #9e9e9e;   /* Texto secundário */
 
     /* ── Texto ── */
     --text-primary:   #F5F0E8;   /* Branco quente (mais confortável) */
@@ -618,7 +618,7 @@ a:hover {
 /* ── Server Sidebar ── */
 .server-sidebar {
     width: var(--server-sidebar-width);
-    background: var(--primary-black);
+    background: #000;
     display: flex;
     flex-direction: column;
     padding: var(--spacing-md) 0;
@@ -772,7 +772,7 @@ a:hover {
 /* ── Channel Sidebar ── */
 .channel-sidebar {
     width: var(--channel-sidebar-width);
-    background: var(--secondary-black);
+    background: #000;
     display: flex;
     flex-direction: column;
     border-right: 1px solid rgba(255, 215, 0, 0.05);
@@ -844,7 +844,7 @@ a:hover {
 }
 .channel-item:hover { background: var(--dark-gray); }
 .channel-item.active {
-    background: var(--medium-gray);
+    background: rgba(255, 215, 0, 0.18);
 }
 .channel-item.active::before {
     display: none;
@@ -859,7 +859,7 @@ a:hover {
     width: 18px;
     text-align: center;
 }
-.channel-item.active i { color: var(--text-primary); }
+.channel-item.active i { color: var(--primary-yellow); }
 .channel-item span {
     font-size: 14px;
     color: var(--light-gray);
@@ -867,8 +867,8 @@ a:hover {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.channel-item:hover span,
-.channel-item.active span { color: var(--text-primary); }
+.channel-item:hover span { color: var(--text-primary); }
+.channel-item.active span { color: var(--primary-yellow); }
 .channel-item.voice i { color: var(--status-online); }
 
 /* ── User Panel ── */
@@ -877,7 +877,7 @@ a:hover {
     align-items: center;
     justify-content: space-between;
     padding: var(--spacing-sm) var(--spacing-md);
-    background: var(--primary-black);
+    background: #000;
     border-top: 1px solid rgba(255, 215, 0, 0.06);
     flex-shrink: 0;
     min-height: 52px;
@@ -970,7 +970,7 @@ a:hover {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--primary-black);
+    background: #000;
     min-width: 0;
 }
 
@@ -1098,7 +1098,7 @@ a:hover {
     overflow-y: auto;
     padding: 16px 16px 24px;
     scroll-behavior: smooth;
-    background: var(--secondary-black, #1e1e1e);
+    background: #000;
 }
 
 .messages-list {
@@ -1334,12 +1334,32 @@ a:hover {
 }
 #typing-indicator.hidden { display: none; }
 
+/* Barra de encriptação (faixa amarela acima do input) */
+.encryption-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--primary-yellow);
+    font-size: 12px;
+    color: #000;
+    flex-shrink: 0;
+}
+.encryption-bar i { color: #000; opacity: 0.9; }
+.encryption-bar-badge {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #000;
+}
+
 .message-input-wrapper {
     display: flex;
     align-items: flex-end;
     background: var(--dark-gray);
     border-radius: var(--radius-lg);
-    border: 1.5px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     padding: var(--spacing-sm);
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
@@ -1367,15 +1387,45 @@ a:hover {
 
 .input-actions {
     display: flex;
-    gap: 2px;
-    padding: 4px;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 4px 4px 8px;
     flex-shrink: 0;
+}
+.message-char-count {
+    font-size: 12px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+.btn-send-message {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--primary-yellow);
+    color: #000;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.btn-send-message:hover {
+    background: var(--light-yellow);
+    transform: scale(1.05);
+}
+.btn-send-message:active { transform: scale(0.98); }
+.btn-send-message:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
 }
 
 /* ── Members Sidebar (estilo MEMBROS — imagem) ── */
 .members-sidebar {
     width: var(--members-sidebar-width);
-    background: var(--secondary-black, #1a1a1a);
+    background: #000;
     border-left: 1px solid rgba(255, 255, 255, 0.06);
     overflow-y: auto;
     overflow-x: hidden;

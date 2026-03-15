@@ -167,6 +167,7 @@
 
             <!-- Home/DMs View (shown when Home is selected) -->
             <div id="home-sidebar-content" class="home-sidebar-content">
+                <p class="home-sidebar-label">Direct Messages</p>
                 <div class="dm-search-wrapper">
                     <input type="text" id="dm-search-input" class="dm-search" placeholder="Q Search" aria-label="Buscar">
                 </div>
@@ -303,7 +304,7 @@
                     </div>
                 </div>
                 <div class="friends-search-wrapper">
-                    <input type="text" id="friends-search-input" placeholder="Search" aria-label="Buscar amigos">
+                    <input type="text" id="friends-search-input" placeholder="Pesquisar amigos" aria-label="Buscar amigos">
                     <i class="fas fa-search" aria-hidden="true"></i>
                 </div>
                 <div id="friends-list" class="friends-list" role="list" aria-label="Lista de amigos">
@@ -349,6 +350,13 @@
                 </div>
             </div>
 
+            <!-- Barra de encriptação (estilo referência) -->
+            <div class="encryption-bar" aria-hidden="true">
+                <i class="fas fa-lock" aria-hidden="true"></i>
+                <span>End-to-end encryption</span>
+                <span class="encryption-bar-badge">AES-GCM</span>
+            </div>
+
             <!-- Typing Indicator + Message Input -->
             <div class="message-input-container">
                 <div id="typing-indicator" class="typing-indicator hidden" aria-live="polite" aria-atomic="true">
@@ -373,27 +381,25 @@
                 </div>
 
                 <div class="message-input-wrapper" role="group" aria-label="Enviar mensagem">
-                    <button class="btn-icon tooltip" id="attach-btn" data-tooltip="Attach" aria-label="Anexar arquivo">
-                        <i class="fas fa-plus-circle" aria-hidden="true"></i>
+                    <button class="btn-icon tooltip" id="attach-btn" data-tooltip="Anexar" aria-label="Anexar arquivo">
+                        <i class="fas fa-paperclip" aria-hidden="true"></i>
                     </button>
                     <textarea id="message-input"
-                              placeholder="Selecione um servidor ou conversa para enviar mensagens"
+                              placeholder="Escrever mensagem..."
                               rows="1"
-                              maxlength="2000"
+                              maxlength="5000"
                               aria-label="Escrever mensagem"
                               aria-multiline="true"></textarea>
                     <div class="input-actions" role="group" aria-label="Opções de mensagem">
-                        <button class="btn-icon tooltip" data-tooltip="Gift" aria-label="Nitro Gift">
-                            <i class="fas fa-gift" aria-hidden="true"></i>
-                        </button>
-                        <button class="btn-icon tooltip" data-tooltip="GIF" aria-label="GIFs">
-                            <i class="fas fa-file-video" aria-hidden="true"></i>
-                        </button>
-                        <button class="btn-icon tooltip" data-tooltip="Stickers" aria-label="Stickers">
-                            <i class="fas fa-sticky-note" aria-hidden="true"></i>
+                        <span class="message-char-count" id="message-char-count" aria-live="polite">0 / 5.000</span>
+                        <button class="btn-icon tooltip" data-tooltip="Imagem" aria-label="Imagem">
+                            <i class="fas fa-image" aria-hidden="true"></i>
                         </button>
                         <button class="btn-icon tooltip" id="emoji-btn" data-tooltip="Emoji" aria-label="Emojis">
                             <i class="fas fa-smile" aria-hidden="true"></i>
+                        </button>
+                        <button type="button" class="btn-send-message" id="send-message-btn" aria-label="Enviar mensagem">
+                            <i class="fas fa-paper-plane" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
