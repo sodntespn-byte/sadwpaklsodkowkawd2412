@@ -7,15 +7,20 @@
 - O **`package.json`** na raiz tem `"main": "backend/server.js"` e `"start": "node backend/server.js"`.
 - A Square Cloud usa a **raiz do repositório**; o comando de arranque sobe o backend, que serve a API e o frontend (pasta `frontend/`).
 
-## 1. Variáveis de ambiente
+## 1. Variáveis de ambiente (obrigatório)
 
-**Obrigatório:** configura no painel da Square Cloud em **Configurações → Environment**. Sem estas variáveis a aplicação **não inicia** ou retorna 503.
+A aplicação está preparada para a **Square Cloud**: aceita muitos nomes de variável para a base de dados e carrega `.env` de várias pastas. Mesmo assim, **tens de definir as variáveis no painel**.
 
-| Variável       | Obrigatório | Exemplo / Notas                                                                 |
-| -------------- | ----------- | ------------------------------------------------------------------------------- |
-| `JWT_SECRET`   | **Sim**     | String com **pelo menos 32 caracteres**. Sem isto a app para logo ao iniciar.   |
-| `DATABASE_URL` | **Sim**     | Connection string do Neon. **Nome exato na Square Cloud:** `DATABASE_URL` (maiúsculas). No painel pode aparecer como "Database" — cria a variável com o **nome** `DATABASE_URL` e o **valor** da URL. Também aceita: `BANCO_DADOS`, `DB_URL`, `Database`, `DATABASE`. |
-| `NODE_ENV`     | Não         | A Square Cloud costuma definir `production` automaticamente.                 |
+**Onde definir:** na Square Cloud → tua aplicação → **Configurações** (ou Settings) → **Environment** / **Variáveis de ambiente** → **Adicionar variável**.
+
+| Variável       | Obrigatório | O que colocar |
+| -------------- | ----------- | ------------- |
+| `JWT_SECRET`   | **Sim**     | Nome: `JWT_SECRET`. Valor: uma string com **pelo menos 32 caracteres** (ex.: saída de `openssl rand -base64 32`). |
+| `DATABASE_URL` | **Sim**     | Nome: `DATABASE_URL`. Valor: a connection string completa do Neon (ex.: `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require`). |
+
+**Nomes aceites para a URL do banco** (se não usares `DATABASE_URL`): `BANCO_DADOS`, `DB_URL`, `Database`, `DATABASE`, `POSTGRES_URL`, `POSTGRESQL_URL`, e outros. O valor tem de começar por `postgres` ou `postgresql://`.
+
+| `NODE_ENV` | Não | A Square Cloud costuma definir `production` automaticamente. |
 
 **Como gerar um JWT_SECRET seguro (32+ caracteres):**
 ```bash
@@ -23,7 +28,17 @@ openssl rand -base64 32
 ```
 Copia o resultado e cola no valor de `JWT_SECRET` no painel.
 
-**Importante:** depois de adicionar ou alterar variáveis, é obrigatório **Redeploy** (ou Reiniciar) a aplicação — as variáveis são lidas apenas ao iniciar o processo.
+**Passo a passo na Square Cloud:**
+1. Abre a tua **app** no dashboard.
+2. Entra em **Configurações** (ou **Settings** / ícone de engrenagem).
+3. Procura **Environment**, **Variáveis de ambiente** ou **Env Variables**.
+4. Clica em **Adicionar** / **Add**.
+5. **Nome (key):** `DATABASE_URL` (exatamente assim, maiúsculas).
+6. **Valor (value):** cola a connection string do Neon (postgresql://...).
+7. Repete para `JWT_SECRET` (nome: `JWT_SECRET`, valor: string longa).
+8. Guarda e faz **Redeploy** da aplicação.
+
+**Importante:** depois de adicionar ou alterar variáveis, é obrigatório **Redeploy** (ou Reiniciar) — as variáveis são lidas apenas ao iniciar o processo.
 
 - Nome exato: `DATABASE_URL` (tudo junto, maiúsculas). Podes colar a URL do Neon com `channel_binding=require`; o servidor remove esse parâmetro automaticamente.
 - O backend usa **PostgreSQL** (Neon). Na primeira subida, o schema é aplicado automaticamente. Se as tabelas já existirem, os `CREATE` são ignorados.

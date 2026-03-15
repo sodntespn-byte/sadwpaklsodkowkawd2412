@@ -1,10 +1,25 @@
 // VERSION: CACHE_V1_STABLE
-// dotenv: não sobrescreve variáveis já definidas pelo host (ex.: Square Cloud). .env na raiz do repo.
+// Compatibilidade máxima com Square Cloud e outros hosts: carregar .env de vários sítios
 import dotenv from 'dotenv';
-dotenv.config({ override: false });
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+
+const __dirnameServer = path.dirname(fileURLToPath(import.meta.url));
+const pathsToTry = [
+  path.join(process.cwd(), '.env'),
+  path.join(__dirnameServer, '.env'),
+  path.join(__dirnameServer, '..', '.env'),
+  path.join(process.cwd(), 'backend', '.env'),
+  process.env.ENV_FILE || '',
+  process.env.DOTENV_PATH || '',
+].filter(Boolean);
+for (const p of pathsToTry) {
+  if (typeof p === 'string' && fs.existsSync(p)) {
+    dotenv.config({ path: p, override: false });
+  }
+}
+dotenv.config({ override: false });
 import http from 'http';
 import express from 'express';
 import helmet from 'helmet';
@@ -144,16 +159,41 @@ function computeContentXpByUser(messagesByChannel) {
 }
 
 // --- db (inline para deploy sem pasta db/)
-// URL do banco APENAS via variáveis de ambiente. Nunca embutir credenciais no código.
+// URL do banco: compatível com Square Cloud e qualquer host (muitos nomes de variável)
+const _DB_ENV_KEYS = [
+  'DATABASE_URL',
+  'BANCO_DADOS',
+  'DB_URL',
+  'Database',
+  'DATABASE',
+  'database_url',
+  'Database_URL',
+  'DatabaseUrl',
+  'POSTGRES_URL',
+  'POSTGRESQL_URL',
+  'POSTGRES_CONNECTION',
+  'SQL_DATABASE_URL',
+  'NEON_DATABASE_URL',
+  'DB_CONNECTION_STRING',
+  'DATABASE_CONNECTION',
+  'CONNECTION_STRING',
+  'PG_URL',
+  'POSTGRESQL_URI',
+];
 function _dbGetUrl() {
-  const url =
-    process.env.DATABASE_URL ||
-    process.env.BANCO_DADOS ||
-    process.env.DB_URL ||
-    process.env.Database ||
-    process.env.DATABASE ||
-    '';
-  return typeof url === 'string' ? url.trim() : '';
+  for (const key of _DB_ENV_KEYS) {
+    const v = process.env[key];
+    if (v && typeof v === 'string' && v.trim().toLowerCase().startsWith('postgres')) {
+      return v.trim();
+    }
+  }
+  // Qualquer variável de ambiente cujo valor pareça URL PostgreSQL (Square Cloud pode usar nomes custom)
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v && typeof v === 'string' && v.trim().toLowerCase().startsWith('postgresql://')) {
+      return v.trim();
+    }
+  }
+  return '';
 }
 function _dbLoadMtlsOptions() {
   try {
@@ -763,11 +803,20 @@ async function getDefaultChatId() {
 }
 
 async function start() {
-  const hasDbUrl = _dbGetUrl().startsWith('postgres');
+  let hasDbUrl = _dbGetUrl().startsWith('postgres');
   if (process.env.NODE_ENV === 'production' && !hasDbUrl) {
+    // Square Cloud e outros hosts podem injetar env com pequeno atraso — esperar e tentar de novo
+    logger.warn('[LIBERTY] À espera de DATABASE_URL (3s)…');
+    await new Promise(r => setTimeout(r, 3000));
+    const envPath = path.join(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) dotenv.config({ path: envPath, override: false });
+    hasDbUrl = _dbGetUrl().startsWith('postgres');
+  }
+  if (process.env.NODE_ENV === 'production' && !hasDbUrl) {
+    const checked = _DB_ENV_KEYS.join(', ');
     logger.error(
       'LIBERTY',
-      'URL da base de dados obrigatória em produção. Square Cloud: Configurações → Environment → adicione a variável com o nome exato DATABASE_URL (ou BANCO_DADOS / DB_URL) e o valor da connection string. Depois faça Redeploy.'
+      `Base de dados obrigatória em produção. Defina uma destas variáveis no painel (Environment / Variáveis): ${checked}. Square Cloud: na app → Configurações → Environment → Adicionar variável → Nome: DATABASE_URL → Valor: a sua connection string PostgreSQL. Depois Redeploy.`
     );
     process.exit(1);
   }
