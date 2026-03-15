@@ -1008,6 +1008,8 @@ class LibertyApp {
     _voiceCallState = { pc: null, stream: null, targetUserId: null, pendingOffer: null, incomingFromUserId: null, displayStream: null, videoEnabled: true, callId: null };
 
     _webrtcClearRemote() {
+        const wrap = document.getElementById('webrtc-remote-wrap');
+        if (wrap) wrap.querySelectorAll('audio.webrtc-remote-audio').forEach((a) => { a.srcObject = null; a.remove(); });
         const remoteV = document.getElementById('webrtc-remote-video');
         const remoteS = document.getElementById('webrtc-remote-screen');
         const screenWrap = document.getElementById('webrtc-remote-screen-wrap');
@@ -1017,7 +1019,7 @@ class LibertyApp {
         if (remoteS) { remoteS.srcObject = null; }
         if (screenWrap) screenWrap.classList.add('hidden');
         if (badge) badge.classList.add('hidden');
-        if (placeholder) placeholder.classList.remove('hidden');
+        if (placeholder) { placeholder.classList.remove('hidden'); placeholder.classList.remove('webrtc-placeholder-connecting'); }
     }
 
     _attachRemoteTrack(e) {
@@ -1026,7 +1028,9 @@ class LibertyApp {
         const track = e.track;
         if (track.kind === 'audio') {
             const audio = document.createElement('audio');
+            audio.className = 'webrtc-remote-audio';
             audio.autoplay = true;
+            audio.playsInline = true;
             audio.srcObject = stream;
             document.getElementById('webrtc-remote-wrap')?.appendChild(audio);
             return;
@@ -1180,6 +1184,8 @@ class LibertyApp {
         const voiceView = document.getElementById('voice-call-view');
         if (voiceView) voiceView.classList.remove('hidden');
         this._webrtcClearRemote();
+        const placeholderText = document.querySelector('#webrtc-remote-placeholder .webrtc-placeholder-text');
+        if (placeholderText) placeholderText.textContent = 'Aguardando a outra pessoa...';
         const localV = document.getElementById('webrtc-local-video');
         if (localV) localV.srcObject = this._voiceCallState.stream;
         const titleEl = document.getElementById('voice-call-channel-name');
@@ -1245,6 +1251,10 @@ class LibertyApp {
             .catch((err) => console.error('Voice offer error', err));
         if (voiceView) voiceView.classList.remove('hidden');
         this._webrtcClearRemote();
+        const placeholder = document.getElementById('webrtc-remote-placeholder');
+        const placeholderText = placeholder?.querySelector('.webrtc-placeholder-text');
+        if (placeholderText) placeholderText.textContent = 'A chamar...';
+        if (placeholder) placeholder.classList.add('webrtc-placeholder-connecting');
         const localV = document.getElementById('webrtc-local-video');
         if (localV) localV.srcObject = this._voiceCallState.stream;
         const titleEl = document.getElementById('voice-call-channel-name');

@@ -1214,6 +1214,13 @@
     opacity: 0.5;
 }
 .webrtc-placeholder-text { font-size: 15px; font-weight: 500; }
+.webrtc-placeholder-connecting .webrtc-placeholder-icon {
+    animation: webrtc-connecting-pulse 1.5s ease-in-out infinite;
+}
+@keyframes webrtc-connecting-pulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 0.85; transform: scale(1.05); }
+}
 
 .webrtc-screen-wrap {
     position: absolute;
@@ -1366,6 +1373,101 @@
     border-color: rgba(229, 57, 53, 0.5);
 }
 .webrtc-ctrl-disconnect:hover { background: rgba(229, 57, 53, 0.5); color: #ff8787; }
+
+/* Incoming call overlay — chamada recebida */
+.incoming-call-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.incoming-call-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 40px 36px;
+    min-width: 320px;
+    max-width: 90vw;
+    background: linear-gradient(165deg, var(--secondary-black) 0%, rgba(20, 19, 18, 0.98) 100%);
+    border: 1px solid rgba(255, 215, 0, 0.2);
+    border-radius: 24px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+.incoming-call-icon {
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, rgba(255, 215, 0, 0.2), rgba(255, 215, 0, 0.06));
+    border: 2px solid rgba(255, 215, 0, 0.35);
+    border-radius: 50%;
+    color: var(--primary-yellow);
+    font-size: 32px;
+    animation: pulse-ring 2s ease-in-out infinite;
+}
+@keyframes pulse-ring {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.25); }
+    50% { box-shadow: 0 0 0 16px rgba(255, 215, 0, 0); }
+}
+.incoming-call-title {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+}
+.incoming-call-from {
+    margin: 0;
+    font-size: 16px;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+.incoming-call-actions {
+    display: flex;
+    gap: 14px;
+    margin-top: 8px;
+}
+.incoming-call-actions .btn {
+    min-width: 140px;
+    padding: 14px 24px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: transform 0.12s, box-shadow 0.2s;
+}
+.incoming-call-actions .btn:active { transform: scale(0.98); }
+.incoming-call-actions .btn-primary {
+    background: linear-gradient(145deg, rgba(67, 160, 71, 0.9), rgba(56, 142, 60, 0.85));
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #fff;
+}
+.incoming-call-actions .btn-primary:hover {
+    background: linear-gradient(145deg, rgba(76, 175, 80, 0.95), rgba(67, 160, 71, 0.9));
+    box-shadow: 0 6px 24px rgba(67, 160, 71, 0.35);
+}
+.incoming-call-actions .btn-secondary {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+.incoming-call-actions .btn-secondary:hover {
+    background: rgba(229, 57, 53, 0.2);
+    border-color: rgba(229, 57, 53, 0.35);
+    color: #ff6b6b;
+}
 
 /* ══════════════════════════════════════════
    REPLY BAR

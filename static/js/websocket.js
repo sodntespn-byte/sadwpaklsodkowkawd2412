@@ -125,6 +125,10 @@ class LibertyGateway {
             this.emit('stream_stopped', { from_user_id: message.from_user_id });
             return;
         }
+        if (type && ['webrtc_offer', 'webrtc_answer', 'webrtc_ice', 'webrtc_reject'].includes(type)) {
+            this.emit(type, { from_user_id: message.from_user_id, payload: message.payload });
+            return;
+        }
         
         if (s !== undefined) this.seq = s;
         

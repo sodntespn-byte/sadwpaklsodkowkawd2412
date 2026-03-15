@@ -436,23 +436,27 @@ const ws = {
       wsClient.on('message', (raw) => {
         try {
           const msg = JSON.parse(raw.toString());
-          if (msg.type === 'subscribe' && msg.chat_id) {
-            wsClient.subscribedChats.add(msg.chat_id);
-            _wsSubscribe(msg.chat_id, wsClient);
-          } else if (msg.type === 'unsubscribe' && msg.chat_id) {
-            wsClient.subscribedChats.delete(msg.chat_id);
-            _wsUnsubscribe(msg.chat_id, wsClient);
-          } else if (msg.type === 'webrtc_offer' || msg.type === 'webrtc_answer' || msg.type === 'webrtc_ice') {
-            const target = msg.target_user_id || msg.to;
-            if (target && msg.payload !== undefined) _wsSendToUser(target, { type: msg.type, from_user_id: userId, payload: msg.payload });
-          } else if (msg.type === 'webrtc_reject') {
-            const target = msg.target_user_id || msg.to;
+          const type = msg.type || msg.op;
+          const d = msg.d || msg;
+          const chatId = msg.chat_id || d.chat_id;
+          if (type === 'subscribe' && chatId) {
+            wsClient.subscribedChats.add(chatId);
+            _wsSubscribe(chatId, wsClient);
+          } else if (type === 'unsubscribe' && chatId) {
+            wsClient.subscribedChats.delete(chatId);
+            _wsUnsubscribe(chatId, wsClient);
+          } else if (type === 'webrtc_offer' || type === 'webrtc_answer' || type === 'webrtc_ice') {
+            const target = msg.target_user_id || msg.to || d.target_user_id;
+            const payload = msg.payload !== undefined ? msg.payload : d.payload;
+            if (target && payload !== undefined) _wsSendToUser(target, { type, from_user_id: userId, payload });
+          } else if (type === 'webrtc_reject') {
+            const target = msg.target_user_id || msg.to || d.target_user_id;
             if (target) _wsSendToUser(target, { type: 'webrtc_reject', from_user_id: userId });
-          } else if (msg.type === 'stream_started') {
-            const target = msg.target_user_id || msg.to;
-            if (target) _wsSendToUser(target, { type: 'stream_started', from_user_id: userId, stream_type: msg.stream_type || 'screen' });
-          } else if (msg.type === 'stream_stopped') {
-            const target = msg.target_user_id || msg.to;
+          } else if (type === 'stream_started') {
+            const target = msg.target_user_id || msg.to || d.target_user_id;
+            if (target) _wsSendToUser(target, { type: 'stream_started', from_user_id: userId, stream_type: msg.stream_type || d.stream_type || 'screen' });
+          } else if (type === 'stream_stopped') {
+            const target = msg.target_user_id || msg.to || d.target_user_id;
             if (target) _wsSendToUser(target, { type: 'stream_stopped', from_user_id: userId });
           }
         } catch (_) {}
@@ -1901,6 +1905,9 @@ async function start() {
   // Static + rota raiz
   app.use(express.static(STATIC_DIR));
   app.get('/', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+
+  // SPA fallback: qualquer path não API/static devolve index.html para o cliente tratar (ex.: /channels/@me/:id ao dar F5)
+  app.get('*', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`LIBERTY listening on port ${PORT}`);
