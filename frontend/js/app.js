@@ -74,9 +74,10 @@
 .profile-card-btn:disabled{opacity:.6;cursor:default}
 .profile-card-close{width:100%;padding:10px 16px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:8px;color:var(--text-primary);font-size:14px;cursor:pointer;font-family:inherit}
 .profile-card-close:hover{background:var(--medium-gray);border-color:var(--primary-yellow)}
-.profile-card-full{pointer-events:auto!important;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}
+.profile-card-full{pointer-events:auto!important;align-items:center;justify-content:center;padding:0;box-sizing:border-box;width:100%;height:100%;display:flex;position:absolute;inset:0}
 .profile-card-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:0;cursor:pointer}
 .profile-card-modal.profile-card-full{pointer-events:auto!important}
+.profile-card-overlay{position:fixed!important;inset:0!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:0!important;z-index:99999!important;background:rgba(0,0,0,.65)!important}
 .profile-card-full .profile-card-modal-inner{position:relative;z-index:1;display:flex;max-width:90vw;width:720px;max-height:85vh;overflow:hidden;border-radius:16px;text-align:left;padding:0}
 .profile-card-two-panels{background:rgba(24,21,18,.98);border:1px solid rgba(255,215,0,.2);box-shadow:0 0 60px rgba(255,215,0,.12)}
 .profile-card-close-btn{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.08);border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:2;transition:all .15s}
@@ -1102,8 +1103,14 @@ class LibertyApp {
     if (deafenBtn) deafenBtn.addEventListener('click', () => this.toggleDeafen());
     if (settingsBtn) settingsBtn.addEventListener('click', () => this.showSettingsPanel('user'));
 
-    // User info -> status picker
-    document.querySelector('.user-info').addEventListener('click', e => this.showStatusPicker(e));
+    // User info -> abre perfil (quadrado ao centro); clique no status no perfil para mudar
+    document.querySelector('.user-info').addEventListener('click', e => {
+      if (this.currentUser) {
+        this.showProfileCard({ ...this.currentUser, user_id: this.currentUser.id, status: this.currentStatus || 'online' }, e);
+      } else {
+        this.showStatusPicker(e);
+      }
+    });
 
     // Voice sidebar (static) Disconnect / Screen Share
     document
@@ -4814,7 +4821,10 @@ class LibertyApp {
       document.body.appendChild(overlay);
     }
     overlay.classList.remove('hidden');
+    overlay.classList.add('profile-card-overlay');
     overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
     overlay.appendChild(card);
     this._profileCard = card;
     this._profileCardOpening = false;
@@ -5031,8 +5041,11 @@ class LibertyApp {
       this._profileCard.remove();
       this._profileCard = null;
       const overlay = document.getElementById('modal-overlay');
-      if (overlay && !overlay.querySelector('.modal:not(.hidden), .profile-card-modal'))
-        overlay.classList.add('hidden');
+      if (overlay) {
+        overlay.classList.remove('profile-card-overlay');
+        if (!overlay.querySelector('.modal:not(.hidden), .profile-card-modal'))
+          overlay.classList.add('hidden');
+      }
     }
   }
 
