@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import { validateBody, schemas } from '../middleware/validate.js';
+import { sanitizeUsername } from '../lib/sanitize.js';
 import logger from '../lib/logger.js';
 
 /**
@@ -20,7 +21,7 @@ export function registerAuthRoutes(router, deps) {
     }
 
     const { username, email, password } = req.body;
-    const name = username ? String(username).trim() : '';
+    const name = sanitizeUsername(username) || '';
     if (!name || name.length < 2) {
       return res.status(400).json({ message: 'username é obrigatório (mín. 2 caracteres)' });
     }
@@ -123,7 +124,7 @@ export function registerAuthRoutes(router, deps) {
       return res.status(503).json({ message: 'Banco de dados indisponível.' });
     }
     const { username, password } = req.body || {};
-    const name = username ? String(username).trim() : '';
+    const name = sanitizeUsername(username) || '';
     if (!name) {
       return res.status(400).json({ message: 'username é obrigatório' });
     }

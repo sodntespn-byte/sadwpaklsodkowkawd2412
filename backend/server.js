@@ -46,6 +46,18 @@ function safeApiMessage(err, fallback) {
 }
 import { schemas, validateBody } from './src/middleware/validate.js';
 import { registerAuthRoutes } from './src/routes/auth.js';
+import {
+  isUuid,
+  sanitizeMessageContent,
+  sanitizeName,
+  sanitizeChannelName,
+  sanitizeReason,
+  sanitizeUsername,
+  sanitizeDescription,
+  sanitizeRole,
+  sanitizeCallStatus,
+  requireUuidParams,
+} from './src/lib/sanitize.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -56,11 +68,6 @@ const setCachedMessages = messageCacheModule.setCachedMessages;
 const addCachedMessage = messageCacheModule.addCachedMessage;
 const getAllMessageLists = messageCacheModule.getAllMessageLists;
 const MAX_CACHE_PER_CHANNEL = messageCacheModule.MAX_CACHE_PER_CHANNEL;
-
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function isUuid(s) {
-  return typeof s === 'string' && UUID_REGEX.test(s.trim());
-}
 
 /**
  * Garante que a mensagem existe no banco. Se não existir, insere.
@@ -545,6 +552,7 @@ const auth = {
       return null;
     }
   },
+  /** Identidade do utilizador: SEMPRE e apenas a partir do JWT (payload.sub). Nunca confiar em user_id/author do body ou params. */
   middleware(req, res, next) {
     const header = req.headers.authorization;
     const bearerToken = header && header.startsWith('Bearer ') ? header.slice(7).trim() : null;
@@ -660,13 +668,13 @@ const ws = {
           } else if (type === 'webrtc_offer' || type === 'webrtc_answer' || type === 'webrtc_ice') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
             const payload = msg.payload !== undefined ? msg.payload : d.payload;
-            if (target && payload !== undefined) _wsSendToUser(target, { type, from_user_id: userId, payload });
+            if (target && isUuid(String(target)) && payload !== undefined) _wsSendToUser(target, { type, from_user_id: userId, payload });
           } else if (type === 'webrtc_reject') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
-            if (target) _wsSendToUser(target, { type: 'webrtc_reject', from_user_id: userId });
+            if (target && isUuid(String(target))) _wsSendToUser(target, { type: 'webrtc_reject', from_user_id: userId });
           } else if (type === 'stream_started') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
-            if (target)
+            if (target && isUuid(String(target)))
               _wsSendToUser(target, {
                 type: 'stream_started',
                 from_user_id: userId,
@@ -674,7 +682,7 @@ const ws = {
               });
           } else if (type === 'stream_stopped') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
-            if (target) _wsSendToUser(target, { type: 'stream_stopped', from_user_id: userId });
+            if (target && isUuid(String(target))) _wsSendToUser(target, { type: 'stream_stopped', from_user_id: userId });
           }
         } catch (_) {}
       });
@@ -719,8 +727,8 @@ const limiterGeneral = rateLimit({
 });
 const limiterAuth = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: { message: 'Muitas tentativas de login. Tente em 15 minutos.' },
+  max: 10,
+  message: { message: 'Muitas tentativas de login/registo. Tente em 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -826,6 +834,10 @@ async function getDefaultChatId() {
 }
 
 async function start() {
+  process.on('unhandledRejection', reason => {
+    logger.error('unhandledRejection', reason instanceof Error ? reason : String(reason));
+  });
+
   let hasDbUrl = _dbGetUrl().startsWith('postgres');
   if (process.env.NODE_ENV === 'production' && !hasDbUrl) {
     // Square Cloud e outros hosts podem injetar env com pequeno atraso — esperar e tentar de novo
@@ -959,14 +971,14 @@ async function start() {
 
   // Mensagens: cache em memória + persistência no DB (ensureMessageInDb)
   app.post('/api/messages', auth.requireAuth, validateBody(schemas.messageContent), async (req, res) => {
-    const { content, author } = req.body || {};
-    const safeContent = String(content).trim().replace(/</g, '&lt;');
+    const { content } = req.body || {};
+    const safeContent = sanitizeMessageContent(content);
     const userId = req.userId;
     try {
       let chatId = null;
       if (db.isConfigured() && db.isConnected()) chatId = await getDefaultChatId();
       if (!chatId) chatId = 'default-chat';
-      let username = (author && String(author).trim()) || 'User';
+      let username = 'User';
       let avatarUrl = null;
       if (userId && db.isConfigured() && db.isConnected()) {
         try {
@@ -1010,7 +1022,7 @@ async function start() {
     }
   });
 
-  app.get('/api/messages', async (_req, res) => {
+  app.get('/api/messages', auth.requireAuth, async (_req, res) => {
     try {
       let chatId = null;
       if (db.isConfigured() && db.isConnected()) chatId = await getDefaultChatId();
@@ -1042,18 +1054,15 @@ async function start() {
   app.post(
     '/api/servers/:serverId/channels/:channelId/messages',
     auth.requireAuth,
+    requireUuidParams(['serverId', 'channelId']),
     validateBody(
       Joi.object({
-        content: Joi.string()
-          .min(1)
-          .max(64 * 1024)
-          .trim()
-          .required(),
+        content: Joi.string().min(1).max(64 * 1024).trim().required(),
       })
     ),
     async (req, res) => {
       const { content } = req.body || {};
-      const safeContent = String(content).trim().replace(/</g, '&lt;');
+      const safeContent = sanitizeMessageContent(content);
       const userId = req.userId;
       try {
         let chatId = null;
@@ -1125,11 +1134,12 @@ async function start() {
   app.post(
     '/api/v1/channels/:channelId/messages',
     auth.requireAuth,
+    requireUuidParams(['channelId']),
     validateBody(schemas.messageContent),
     async (req, res) => {
       const { channelId } = req.params;
       const { content, client_id: clientId } = req.body || {};
-      const safeContent = String(content).trim().replace(/</g, '&lt;');
+      const safeContent = sanitizeMessageContent(content);
       const userId = req.userId;
       try {
         let chatId = null;
@@ -1176,7 +1186,7 @@ async function start() {
     }
   );
 
-  app.get('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
+  app.get('/api/v1/channels/:channelId/messages', auth.requireAuth, requireUuidParams(['channelId']), async (req, res) => {
     const { channelId } = req.params;
     const userId = req.userId;
     try {
@@ -1203,7 +1213,7 @@ async function start() {
         created_at: (m.created_at instanceof Date ? m.created_at : new Date(m.created_at)).toISOString(),
       }));
       if (db.isConfigured() && db.isConnected() && result.length > 0) {
-        const authorIds = [...new Set(result.map(m => m.author_id).filter(Boolean))];
+        const authorIds = [...new Set(result.map(m => m.author_id).filter(id => id && isUuid(String(id))))];
         if (authorIds.length > 0) {
           try {
             const placeholders = authorIds.map((_, i) => `$${i + 1}::uuid`).join(',');
@@ -1226,7 +1236,7 @@ async function start() {
   });
 
   // Pins — apenas admins (ADMIN_USERNAMES) podem fixar/desfixar; qualquer um pode listar
-  app.get('/api/v1/channels/:channelId/pins', auth.requireAuth, async (req, res) => {
+  app.get('/api/v1/channels/:channelId/pins', auth.requireAuth, requireUuidParams(['channelId']), async (req, res) => {
     const chatId = req.params.channelId;
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     if (!isUuid(chatId)) return res.status(400).json({ message: 'channelId inválido' });
@@ -1253,7 +1263,7 @@ async function start() {
     }
   });
 
-  app.put('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, async (req, res) => {
+  app.put('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, requireUuidParams(['channelId', 'messageId']), async (req, res) => {
     const { channelId, messageId } = req.params;
     if (!(await isAdmin(req)))
       return res.status(403).json({ message: 'Apenas administradores podem fixar mensagens.' });
@@ -1273,7 +1283,7 @@ async function start() {
     }
   });
 
-  app.delete('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, async (req, res) => {
+  app.delete('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, requireUuidParams(['channelId', 'messageId']), async (req, res) => {
     const { channelId, messageId } = req.params;
     if (!(await isAdmin(req)))
       return res.status(403).json({ message: 'Apenas administradores podem desfixar mensagens.' });
@@ -1362,7 +1372,7 @@ async function start() {
           return res.status(200).json(servers);
         } catch (e) {
           logger.error('GET /api/v1/servers (após init)', e);
-          return res.status(500).json({ message: e.message || 'Erro ao listar servidores' });
+          return res.status(500).json({ message: safeApiMessage(e, 'Erro ao listar servidores') });
         }
       }
       logger.error('GET /api/v1/servers', err);
@@ -1371,7 +1381,7 @@ async function start() {
   });
 
   // GET /api/v1/servers/:serverId — detalhes de um servidor (autenticado; 404 se não existir ou sem acesso)
-  app.get('/api/v1/servers/:serverId', auth.requireAuth, async (req, res) => {
+  app.get('/api/v1/servers/:serverId', auth.requireAuth, requireUuidParams(['serverId']), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1407,7 +1417,7 @@ async function start() {
   });
 
   // PATCH /api/v1/servers/:serverId — atualizar servidor (bloqueado para servidor LIBERTY oficial)
-  app.patch('/api/v1/servers/:serverId', auth.requireAuth, async (req, res) => {
+  app.patch('/api/v1/servers/:serverId', auth.requireAuth, requireUuidParams(['serverId']), validateBody(schemas.patchServer), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1432,9 +1442,10 @@ async function start() {
       const updates = [];
       const values = [];
       let idx = 1;
-      if (name !== undefined && String(name).trim()) {
+      const safeName = name !== undefined ? sanitizeName(name) : '';
+      if (safeName) {
         updates.push(`name = $${idx++}`);
-        values.push(String(name).trim());
+        values.push(safeName);
       }
       if (icon !== undefined && typeof icon === 'string' && icon.startsWith('data:image/')) {
         const match = icon.match(/^data:image\/(\w+);base64,(.+)$/);
@@ -1485,7 +1496,7 @@ async function start() {
   });
 
   // DELETE /api/v1/servers/:serverId — apagar servidor (bloqueado para servidor LIBERTY oficial)
-  app.delete('/api/v1/servers/:serverId', auth.requireAuth, async (req, res) => {
+  app.delete('/api/v1/servers/:serverId', auth.requireAuth, requireUuidParams(['serverId']), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1521,7 +1532,7 @@ async function start() {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
     const { name, region, icon } = req.body || {};
-    const serverName = (name && String(name).trim()) || 'Novo servidor';
+    const serverName = sanitizeName(name) || 'Novo servidor';
     const userId = req.userId;
     try {
       const ins = await db.query(
@@ -1612,7 +1623,7 @@ async function start() {
   });
 
   // GET /api/v1/servers/:serverId/channels — lista canais e categorias do servidor
-  app.get('/api/v1/servers/:serverId/channels', auth.requireAuth, async (req, res) => {
+  app.get('/api/v1/servers/:serverId/channels', auth.requireAuth, requireUuidParams(['serverId']), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1642,7 +1653,7 @@ async function start() {
   });
 
   // GET /api/v1/servers/:serverId/members — membros do servidor (exclui banidos; role de server_members)
-  app.get('/api/v1/servers/:serverId/members', auth.requireAuth, async (req, res) => {
+  app.get('/api/v1/servers/:serverId/members', auth.requireAuth, requireUuidParams(['serverId']), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1676,14 +1687,11 @@ async function start() {
   });
 
   // PATCH /api/v1/servers/:serverId/members/:userId — alterar cargo (apenas dono do servidor ou admin)
-  app.patch('/api/v1/servers/:serverId/members/:userId', auth.requireAuth, async (req, res) => {
+  app.patch('/api/v1/servers/:serverId/members/:userId', auth.requireAuth, requireUuidParams(['serverId', 'userId']), validateBody(schemas.patchMemberRole), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     const { serverId, userId } = req.params;
-    const role = req.body && req.body.role ? String(req.body.role).toLowerCase() : null;
-    const allowedRoles = ['member', 'moderator', 'admin'];
-    if (!role || !allowedRoles.includes(role))
-      return res.status(400).json({ message: 'role deve ser member, moderator ou admin' });
-    if (!isUuid(serverId) || !isUuid(userId)) return res.status(400).json({ message: 'IDs inválidos' });
+    const role = sanitizeRole(req.body?.role);
+    if (!role) return res.status(400).json({ message: 'role deve ser member, moderator ou admin' });
     try {
       const serverRow = await db.query('SELECT owner_id FROM servers WHERE id = $1::uuid', [serverId]);
       const s = serverRow.rows[0];
@@ -1705,18 +1713,16 @@ async function start() {
   });
 
   // POST /api/v1/servers/:serverId/bans — banir usuário do servidor (apenas admins)
-  app.post('/api/v1/servers/:serverId/bans', auth.requireAuth, async (req, res) => {
+  app.post('/api/v1/servers/:serverId/bans', auth.requireAuth, requireUuidParams(['serverId']), validateBody(schemas.serverBan), async (req, res) => {
     if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores podem banir membros.' });
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     const serverId = req.params.serverId;
     const { user_id, reason } = req.body || {};
-    if (!isUuid(serverId) || !user_id || !isUuid(user_id))
-      return res.status(400).json({ message: 'serverId e user_id são obrigatórios' });
     try {
       await db.query(
         `INSERT INTO server_bans (server_id, user_id, banned_by, reason) VALUES ($1::uuid, $2::uuid, $3::uuid, $4)
          ON CONFLICT (server_id, user_id) DO UPDATE SET banned_by = $3::uuid, reason = $4`,
-        [serverId, user_id, req.userId, reason ? String(reason).trim() : null]
+        [serverId, user_id, req.userId, sanitizeReason(reason)]
       );
       const chats = await db.query('SELECT id FROM chats WHERE server_id = $1::uuid', [serverId]);
       for (const ch of chats.rows || []) {
@@ -1730,11 +1736,10 @@ async function start() {
   });
 
   // DELETE /api/v1/servers/:serverId/bans/:userId — desbanir (apenas admins)
-  app.delete('/api/v1/servers/:serverId/bans/:userId', auth.requireAuth, async (req, res) => {
+  app.delete('/api/v1/servers/:serverId/bans/:userId', auth.requireAuth, requireUuidParams(['serverId', 'userId']), async (req, res) => {
     if (!(await isAdmin(req))) return res.status(403).json({ message: 'Apenas administradores podem desbanir.' });
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     const { serverId, userId } = req.params;
-    if (!isUuid(serverId) || !isUuid(userId)) return res.status(400).json({ message: 'IDs inválidos' });
     try {
       await db.query('DELETE FROM server_bans WHERE server_id = $1::uuid AND user_id = $2::uuid', [serverId, userId]);
       return res.status(204).end();
@@ -1744,7 +1749,7 @@ async function start() {
   });
 
   // POST /api/v1/servers/:serverId/channels — criar canal (texto/voz) ou categoria
-  app.post('/api/v1/servers/:serverId/channels', auth.requireAuth, async (req, res) => {
+  app.post('/api/v1/servers/:serverId/channels', auth.requireAuth, requireUuidParams(['serverId']), validateBody(schemas.createChannel), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1759,14 +1764,13 @@ async function start() {
     const { name, type, parent_id } = req.body || {};
     const channelType = (type === 'voice' ? 'voice' : 'text').toLowerCase();
     const isCategory = String(type).toLowerCase() === 'category';
-    const channelName =
-      name && String(name).trim() ? String(name).trim().replace(/\s+/g, '-').toLowerCase().substring(0, 100) : null;
+    const channelName = sanitizeChannelName(name) || sanitizeName(name, 100).replace(/\s+/g, '-').toLowerCase();
     if (!channelName || channelName.length < 1) {
       return res.status(400).json({ message: 'Nome do canal ou categoria é obrigatório' });
     }
     try {
       const chatType = isCategory ? 'category' : 'channel';
-      const parentId = parent_id && String(parent_id).trim() ? String(parent_id).trim() : null;
+      const parentId = parent_id && isUuid(parent_id) ? String(parent_id).trim() : null;
       const channelTypeVal = isCategory ? null : channelType;
       const ins = await db.query(
         `INSERT INTO chats (name, type, server_id, parent_id, channel_type)
@@ -1986,22 +1990,25 @@ async function start() {
   });
 
   // POST /api/v1/calls — registar início de chamada WebRTC (ringing)
-  app.post('/api/v1/calls', auth.requireAuth, async (req, res) => {
+  app.post('/api/v1/calls', auth.requireAuth, validateBody(schemas.callStart), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
     const callerId = req.userId;
     const calleeId = req.body?.callee_id ? String(req.body.callee_id).trim() : null;
-    const chatId = req.body?.chat_id ? String(req.body.chat_id).trim() : null;
+    const chatId = req.body?.chat_id ? String(req.body.chat_id).trim() || null : null;
     if (!calleeId || calleeId === callerId) {
       return res.status(400).json({ message: 'callee_id inválido' });
+    }
+    if (chatId && !isUuid(chatId)) {
+      return res.status(400).json({ message: 'chat_id deve ser UUID' });
     }
     try {
       const r = await db.query(
         `INSERT INTO webrtc_calls (caller_id, callee_id, chat_id, status)
          VALUES ($1::uuid, $2::uuid, $3::uuid, 'ringing')
          RETURNING id, caller_id, callee_id, chat_id, status, created_at`,
-        [callerId, calleeId, chatId || null]
+        [callerId, calleeId, chatId]
       );
       const row = r.rows[0];
       return res.status(201).json({
@@ -2019,15 +2026,14 @@ async function start() {
   });
 
   // PATCH /api/v1/calls/:id — atualizar estado da chamada (active, ended, rejected, missed)
-  app.patch('/api/v1/calls/:id', auth.requireAuth, async (req, res) => {
+  app.patch('/api/v1/calls/:id', auth.requireAuth, requireUuidParams(['id']), validateBody(schemas.callStatus), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
     const callId = req.params.id;
-    const status = req.body?.status ? String(req.body.status).trim() : null;
-    const valid = ['ringing', 'active', 'ended', 'rejected', 'missed'];
-    if (!status || !valid.includes(status)) {
-      return res.status(400).json({ message: 'status deve ser um de: ' + valid.join(', ') });
+    const status = sanitizeCallStatus(req.body?.status);
+    if (!status) {
+      return res.status(400).json({ message: 'status deve ser um de: ringing, active, ended, rejected, missed' });
     }
     try {
       const r = await db.query(
@@ -2079,7 +2085,7 @@ async function start() {
   app.get('/api/v1/users/@me', auth.requireAuth, getMe);
 
   // GET /api/v1/users/:userId — perfil público (nome, avatar, banner, descrição) para modal de perfil
-  app.get('/api/v1/users/:userId', auth.requireAuth, async (req, res) => {
+  app.get('/api/v1/users/:userId', auth.requireAuth, requireUuidParams(['userId']), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     const targetId = req.params.userId;
     try {
@@ -2109,14 +2115,21 @@ async function start() {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
     const { avatar_url, banner_url, description } = req.body || {};
-    const avatarVal = avatar_url != null ? String(avatar_url).trim() : null;
-    const bannerVal = banner_url != null ? String(banner_url).trim() : null;
-    const descVal = description != null ? String(description).trim() : null;
-    if (avatarVal && avatarVal.length > 0 && !/^https?:\/\//i.test(avatarVal) && !/^\//.test(avatarVal)) {
-      return res.status(400).json({ message: 'avatar_url deve ser uma URL (http/https) ou caminho (/uploads/...)' });
+    const MAX_URL_LEN = 2048;
+    let avatarVal = avatar_url != null ? String(avatar_url).trim() : null;
+    let bannerVal = banner_url != null ? String(banner_url).trim() : null;
+    const descVal = description != null ? sanitizeDescription(description) : null;
+    if (avatarVal && avatarVal.length > 0) {
+      if (!/^https?:\/\//i.test(avatarVal) && !/^\//.test(avatarVal)) {
+        return res.status(400).json({ message: 'avatar_url deve ser uma URL (http/https) ou caminho (/uploads/...)' });
+      }
+      if (avatarVal.length > MAX_URL_LEN) avatarVal = avatarVal.slice(0, MAX_URL_LEN);
     }
-    if (bannerVal && bannerVal.length > 0 && !/^https?:\/\//i.test(bannerVal) && !/^\//.test(bannerVal)) {
-      return res.status(400).json({ message: 'banner_url deve ser uma URL (http/https) ou caminho' });
+    if (bannerVal && bannerVal.length > 0) {
+      if (!/^https?:\/\//i.test(bannerVal) && !/^\//.test(bannerVal)) {
+        return res.status(400).json({ message: 'banner_url deve ser uma URL (http/https) ou caminho' });
+      }
+      if (bannerVal.length > MAX_URL_LEN) bannerVal = bannerVal.slice(0, MAX_URL_LEN);
     }
     try {
       const cur = await db.query('SELECT avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1', [
@@ -2345,10 +2358,9 @@ async function start() {
   });
 
   // POST /api/v1/users/@me/relationships — adicionar amigo por username (envia pedido pending)
-  app.post('/api/v1/users/@me/relationships', auth.requireAuth, async (req, res) => {
+  app.post('/api/v1/users/@me/relationships', auth.requireAuth, validateBody(schemas.relationshipAdd), async (req, res) => {
     const userId = req.userId;
-    const { username } = req.body || {};
-    const name = username && String(username).trim();
+    const name = sanitizeUsername(req.body?.username);
     if (!name) return res.status(400).json({ message: 'username é obrigatório' });
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
@@ -2390,7 +2402,7 @@ async function start() {
   });
 
   // PUT /api/v1/users/@me/relationships/:id — aceitar pedido de amizade
-  app.put('/api/v1/users/@me/relationships/:relationshipId', auth.requireAuth, async (req, res) => {
+  app.put('/api/v1/users/@me/relationships/:relationshipId', auth.requireAuth, requireUuidParams(['relationshipId']), async (req, res) => {
     const userId = req.userId;
     const relId = req.params.relationshipId;
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
@@ -2408,7 +2420,7 @@ async function start() {
   });
 
   // DELETE /api/v1/users/@me/relationships/:id — remover amizade / cancelar pedido / desbloquear
-  app.delete('/api/v1/users/@me/relationships/:relationshipId', auth.requireAuth, async (req, res) => {
+  app.delete('/api/v1/users/@me/relationships/:relationshipId', auth.requireAuth, requireUuidParams(['relationshipId']), async (req, res) => {
     const userId = req.userId;
     const relId = req.params.relationshipId;
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
@@ -2455,6 +2467,15 @@ async function start() {
 
   // SPA fallback: qualquer path não API/static devolve index.html para o cliente tratar (ex.: /channels/@me/:id ao dar F5)
   app.get('*', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+
+  // Handler de erros global: evita vazamento de stack/detalhes e garante resposta JSON em rotas API
+  app.use((err, req, res, next) => {
+    logger.error('Express error handler', err);
+    if (res.headersSent) return next(err);
+    const status = err.status ?? err.statusCode ?? 500;
+    const message = config.isProduction ? 'Erro interno. Tente novamente mais tarde.' : (err.message || 'Erro interno');
+    res.status(status).json({ message });
+  });
 
   server.listen(PORT, '0.0.0.0', () => {
     logger.info('LIBERTY listening on port', PORT);

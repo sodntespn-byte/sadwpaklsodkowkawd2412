@@ -79,10 +79,11 @@
       item.dataset.index = String(i);
       item.dataset.userId = member.id || '';
       item.dataset.username = member.username || '';
-      const avatar =
-        member.avatar_url || member.avatar ? `<img src="${member.avatar_url || member.avatar}" alt="">` : '';
+      const rawUrl = (member.avatar_url || member.avatar || '').trim();
+      const safeUrl = /^(https?:|\/)/.test(rawUrl) ? rawUrl.replace(/"/g, '&quot;') : '';
+      const avatar = safeUrl ? `<img src="${safeUrl}" alt="">` : '';
       const letter = (member.username || 'U').charAt(0).toUpperCase();
-      item.innerHTML = `<span class="mentions-popover-avatar">${avatar || letter}</span><span class="mentions-popover-name">${escapeHtml(member.username || 'User')}</span>`;
+      item.innerHTML = `<span class="mentions-popover-avatar">${avatar || escapeHtml(letter)}</span><span class="mentions-popover-name">${escapeHtml(member.username || 'User')}</span>`;
       item.addEventListener('click', () => {
         onSelect(member);
         hidePopover();

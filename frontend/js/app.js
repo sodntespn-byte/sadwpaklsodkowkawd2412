@@ -818,7 +818,7 @@ class LibertyApp {
     try {
       this.renderServers();
       this.updateUserPanel();
-      this.selectHome();
+      await this._applyInitialRoute();
       this.loadFriends().catch(() => {});
       this._startActivityPing();
       this._refreshUIAfterConnect();
@@ -830,6 +830,35 @@ class LibertyApp {
       console.warn('connect UI:', e);
       this._refreshUIAfterConnect();
     }
+  }
+
+  async _applyInitialRoute() {
+    const path = typeof location !== 'undefined' && location.pathname ? location.pathname : '';
+    await this._applyRouteFromPath(path);
+  }
+
+  async _applyRouteFromPath(path) {
+    if (!path) {
+      this.selectHome();
+      return;
+    }
+    const serverChannelMatch = path.match(/^\/channels\/([^/]+)\/([^/]+)\/?$/);
+    const serverOnlyMatch = path.match(/^\/channels\/([^/]+)\/?$/);
+    if (serverChannelMatch) {
+      const [, serverId, channelId] = serverChannelMatch;
+      if (serverId !== '@me') {
+        await this.selectServer(serverId, channelId);
+        return;
+      }
+    }
+    if (serverOnlyMatch) {
+      const [, serverId] = serverOnlyMatch;
+      if (serverId !== '@me') {
+        await this.selectServer(serverId);
+        return;
+      }
+    }
+    this.selectHome();
   }
 
   _refreshDMListSidebar() {
@@ -881,9 +910,9 @@ class LibertyApp {
       const avatarSrc = this._getAvatarUrl();
       const letter = (this.currentUser.username || 'U').charAt(0).toUpperCase();
       if (avatarSrc) {
-        sidebarAvatar.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--primary-black)">${letter}</span>`;
+        sidebarAvatar.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--primary-black)">${this.escapeHtml(letter)}</span>`;
       } else {
-        sidebarAvatar.innerHTML = `<span>${letter}</span>`;
+        sidebarAvatar.innerHTML = `<span>${this.escapeHtml(letter)}</span>`;
       }
     }
   }
@@ -902,7 +931,7 @@ class LibertyApp {
       const avatarSrc = this._getAvatarUrl();
       avatarEl.innerHTML = avatarSrc
         ? `<img src="${this.escapeHtml(avatarSrc)}" alt="${this.escapeHtml(this.currentUser.username)}"><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`
-        : `<span>${letter}</span><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`;
+        : `<span>${this.escapeHtml(letter)}</span><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`;
     }
     if (statusEl) {
       const labels = { online: 'Online', idle: 'Idle', dnd: 'Do Not Disturb', invisible: 'Invisible' };
@@ -954,6 +983,25 @@ class LibertyApp {
     // Home button
     const homeBtn = document.querySelector('.server-item.home');
     if (homeBtn) homeBtn.addEventListener('click', () => this.selectHome());
+
+    // Navegação sem F5: Voltar/Avançar do browser
+    window.addEventListener('popstate', () => {
+      const path = typeof location !== 'undefined' && location.pathname ? location.pathname : '';
+      this._applyRouteFromPath(path);
+    });
+
+    // Links internos /channels/*: evitar reload, aplicar rota no cliente
+    document.addEventListener('click', (e) => {
+      const a = e.target.closest('a[href^="/channels/"]');
+      if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
+      const href = a.getAttribute('href');
+      if (!href || href.startsWith('http')) return;
+      const path = href.split('?')[0];
+      if (path.startsWith('/channels/') && (!a.origin || a.origin === location.origin)) {
+        e.preventDefault();
+        this._applyRouteFromPath(path);
+      }
+    }, true);
 
     // Add server
     document.getElementById('add-server-btn')?.addEventListener('click', () => this.showModal('create-server-modal'));
@@ -2195,7 +2243,7 @@ class LibertyApp {
       const iconSrc = server.icon_url || server.icon;
       item.innerHTML = `
                 <div class="server-icon" title="${this.escapeHtml(server.name)}">
-                    ${iconSrc ? `<img src="${this.escapeHtml(iconSrc)}" alt="${this.escapeHtml(server.name)}">` : `<span>${initial}</span>`}
+                    ${iconSrc ? `<img src="${this.escapeHtml(iconSrc)}" alt="${this.escapeHtml(server.name)}">` : `<span>${this.escapeHtml(initial)}</span>`}
                 </div>
                 <span class="server-name">${this.escapeHtml(server.name)}</span>
                 <div class="server-indicator"></div>
@@ -2213,6 +2261,9 @@ class LibertyApp {
     this.currentChannel = null;
     this.channels = [];
     this.members = [];
+    if (typeof history !== 'undefined' && history.replaceState) {
+      history.replaceState({ view: 'home' }, '', '/channels/@me');
+    }
     document
       .querySelectorAll('.server-item')
       .forEach(item => item.classList.toggle('active', item.classList.contains('home')));
@@ -2403,8 +2454,8 @@ class LibertyApp {
       const hasUnread = unreadCount > 0;
       if (hasUnread) item.classList.add('dm-list-item-unread');
       const avatarHtml = avatarSrc
-        ? `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;color:#fff">${letter}</span>`
-        : `<span style="color:#fff">${letter}</span>`;
+        ? `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;color:#fff">${this.escapeHtml(letter)}</span>`
+        : `<span style="color:#fff">${this.escapeHtml(letter)}</span>`;
       const badgeHtml = hasUnread
         ? `<span class="dm-unread-badge" aria-label="Mensagens não lidas">${unreadCount > 99 ? '99+' : String(unreadCount)}</span>`
         : '';
@@ -2718,7 +2769,7 @@ class LibertyApp {
         const u = p.user || { username: 'Unknown' };
         const isIncoming = p.type === 3;
         bodyHtml += `<div class="friend-item" data-user="${u.id}" data-rel-id="${p.id}">
-                    <div class="friend-item-avatar offline"><span>${(u.username || 'U').charAt(0)}</span></div>
+                    <div class="friend-item-avatar offline"><span>${this.escapeHtml((u.username || 'U').charAt(0))}</span></div>
                     <div class="friend-item-info">
                         <div class="friend-item-name">${this.escapeHtml(u.username)}</div>
                         <div class="friend-item-status">${isIncoming ? 'Convite recebido' : 'Pedido enviado'}</div>
@@ -2743,7 +2794,7 @@ class LibertyApp {
         incoming.forEach(p => {
           const u = p.user || { username: 'Unknown' };
           bodyHtml += `<div class="friend-item" data-user="${u.id}" data-rel-id="${p.id}">
-                        <div class="friend-item-avatar offline"><span>${(u.username || 'U').charAt(0)}</span></div>
+                        <div class="friend-item-avatar offline"><span>${this.escapeHtml((u.username || 'U').charAt(0))}</span></div>
                         <div class="friend-item-info">
                             <div class="friend-item-name">${this.escapeHtml(u.username)}</div>
                             <div class="friend-item-status">Convite recebido</div>
@@ -3175,7 +3226,7 @@ class LibertyApp {
     }
   }
 
-  async selectServer(serverId) {
+  async selectServer(serverId, preferredChannelId = null) {
     this.isHomeView = false;
     document
       .querySelectorAll('.server-item')
@@ -3232,8 +3283,13 @@ class LibertyApp {
       }
       this.renderChannels();
       this.renderMembers();
-      const textChannel = this.channels.find(c => c.channel_type === 'text' && c.type !== 'category');
-      if (textChannel) this.selectChannel(textChannel.id);
+      if (typeof history !== 'undefined' && history.replaceState) {
+        history.replaceState({ view: 'server', serverId }, '', `/channels/${serverId}`);
+      }
+      const toSelect = preferredChannelId && this.channels.some(c => c.id === preferredChannelId)
+        ? this.channels.find(c => c.id === preferredChannelId)
+        : this.channels.find(c => c.channel_type === 'text' && c.type !== 'category');
+      if (toSelect) this.selectChannel(toSelect.id);
     } catch (err) {
       this.showToast('Failed to load server', 'error');
     }
@@ -3497,6 +3553,9 @@ class LibertyApp {
     this.typing.clear();
     this.renderTypingIndicator();
     this.cancelReply();
+    if (this.currentServer && this.currentServer.id && channelId && typeof history !== 'undefined' && history.replaceState) {
+      history.replaceState({ view: 'channel', serverId: this.currentServer.id, channelId }, '', `/channels/${this.currentServer.id}/${channelId}`);
+    }
     if (window.LibertyChatRoot && window.LibertyChatRoot.render) {
       window.LibertyChatRoot.render();
     } else {
@@ -6494,7 +6553,10 @@ class LibertyApp {
     escaped = escaped.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
     escaped = escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-    escaped = escaped.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    escaped = escaped.replace(/(https?:\/\/[^\s<]+)/g, (_, url) => {
+      const safeHref = this.escapeHtml(url);
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    });
     escaped = escaped.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
     escaped = escaped.replace(/\n/g, '<br>');
     return escaped;
