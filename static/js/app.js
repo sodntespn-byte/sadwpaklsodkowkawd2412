@@ -368,6 +368,45 @@ const EMOJIS = {
     'Symbols': ['❤️','💯','💢','💥','💫','💦','🔥','⭐','✨','🌟','💨','🕳️','💣','🗯️','💤','✅','❌','⭕','🚫','♻️','⚠️','🔴','🟡','🟢','🔵']
 };
 
+/** Cache local de mensagens (LocalStorage) para acesso rápido; servidor persiste no DB. */
+const MessageCache = {
+    key(channelId) { return 'liberty_msg_' + (channelId || ''); },
+    maxPerChannel: 200,
+    get(channelId) {
+        try {
+            const raw = localStorage.getItem(this.key(channelId));
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            return Array.isArray(arr) ? arr : [];
+        } catch (_) { return []; }
+    },
+    set(channelId, messages) {
+        if (!channelId) return;
+        try {
+            const list = Array.isArray(messages) ? messages : [];
+            const byId = new Map();
+            list.forEach((m) => {
+                const id = m.id || m.message_id;
+                if (id) byId.set(id, m);
+            });
+            const sorted = [...byId.values()].sort((a, b) => {
+                const tA = (a.created_at && new Date(a.created_at).getTime()) || 0;
+                const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
+                return tA - tB;
+            });
+            const capped = sorted.length > this.maxPerChannel ? sorted.slice(-this.maxPerChannel) : sorted;
+            localStorage.setItem(this.key(channelId), JSON.stringify(capped));
+        } catch (_) {}
+    },
+    add(channelId, message) {
+        if (!channelId || !message) return;
+        const list = this.get(channelId);
+        const id = message.id || message.message_id;
+        const without = id ? list.filter((m) => (m.id || m.message_id) !== id) : list;
+        this.set(channelId, [...without, message]);
+    }
+};
+
 class LibertyApp {
     constructor() {
         this.currentUser = null;
@@ -2929,16 +2968,35 @@ class LibertyApp {
 
     async loadMessages(channelId) {
         const container = document.getElementById('messages-list');
+        this.messages.clear();
         container.innerHTML = `
             <div class="messages-loading">
                 <div class="message-skeleton"><div class="skeleton message-skeleton-avatar"></div><div class="message-skeleton-body"><div class="skeleton message-skeleton-line short"></div><div class="skeleton message-skeleton-line"></div><div class="skeleton message-skeleton-line" style="width:80%"></div></div></div>
                 <div class="message-skeleton"><div class="skeleton message-skeleton-avatar"></div><div class="message-skeleton-body"><div class="skeleton message-skeleton-line short"></div><div class="skeleton message-skeleton-line"></div></div></div>
                 <div class="message-skeleton"><div class="skeleton message-skeleton-avatar"></div><div class="message-skeleton-body"><div class="skeleton message-skeleton-line short"></div><div class="skeleton message-skeleton-line"></div><div class="skeleton message-skeleton-line" style="width:70%"></div></div></div>
             </div>`;
+        const cached = MessageCache.get(channelId);
+        if (cached.length > 0) {
+            container.innerHTML = '';
+            cached.forEach(msg => this.addMessage(msg, false));
+            this.scrollToBottom();
+        }
         try {
             const messages = await API.Message.list(channelId, { limit: 50 });
+            const byId = new Map();
+            [...(cached || []), ...(Array.isArray(messages) ? messages : [])].forEach((m) => {
+                const id = m.id || m.message_id;
+                if (id) byId.set(id, m);
+            });
+            const merged = [...byId.values()].sort((a, b) => {
+                const tA = (a.created_at && new Date(a.created_at).getTime()) || 0;
+                const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
+                return tA - tB;
+            });
+            MessageCache.set(channelId, merged);
             container.innerHTML = '';
-            if (!messages || messages.length === 0) {
+            this.messages.clear();
+            if (merged.length === 0) {
                 container.innerHTML = `
                     <div class="welcome-message">
                         <div class="welcome-icon"><i class="fas fa-message"></i></div>
@@ -2948,12 +3006,12 @@ class LibertyApp {
                 `;
                 return;
             }
-            // O backend já retorna as mensagens em ordem cronológica (mais antiga -> mais recente),
-            // inclusive quando vem do cache em memória. Basta renderizar na ordem recebida.
-            messages.forEach(msg => this.addMessage(msg, false));
+            merged.forEach(msg => this.addMessage(msg, false));
             this.scrollToBottom();
         } catch {
-            container.innerHTML = '<div class="empty-state"><p class="empty-state-description">Failed to load messages.</p></div>';
+            if (cached.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p class="empty-state-description">Failed to load messages.</p></div>';
+            }
         }
     }
 
@@ -3045,6 +3103,8 @@ class LibertyApp {
 
         // Store message data
         this.messages.set(message.id, { ...message, authorName, isSelf });
+        const cid = this.currentChannel?.id || this.currentChannel?.channelId;
+        if (cid) MessageCache.add(cid, message);
 
         // Init reactions
         if (!this.reactions.has(message.id)) this.reactions.set(message.id, []);

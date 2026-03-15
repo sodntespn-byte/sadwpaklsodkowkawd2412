@@ -1,0 +1,134 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIBERTY — Base responsiva (carregar primeiro)
+   Design responsivo: smartwatch → ultrawide | sem overflow | unidades fluidas
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 1. BOX-SIZING: todos os elementos */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+/* 2. CAUSA RAIZ DO OVERFLOW: contenção em raiz e filhos flex/grid */
+html {
+    font-size: 16px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+html,
+body {
+    width: 100%;
+    max-width: 100vw;
+    min-width: 0;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+/* Overflow horizontal: última instância só no body; corrigir nos filhos */
+body {
+    overflow-x: hidden;
+}
+
+/* Filhos flex/grid que podem encolher sem causar overflow */
+.app,
+.main-content,
+.messages-container,
+.message-input-container,
+.message-input-wrapper,
+.friends-view,
+#friends-list,
+.channel-list,
+.members-list-wrapper,
+.channel-info,
+.message-content,
+.message-group-body {
+    min-width: 0;
+}
+
+/* 3. IMAGENS FLUIDAS */
+img,
+picture,
+video,
+canvas,
+svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+img[width][height] {
+    height: auto;
+}
+
+/* Avatares/ícones em containers de tamanho fixo: preencher sem overflow */
+.server-icon img,
+.brand-logo img,
+.user-avatar img,
+.member-avatar img,
+.member-avatar-yellow img,
+.message-avatar img,
+.dm-list-item-avatar img {
+    max-width: 100%;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* 4. BREAKPOINTS PADRÃO (variáveis para media queries) */
+:root {
+    --bp-smartwatch: 260px;
+    --bp-mobile: 480px;
+    --bp-tablet: 768px;
+    --bp-desktop: 1024px;
+    --bp-wide: 1280px;
+    --bp-ultrawide: 1920px;
+}
+
+/* 5. CONTAINERS FLUIDOS (evitar larguras fixas que quebram) */
+.app {
+    width: 100%;
+    max-width: 100vw;
+}
+
+.main-content {
+    flex: 1 1 0%;
+    max-width: 100%;
+}
+
+.channel-sidebar,
+.members-sidebar {
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+/* 6. TIPOGRAFIA FLUIDA (opcional: escala com viewport) */
+@media (min-width: 1200px) {
+    html {
+        font-size: clamp(16px, 0.9vw, 18px);
+    }
+}
+
+@media (max-width: 29.9375rem) {
+    html {
+        font-size: clamp(14px, 4vw, 16px);
+    }
+}
+
+/* Smartwatch / viewports muito pequenos: garantir contenção */
+@media (max-width: 16.25rem) {
+    .app {
+        min-width: 100%;
+        overflow-x: hidden;
+    }
+    .server-sidebar {
+        min-width: 2.5rem;
+        width: 2.5rem;
+    }
+    .channel-sidebar,
+    .members-sidebar {
+        max-width: 100vw;
+    }
+}

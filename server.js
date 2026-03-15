@@ -17,12 +17,14 @@ import crypto from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Cache em memória das mensagens (não grava na tabela messages da base de dados)
+// Cache em memória das mensagens + persistência no DB (segurança)
 const messageCache = new Map(); // chatId -> array de mensagens
 const MAX_CACHE_PER_CHANNEL = 300;
+
 function getCachedMessages(chatId) {
   return messageCache.get(chatId) || [];
 }
+
 function addCachedMessage(chatId, msg) {
   let list = messageCache.get(chatId);
   if (!list) {
@@ -31,6 +33,87 @@ function addCachedMessage(chatId, msg) {
   }
   list.push(msg);
   if (list.length > MAX_CACHE_PER_CHANNEL) list.shift();
+}
+
+/** Repopula o cache com uma lista de mensagens (ex.: vindas do DB). Evita duplicados por id. */
+function setCachedMessages(chatId, messages) {
+  if (!chatId || !Array.isArray(messages)) return;
+  const seen = new Set();
+  const list = messages.filter((m) => {
+    const id = m.id || m.message_id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  messageCache.set(chatId, list);
+  if (list.length > MAX_CACHE_PER_CHANNEL) {
+    list.splice(0, list.length - MAX_CACHE_PER_CHANNEL);
+  }
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUuid(s) {
+  return typeof s === 'string' && UUID_REGEX.test(s.trim());
+}
+
+/**
+ * Garante que a mensagem existe no banco. Se não existir, insere.
+ * Usa id da mensagem para evitar duplicados (ON CONFLICT DO NOTHING).
+ */
+async function ensureMessageInDb(msg, chatId) {
+  if (!msg || !chatId || !db.isConfigured() || !db.isConnected()) return;
+  const id = msg.id || msg.message_id;
+  if (!id || !isUuid(id)) return;
+  const dbChatId = isUuid(chatId) ? chatId : null;
+  if (!dbChatId) return;
+  const userId = msg.author_id && isUuid(String(msg.author_id)) ? msg.author_id : null;
+  const content = String(msg.content || '').trim();
+  if (!content) return;
+  const createdAt = msg.created_at instanceof Date ? msg.created_at : new Date(msg.created_at || Date.now());
+  try {
+    await db.query(
+      `INSERT INTO messages (id, chat_id, user_id, content, created_at, updated_at)
+       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)
+       ON CONFLICT (id) DO NOTHING`,
+      [id, dbChatId, userId, content, createdAt, createdAt]
+    );
+  } catch (err) {
+    console.warn('[LIBERTY] ensureMessageInDb:', err.message);
+  }
+}
+
+/**
+ * Carrega mensagens do banco para um chat e devolve no formato da API.
+ * Usado quando o cache está vazio (ex.: após restart) para repopular.
+ */
+async function loadMessagesFromDb(chatId, limit = 300) {
+  if (!chatId || !isUuid(chatId) || !db.isConfigured() || !db.isConnected()) return [];
+  try {
+    const r = await db.query(
+      `SELECT m.id, m.chat_id, m.user_id, m.content, m.created_at, u.username, u.avatar_url
+       FROM messages m
+       LEFT JOIN users u ON u.id = m.user_id
+       WHERE m.chat_id = $1::uuid
+       ORDER BY m.created_at ASC
+       LIMIT $2`,
+      [chatId, limit]
+    );
+    const rows = r.rows || [];
+    return rows.map((row) => ({
+      id: String(row.id),
+      chat_id: String(row.chat_id),
+      content: row.content || '',
+      author_id: row.user_id ? String(row.user_id) : null,
+      author_username: row.username || 'User',
+      author: row.username || 'User',
+      username: row.username || 'User',
+      avatar_url: row.avatar_url || null,
+      created_at: row.created_at,
+    }));
+  } catch (err) {
+    console.warn('[LIBERTY] loadMessagesFromDb:', err.message);
+    return [];
+  }
 }
 
 // Atividade em app (minutos) para ranking "By Activity" — só em memória
@@ -752,7 +835,7 @@ async function start() {
     }
   });
 
-  // Mensagens: só em cache (memória), não grava na base de dados
+  // Mensagens: cache em memória + persistência no DB (ensureMessageInDb)
   app.post('/api/messages', auth.requireAuth, async (req, res) => {
     const { content, author } = req.body || {};
     if (!content || !String(content).trim()) {
@@ -791,6 +874,7 @@ async function start() {
         created_at: createdAt,
       };
       addCachedMessage(chatId, saved);
+      await ensureMessageInDb(saved, chatId);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
       return res.status(201).json({
@@ -812,8 +896,15 @@ async function start() {
       let chatId = null;
       if (db.isConfigured() && db.isConnected()) chatId = await getDefaultChatId();
       if (!chatId) chatId = 'default-chat';
-      const cached = getCachedMessages(chatId);
-      const response = cached.map((m) => ({
+      let list = getCachedMessages(chatId);
+      if (list.length === 0 && db.isConfigured() && db.isConnected() && isUuid(chatId)) {
+        const fromDb = await loadMessagesFromDb(chatId, MAX_CACHE_PER_CHANNEL);
+        if (fromDb.length > 0) {
+          setCachedMessages(chatId, fromDb);
+          list = getCachedMessages(chatId);
+        }
+      }
+      const response = list.map((m) => ({
         id: m.id,
         content: String(m.content || '').trim(),
         author_username: m.author_username || m.author || 'User',
@@ -828,7 +919,7 @@ async function start() {
     }
   });
 
-  // POST /api/servers/:serverId/channels/:channelId/messages — só cache (memória), não grava na DB
+  // POST /api/servers/:serverId/channels/:channelId/messages — cache + persistência no DB
   app.post('/api/servers/:serverId/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
     const { content } = req.body || {};
     if (!content || !String(content).trim()) {
@@ -869,6 +960,7 @@ async function start() {
         created_at: createdAt,
       };
       addCachedMessage(chatId, saved);
+      await ensureMessageInDb(saved, chatId);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
       return res.status(201).json({
@@ -900,7 +992,7 @@ async function start() {
     return await getChatIdForServerAndChannel(null, channelId) || await getDefaultChatId();
   }
 
-  // Mensagens por canal: só em cache (memória), não grava na tabela messages da base de dados
+  // Mensagens por canal: cache + persistência no DB (ensureMessageInDb)
   app.post('/api/v1/channels/:channelId/messages', auth.requireAuth, async (req, res) => {
     const { channelId } = req.params;
     const { content } = req.body || {};
@@ -941,6 +1033,7 @@ async function start() {
         created_at: createdAt,
       };
       addCachedMessage(chatId, saved);
+      await ensureMessageInDb(saved, chatId);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
       return res.status(201).json({ success: true, message: saved });
@@ -959,8 +1052,15 @@ async function start() {
         chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
       }
       if (!chatId) chatId = String(channelId);
-      const cached = getCachedMessages(chatId);
-      let list = cached.map((m) => ({
+      let list = getCachedMessages(chatId);
+      if (list.length === 0 && db.isConfigured() && db.isConnected() && isUuid(chatId)) {
+        const fromDb = await loadMessagesFromDb(chatId, MAX_CACHE_PER_CHANNEL);
+        if (fromDb.length > 0) {
+          setCachedMessages(chatId, fromDb);
+          list = getCachedMessages(chatId);
+        }
+      }
+      let result = list.map((m) => ({
         id: m.id,
         channel_id: channelId,
         content: String(m.content || ''),
@@ -969,18 +1069,18 @@ async function start() {
         avatar_url: m.avatar_url || null,
         created_at: (m.created_at instanceof Date ? m.created_at : new Date(m.created_at)).toISOString(),
       }));
-      if (db.isConfigured() && db.isConnected() && list.length > 0) {
-        const authorIds = [...new Set(list.map((m) => m.author_id).filter(Boolean))];
+      if (db.isConfigured() && db.isConnected() && result.length > 0) {
+        const authorIds = [...new Set(result.map((m) => m.author_id).filter(Boolean))];
         if (authorIds.length > 0) {
           try {
             const placeholders = authorIds.map((_, i) => `$${i + 1}::uuid`).join(',');
             const r = await db.query(`SELECT id, avatar_url FROM users WHERE id IN (${placeholders})`, authorIds);
             const avatarByAuthor = Object.fromEntries((r.rows || []).map((row) => [String(row.id), row.avatar_url || null]));
-            list = list.map((m) => ({ ...m, avatar_url: (m.author_id && avatarByAuthor[m.author_id]) || m.avatar_url }));
+            result = result.map((m) => ({ ...m, avatar_url: (m.author_id && avatarByAuthor[m.author_id]) || m.avatar_url }));
           } catch (_) {}
         }
       }
-      return res.status(200).json(list);
+      return res.status(200).json(result);
     } catch (err) {
       console.error('[API] GET /api/v1/channels/:id/messages', err.message);
       return res.status(500).json({ message: err.message || 'Erro' });

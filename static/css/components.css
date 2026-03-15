@@ -2314,7 +2314,7 @@
     margin-bottom: 16px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 48rem) {
     .ranking-tables { grid-template-columns: 1fr; }
 }
 
@@ -2446,3 +2446,9 @@
 
 .ranking-footer-encryption { color: var(--primary-black); }
 .ranking-footer-badge { color: var(--primary-black); opacity: 0.85; font-weight: 700; }
+
+/* ═══ Responsivo: evitar overflow em viewports pequenos ═══ */
+@media (max-width: 26rem) {
+    .modal { max-width: min(100%, 95vw); width: 100%; }
+    .player-banner-card { max-width: min(100%, 95vw); }
+}
