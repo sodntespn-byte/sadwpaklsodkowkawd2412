@@ -14,7 +14,7 @@
 | Variável       | Obrigatório | Exemplo / Notas                                                                 |
 | -------------- | ----------- | ------------------------------------------------------------------------------- |
 | `JWT_SECRET`   | **Sim**     | String com **pelo menos 32 caracteres**. Sem isto a app para logo ao iniciar.   |
-| `DATABASE_URL` | **Sim**     | `postgresql://user:pass@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require` |
+| `DATABASE_URL` | **Sim**     | Connection string do Neon (ex.: `postgresql://user:pass@ep-xxx-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require`). Pode incluir `&channel_binding=require`; o servidor remove se necessário. |
 | `NODE_ENV`     | Não         | A Square Cloud costuma definir `production` automaticamente.                 |
 
 **Como gerar um JWT_SECRET seguro (32+ caracteres):**
