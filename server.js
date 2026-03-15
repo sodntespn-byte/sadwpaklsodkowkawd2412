@@ -17,39 +17,12 @@ import crypto from 'node:crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Cache em memória das mensagens + persistência no DB (segurança)
-const messageCache = new Map(); // chatId -> array de mensagens
-const MAX_CACHE_PER_CHANNEL = 300;
-
-function getCachedMessages(chatId) {
-  return messageCache.get(chatId) || [];
-}
-
-function addCachedMessage(chatId, msg) {
-  let list = messageCache.get(chatId);
-  if (!list) {
-    list = [];
-    messageCache.set(chatId, list);
-  }
-  list.push(msg);
-  if (list.length > MAX_CACHE_PER_CHANNEL) list.shift();
-}
-
-/** Repopula o cache com uma lista de mensagens (ex.: vindas do DB). Evita duplicados por id. */
-function setCachedMessages(chatId, messages) {
-  if (!chatId || !Array.isArray(messages)) return;
-  const seen = new Set();
-  const list = messages.filter((m) => {
-    const id = m.id || m.message_id;
-    if (!id || seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
-  messageCache.set(chatId, list);
-  if (list.length > MAX_CACHE_PER_CHANNEL) {
-    list.splice(0, list.length - MAX_CACHE_PER_CHANNEL);
-  }
-}
+// Cache de mensagens: memória ou Redis (REDIS_URL); persistência no DB garante segurança
+import messageCacheModule from './message-cache.js';
+const getCachedMessages = messageCacheModule.getCachedMessages;
+const setCachedMessages = messageCacheModule.setCachedMessages;
+const addCachedMessage = messageCacheModule.addCachedMessage;
+const MAX_CACHE_PER_CHANNEL = messageCacheModule.MAX_CACHE_PER_CHANNEL;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function isUuid(s) {
@@ -873,7 +846,7 @@ async function start() {
         timestamp: createdAt,
         created_at: createdAt,
       };
-      addCachedMessage(chatId, saved);
+      await addCachedMessage(chatId, saved);
       await ensureMessageInDb(saved, chatId);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
@@ -896,12 +869,12 @@ async function start() {
       let chatId = null;
       if (db.isConfigured() && db.isConnected()) chatId = await getDefaultChatId();
       if (!chatId) chatId = 'default-chat';
-      let list = getCachedMessages(chatId);
+      let list = await getCachedMessages(chatId);
       if (list.length === 0 && db.isConfigured() && db.isConnected() && isUuid(chatId)) {
         const fromDb = await loadMessagesFromDb(chatId, MAX_CACHE_PER_CHANNEL);
         if (fromDb.length > 0) {
-          setCachedMessages(chatId, fromDb);
-          list = getCachedMessages(chatId);
+          await setCachedMessages(chatId, fromDb);
+          list = await getCachedMessages(chatId);
         }
       }
       const response = list.map((m) => ({
@@ -959,7 +932,7 @@ async function start() {
         timestamp: createdAt,
         created_at: createdAt,
       };
-      addCachedMessage(chatId, saved);
+      await addCachedMessage(chatId, saved);
       await ensureMessageInDb(saved, chatId);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
@@ -1032,7 +1005,7 @@ async function start() {
         timestamp: createdAt,
         created_at: createdAt,
       };
-      addCachedMessage(chatId, saved);
+      await addCachedMessage(chatId, saved);
       await ensureMessageInDb(saved, chatId);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
@@ -1052,12 +1025,12 @@ async function start() {
         chatId = await resolveChannelToChatId(userId, channelId) || await getDefaultChatId();
       }
       if (!chatId) chatId = String(channelId);
-      let list = getCachedMessages(chatId);
+      let list = await getCachedMessages(chatId);
       if (list.length === 0 && db.isConfigured() && db.isConnected() && isUuid(chatId)) {
         const fromDb = await loadMessagesFromDb(chatId, MAX_CACHE_PER_CHANNEL);
         if (fromDb.length > 0) {
-          setCachedMessages(chatId, fromDb);
-          list = getCachedMessages(chatId);
+          await setCachedMessages(chatId, fromDb);
+          list = await getCachedMessages(chatId);
         }
       }
       let result = list.map((m) => ({

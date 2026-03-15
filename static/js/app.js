@@ -368,7 +368,12 @@ const EMOJIS = {
     'Symbols': ['❤️','💯','💢','💥','💫','💦','🔥','⭐','✨','🌟','💨','🕳️','💣','🗯️','💤','✅','❌','⭕','🚫','♻️','⚠️','🔴','🟡','🟢','🔵']
 };
 
-/** Cache local de mensagens (LocalStorage) para acesso rápido; servidor persiste no DB. */
+/**
+ * Cache local de mensagens (LocalStorage) para acesso rápido.
+ * Fluxo: 1) Ler do cache. 2) Se vazio, buscar na API e repopular o cache.
+ * O servidor persiste no DB para que os dados não se percam (refresh ou cache limpo).
+ * Identificadores únicos (id) evitam duplicados ao mesclar cache + API.
+ */
 const MessageCache = {
     key(channelId) { return 'liberty_msg_' + (channelId || ''); },
     maxPerChannel: 200,
@@ -1776,12 +1781,40 @@ class LibertyApp {
         `;
 
         if (dm.id) {
+            const cached = MessageCache.get(dm.id);
+            if (cached.length > 0) {
+                container.innerHTML = '';
+                cached.forEach(m => this.addMessage(m, false));
+            }
             try {
                 const messages = await API.DM.getMessages(dm.id, { limit: 50 });
-                if (messages && messages.length > 0) {
-                    messages.reverse().forEach(m => this.addMessage(m, false));
+                const byId = new Map();
+                [...(cached || []), ...(Array.isArray(messages) ? messages : [])].forEach((m) => {
+                    const id = m.id || m.message_id;
+                    if (id) byId.set(id, m);
+                });
+                const merged = [...byId.values()].sort((a, b) => {
+                    const tA = (a.created_at && new Date(a.created_at).getTime()) || 0;
+                    const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
+                    return tA - tB;
+                });
+                MessageCache.set(dm.id, merged);
+                container.innerHTML = '';
+                this.messages.clear();
+                if (merged.length > 0) {
+                    merged.forEach(m => this.addMessage(m, false));
+                } else {
+                    container.innerHTML = `
+                        <div class="welcome-message">
+                            <div class="welcome-icon"><span style="font-size:30px;font-weight:700;color:var(--primary-black)">${displayName.charAt(0).toUpperCase()}</span></div>
+                            <h2 class="welcome-title">${this.escapeHtml(displayName)}</h2>
+                            <p class="welcome-description">${isGroup ? 'Group conversation.' : `This is the beginning of your direct message history with <strong>${this.escapeHtml(recipient.username)}</strong>.`}</p>
+                        </div>
+                    `;
                 }
-            } catch { /* empty */ }
+            } catch {
+                if (cached.length === 0) { /* mantém welcome */ }
+            }
         }
 
         this.scrollToBottom();
