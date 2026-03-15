@@ -258,13 +258,15 @@
                         <span class="user-status" id="user-status">Online</span>
                     </div>
                 </div>
-                <div class="user-controls" role="group" aria-label="Controles de voz">
-                    <button class="btn-icon tooltip" id="mute-btn" data-tooltip="Mute" aria-label="Mutar microfone">
-                        <i class="fas fa-microphone" aria-hidden="true"></i>
-                    </button>
-                    <button class="btn-icon tooltip" id="deafen-btn" data-tooltip="Deafen" aria-label="Silenciar áudio">
-                        <i class="fas fa-headphones" aria-hidden="true"></i>
-                    </button>
+                <div class="user-controls" role="group" aria-label="Controles do utilizador">
+                    <div class="user-controls-voice hidden" id="user-controls-voice" aria-label="Controles de voz (apenas em DM)">
+                        <button class="btn-icon tooltip" id="mute-btn" data-tooltip="Mute" aria-label="Mutar microfone">
+                            <i class="fas fa-microphone" aria-hidden="true"></i>
+                        </button>
+                        <button class="btn-icon tooltip" id="deafen-btn" data-tooltip="Deafen" aria-label="Silenciar áudio">
+                            <i class="fas fa-headphones" aria-hidden="true"></i>
+                        </button>
+                    </div>
                     <button class="btn-icon tooltip" id="user-settings-btn" data-tooltip="Settings" aria-label="Configurações do usuário">
                         <i class="fas fa-cog" aria-hidden="true"></i>
                     </button>

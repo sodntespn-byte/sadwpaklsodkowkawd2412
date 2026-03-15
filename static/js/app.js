@@ -1112,6 +1112,7 @@ class LibertyApp {
 
     selectHome() {
         this.isHomeView = true;
+        this.currentHomeSubView = 'friends';
         this.currentServer = null;
         this.currentChannel = null;
         this.channels = [];
@@ -1144,11 +1145,13 @@ class LibertyApp {
                     if (dmList) dmList.querySelectorAll('.dm-list-item').forEach(d => d.classList.remove('active'));
                     const view = btn.dataset.view;
                     if (view === 'friends') {
+                        this.currentHomeSubView = 'friends';
                         this.renderFriendsView(this.currentFriendsTab);
-                        const channelNameEl = document.getElementById('channel-name');
-                        const channelIconEl = document.querySelector('.channel-header .channel-info i');
-                        if (channelNameEl) channelNameEl.textContent = 'Friends';
-                        if (channelIconEl) channelIconEl.className = 'fas fa-users channel-header-icon';
+                        this._updateChannelHeaderForContext();
+                    } else if (view === 'rankings') {
+                        this.currentHomeSubView = 'rankings';
+                        this.renderRankingsView();
+                        this._updateChannelHeaderForContext();
                     } else {
                         this.showToast(`${btn.textContent.trim()} — Coming Soon!`, 'info');
                     }
@@ -1546,6 +1549,45 @@ class LibertyApp {
             };
         }
 
+    async renderRankingsView() {
+        const friendsView = document.getElementById('friends-view');
+        const messagesContainer = document.getElementById('messages-container');
+        const friendsList = document.getElementById('friends-list');
+        const addSection = document.getElementById('friends-add-section');
+        const searchWrapper = document.querySelector('.friends-view .friends-search-wrapper');
+        if (friendsView) friendsView.classList.remove('hidden');
+        if (messagesContainer) messagesContainer.style.display = 'none';
+        if (addSection) addSection.classList.add('hidden');
+        if (searchWrapper) searchWrapper.style.display = 'none';
+        if (!friendsList) return;
+        friendsList.innerHTML = '<div class="friends-list-loading" style="padding:20px;text-align:center;color:var(--text-muted)">A carregar ranking…</div>';
+        this._updateUserControlsVoiceVisibility();
+        try {
+            const list = await API.Ranking.list(20);
+            const headerStyle = 'padding:8px 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-secondary)';
+            let bodyHtml = `<div style="${headerStyle}">Quem mais fica e comenta</div>`;
+            if (!list || list.length === 0) {
+                bodyHtml += '<div style="padding:20px;text-align:center;color:var(--text-muted)">Ainda não há mensagens para ranking.</div>';
+            } else {
+                const avatarColors = ['#5865F2','#57F287','#FEE75C','#EB459E','#ED4245','#3BA55D','#FAA61A','#9B59B6','#E67E22','#1ABC9C'];
+                list.forEach((row, i) => {
+                    const color = avatarColors[row.rank % avatarColors.length];
+                    const initial = (row.username || 'U').charAt(0).toUpperCase();
+                    bodyHtml += `<div class="friend-item ranking-item" data-user-id="${this.escapeHtml(row.id)}">
+                        <div class="friend-item-avatar offline" style="background:${color}"><span>${this.escapeHtml(initial)}</span></div>
+                        <div class="friend-item-info" style="flex:1">
+                            <div class="friend-item-name">#${row.rank} ${this.escapeHtml(row.username)}</div>
+                            <div class="friend-item-status">${row.message_count} mensagens</div>
+                        </div>
+                    </div>`;
+                });
+            }
+            friendsList.innerHTML = bodyHtml;
+        } catch (err) {
+            friendsList.innerHTML = '<div style="padding:20px;text-align:center;color:var(--error)">Falha ao carregar ranking.</div>';
+        }
+    }
+
         friendsList?.querySelectorAll('.friend-item-actions button').forEach(btn => {
             btn.addEventListener('click', async e => {
                 e.stopPropagation();
@@ -1664,7 +1706,15 @@ class LibertyApp {
                 <div class="channel-header-divider" aria-hidden="true"></div>
                 <span class="channel-topic dm-status" id="channel-topic">${this._statusLabel(status)}</span>
             `;
+        } else if (this.isHomeView && this.currentHomeSubView === 'rankings') {
+            info.innerHTML = `
+                <i class="fas fa-trophy channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
+                <h3 id="channel-name">LIBERTY Rankings</h3>
+                <div class="channel-header-divider" aria-hidden="true"></div>
+                <span class="channel-topic" id="channel-topic">Quem mais fica e comenta</span>
+            `;
         } else if (this.isHomeView) {
+            this.currentHomeSubView = this.currentHomeSubView || 'friends';
             const tab = this.currentFriendsTab || 'online';
             info.innerHTML = `
                 <i class="fas fa-user-friends channel-header-icon" aria-hidden="true"></i>
@@ -1698,6 +1748,14 @@ class LibertyApp {
             `;
         }
         if (isDM) this._wireDMHeaderVoiceVideoButtons();
+        this._updateUserControlsVoiceVisibility();
+    }
+
+    _updateUserControlsVoiceVisibility() {
+        const voiceEl = document.getElementById('user-controls-voice');
+        if (!voiceEl) return;
+        const inDM = !this.isHomeView && this.currentChannel && (this.currentChannel.type === 'dm' || this.currentChannel.type === 'group_dm') && !this.currentChannel.server_id;
+        voiceEl.classList.toggle('hidden', !inDM);
     }
 
     _updateVoiceCallButtonVisibility() {

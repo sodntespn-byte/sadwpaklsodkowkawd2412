@@ -1386,6 +1386,37 @@ async function start() {
   app.patch('/api/v1/users/me', auth.requireAuth, patchMe);
   app.patch('/api/v1/users/@me', auth.requireAuth, patchMe);
 
+  // GET /api/v1/ranking — top usuários por quantidade de mensagens (quem mais fica e comenta)
+  app.get('/api/v1/ranking', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+    try {
+      const r = await db.query(
+        `SELECT u.id, u.username, u.avatar_url, COUNT(m.id)::int AS message_count
+         FROM users u
+         LEFT JOIN messages m ON m.user_id = u.id
+         GROUP BY u.id, u.username, u.avatar_url
+         HAVING COUNT(m.id) > 0
+         ORDER BY message_count DESC
+         LIMIT $1`,
+        [limit]
+      );
+      const list = r.rows.map((row, index) => ({
+        rank: index + 1,
+        id: String(row.id),
+        username: row.username,
+        avatar_url: row.avatar_url || null,
+        message_count: row.message_count,
+      }));
+      return res.status(200).json(list);
+    } catch (err) {
+      console.error('[LIBERTY] GET /ranking', err);
+      return res.status(500).json({ message: err.message || 'Erro ao buscar ranking' });
+    }
+  });
+
   // GET /api/v1/users/@me/relationships — lista com type: 1=amigo, 2=bloqueado, 3=pending recebido, 4=pending enviado
   app.get('/api/v1/users/@me/relationships', auth.requireAuth, async (req, res) => {
     const userId = req.userId;

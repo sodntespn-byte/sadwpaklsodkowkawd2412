@@ -152,6 +152,13 @@ const UserAPI = {
     }
 };
 
+// Ranking API — quem mais fica e comenta
+const RankingAPI = {
+    async list(limit = 20) {
+        return apiRequest(`/ranking?limit=${limit}`);
+    }
+};
+
 // Server API
 const ServerAPI = {
     async list() {
@@ -467,6 +474,7 @@ window.API = {
     Role: RoleAPI,
     DM: DMAPI,
     Friend: FriendAPI,
+    Ranking: RankingAPI,
     Reaction: ReactionAPI,
     Pin: PinAPI,
     Ban: BanAPI
