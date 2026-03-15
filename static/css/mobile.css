@@ -1,365 +1,430 @@
 /* ═══════════════════════════════════════════════════════════════
-   LIBERTY — Mobile: compatibilidade extrema com celulares
-   viewport-fit=cover + safe-area, touch 44px, drawer, sem overflow
+   LIBERTY — Mobile: proporções funcionais, nada em cima do outro
+   Celular eficiente e legível
    ═══════════════════════════════════════════════════════════════ */
 
-/* Backdrop do drawer: escondido por defeito (só mostra em mobile quando drawer aberto) */
-.channel-sidebar-backdrop {
-    display: none;
-    pointer-events: none;
+/* Evitar scroll horizontal e proporções quebradas */
+html {
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
 }
-
-/* Evitar scroll horizontal em todo o app */
-html, body {
+body {
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
 }
 
-/* Safe area para notch e gestos (iOS/Android) */
+/* Safe area (notch/gestos) sem quebrar layout */
 .app {
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
+    box-sizing: border-box;
 }
 
-/* Redução do highlight de toque (Android) e área de toque consistente */
-@media (max-width: 768px) {
-    * {
-        -webkit-tap-highlight-color: rgba(255, 215, 0, 0.15);
-    }
-    .messages-container {
-        overscroll-behavior: contain;
-        -webkit-overflow-scrolling: touch;
-    }
+.channel-sidebar-backdrop {
+    display: none;
+    pointer-events: none;
 }
 
-/* ─── 768px: tablet / telemóvel em paisagem ─── */
+/* ─── A partir de 768px (tablet/mobile) ─── */
 @media (max-width: 768px) {
     .app {
         min-height: 100vh;
         min-height: 100dvh;
+        height: 100vh;
+        height: 100dvh;
+        max-width: 100vw;
+        overflow: hidden;
     }
 
-    /* Botão hamburger visível e com área de toque mínima 44px */
+    .server-sidebar {
+        flex-shrink: 0;
+        width: var(--server-sidebar-width);
+        min-width: var(--server-sidebar-width);
+    }
+
+    .main-content {
+        flex: 1 1 0%;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .channel-header {
+        flex-shrink: 0;
+        min-height: 48px;
+        height: auto;
+        padding: 8px 10px 8px max(10px, env(safe-area-inset-left));
+        padding-right: max(10px, env(safe-area-inset-right));
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .channel-info {
+        flex: 1 1 auto;
+        min-width: 0;
+        order: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .channel-info h3 {
+        font-size: 15px;
+        max-width: 50vw;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .channel-header-divider,
+    .channel-topic {
+        display: none;
+    }
+
+    .channel-actions {
+        order: 2;
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        flex-wrap: nowrap;
+    }
+
+    .channel-actions .btn-icon {
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+        padding: 0;
+        flex-shrink: 0;
+    }
+
+    .channel-search-wrapper {
+        display: none;
+    }
+
     .channel-sidebar-toggle.mobile-only {
         display: flex !important;
-        min-width: 44px;
-        min-height: 44px;
-        align-items: center;
-        justify-content: center;
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
         margin-right: 4px;
     }
 
-    /* Drawer da sidebar: overlay escuro quando aberto */
-    .channel-sidebar-backdrop {
-        pointer-events: none;
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 140;
-        animation: mobileBackdropFade 0.2s ease;
+    .messages-container {
+        flex: 1 1 0%;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 12px;
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+        -webkit-overflow-scrolling: touch;
     }
+
+    .message-input-container {
+        flex-shrink: 0;
+        padding: 10px 12px;
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+        padding-bottom: max(10px, env(safe-area-inset-bottom));
+        background: #0a0a0a;
+        border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .friends-view {
+        flex: 1 1 0%;
+        min-height: 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .friends-view .friends-search-wrapper {
+        flex-shrink: 0;
+        padding: 10px 12px;
+    }
+
+    #friends-list {
+        flex: 1 1 0%;
+        min-height: 0;
+        overflow-y: auto;
+        padding: 8px;
+    }
+
     .channel-sidebar-backdrop.is-open {
         display: block;
         pointer-events: auto;
     }
-    @keyframes mobileBackdropFade {
-        from { opacity: 0; }
-        to { opacity: 1; }
+
+    .channel-sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        z-index: 140;
     }
 
     .channel-sidebar {
-        left: 0;
-        width: min(280px, 85vw);
-        max-width: none;
+        position: fixed;
+        left: var(--server-sidebar-width);
+        top: 0;
+        bottom: 0;
+        z-index: 150;
+        width: min(280px, calc(100vw - var(--server-sidebar-width) - 16px));
+        max-width: 100%;
         padding-top: env(safe-area-inset-top);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        background: #0c0c0c;
+        box-shadow: 4px 0 24px rgba(0,0,0,0.4);
     }
 
-    .main-content {
-        padding-left: 0;
-        padding-right: 0;
-    }
-
-    .channel-header {
-        padding-left: max(12px, env(safe-area-inset-left));
-        padding-right: max(12px, env(safe-area-inset-right));
-        min-height: 48px;
-    }
-
-    .channel-actions .btn-icon {
-        min-width: 44px;
-        min-height: 44px;
-    }
-
-    .messages-container {
-        padding-left: max(12px, env(safe-area-inset-left));
-        padding-right: max(12px, env(safe-area-inset-right));
-    }
-
-    .message-input-container {
-        padding-left: max(12px, env(safe-area-inset-left));
-        padding-right: max(12px, env(safe-area-inset-right));
-        padding-bottom: max(12px, env(safe-area-inset-bottom));
+    .channel-sidebar.mobile-hidden {
+        transform: translateX(-100%);
     }
 }
 
 /* ─── 480px: telemóvel ─── */
 @media (max-width: 480px) {
     :root {
-        --server-sidebar-width: 56px;
+        --server-sidebar-width: 52px;
+    }
+
+    .app {
+        padding-left: 0;
+        padding-right: 0;
     }
 
     .server-sidebar {
-        width: 56px;
+        width: 52px;
+        min-width: 52px;
         padding-left: env(safe-area-inset-left);
     }
 
     .server-icon {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
-        min-height: 44px;
+        width: 42px;
+        height: 42px;
+        min-width: 42px;
+        min-height: 42px;
     }
 
-    .channel-sidebar {
-        width: min(260px, 92vw);
+    .main-content {
+        min-width: 0;
     }
 
     .channel-info h3 {
-        font-size: 15px;
-        max-width: 140px;
+        font-size: 14px;
+        max-width: 45vw;
     }
 
-    /* Menos botões no header em mobile: esconder threads, inbox, help */
     .channel-actions .btn-icon[data-tooltip="Threads"],
+    .channel-actions .btn-icon[data-tooltip="Notifications"],
     .channel-actions .btn-icon[data-tooltip="Inbox"],
-    .channel-actions #help-btn {
+    .channel-actions #help-btn,
+    .channel-actions #toggle-members-btn {
         display: none !important;
     }
 
-    .friend-item {
-        min-height: 56px;
-        padding: 12px 12px;
+    .channel-actions .btn-icon,
+    .channel-sidebar-toggle.mobile-only {
+        width: 38px;
+        min-width: 38px;
+        height: 38px;
+        min-height: 38px;
     }
 
-    .friend-item-avatar {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
-        min-height: 44px;
-    }
-
-    .member-item {
-        min-height: 52px;
-        padding: 10px 12px;
-    }
-
-    .member-avatar-yellow,
-    .member-avatar {
-        width: 40px;
-        height: 40px;
-        min-width: 40px;
-        min-height: 40px;
-    }
-
-    .member-action-btn {
-        min-width: 44px;
-        min-height: 44px;
+    .channel-sidebar {
+        width: min(260px, calc(100vw - 52px - 12px));
     }
 
     .message {
-        padding: 12px 0;
+        padding: 10px 0;
+        min-width: 0;
     }
 
     .message-avatar {
-        width: 40px;
-        height: 40px;
-        min-width: 40px;
-        min-height: 40px;
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
     }
 
     .message-content {
-        font-size: 15px;
-        line-height: 1.45;
+        font-size: 14px;
+        line-height: 1.4;
+        word-break: break-word;
+    }
+
+    .message-input-wrapper {
+        padding: 8px 0;
     }
 
     .message-input-wrapper textarea {
-        min-height: 44px;
-        font-size: 16px; /* evita zoom no iOS ao focar */
+        min-height: 42px;
+        font-size: 16px;
     }
 
     .message-input-wrapper .btn-icon,
     .btn-send-message {
-        min-width: 44px;
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        min-height: 40px;
+    }
+
+    .friend-item {
+        padding: 10px 12px;
+        min-height: 52px;
+        box-sizing: border-box;
+    }
+
+    .friend-item-avatar {
+        width: 40px;
+        height: 40px;
+        min-width: 40px;
+        min-height: 40px;
+    }
+
+    .friend-item-name {
+        font-size: 14px;
+    }
+
+    .member-item {
+        padding: 8px 10px;
+        min-height: 48px;
+    }
+
+    .member-avatar-yellow,
+    .member-avatar {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        min-height: 36px;
+    }
+
+    .member-item .member-name {
+        font-size: 13px;
+    }
+
+    .member-action-btn {
+        width: 36px;
+        min-width: 36px;
+        height: 36px;
+        min-height: 36px;
+    }
+
+    .home-nav-item {
         min-height: 44px;
+        padding: 10px 12px;
+    }
+
+    .dm-list .dm-list-item {
+        min-height: 44px;
+        padding: 10px 12px;
     }
 
     .friends-view .friends-search-wrapper input {
         min-height: 44px;
         font-size: 16px;
     }
-
-    .dm-list .dm-list-item {
-        min-height: 48px;
-        padding: 10px 12px;
-    }
-
-    .home-nav-item {
-        min-height: 44px;
-        padding: 10px 14px;
-    }
 }
 
-/* ─── 400px: telemóveis pequenos ─── */
+/* ─── 400px: ecrãs pequenos ─── */
 @media (max-width: 400px) {
+    :root {
+        --server-sidebar-width: 48px;
+    }
+
     .server-sidebar {
-        width: 52px;
+        width: 48px;
+        min-width: 48px;
     }
 
     .server-icon {
-        width: 40px;
-        height: 40px;
-        min-width: 40px;
-        min-height: 40px;
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        min-height: 38px;
     }
 
     .channel-sidebar {
-        width: 100%;
-        max-width: 100%;
-        border-radius: 0;
+        width: min(240px, calc(100vw - 48px - 12px));
     }
 
-    .channel-header .channel-info h3 {
-        max-width: 100px;
-        font-size: 14px;
-    }
-
-    .channel-actions .btn-icon {
-        min-width: 40px;
-        min-height: 40px;
-    }
-
-    .friends-header {
-        padding: 10px 12px;
-    }
-
-    .friends-tabs .tab {
-        padding: 10px 12px;
-        min-height: 44px;
-    }
-
-    .modal-overlay {
-        padding: 0;
-        align-items: flex-end;
-    }
-
-    .modal-overlay .modal {
-        max-width: 100%;
-        width: 100%;
-        max-height: 90vh;
-        border-radius: 16px 16px 0 0;
-        margin-bottom: env(safe-area-inset-bottom);
-    }
-
-    .player-banner-card,
-    .profile-card-modal .profile-card-modal-inner {
-        max-width: 100%;
-        margin: 12px;
-        margin-bottom: max(12px, env(safe-area-inset-bottom));
-    }
-}
-
-/* ─── 360px: ecrãs muito pequenos ─── */
-@media (max-width: 360px) {
     .channel-header {
         padding-left: 8px;
         padding-right: 8px;
     }
 
-    .channel-actions .btn-icon {
+    .channel-info h3 {
+        max-width: 42vw;
+        font-size: 13px;
+    }
+
+    .channel-actions .btn-icon,
+    .channel-sidebar-toggle.mobile-only {
+        width: 36px;
         min-width: 36px;
+        height: 36px;
         min-height: 36px;
     }
 
-    .message-input-container {
-        padding-left: 8px;
-        padding-right: 8px;
+    .messages-container {
+        padding: 10px;
     }
 
-    .message-input-wrapper {
-        padding: 8px 0 8px 0;
+    .message-input-container {
+        padding: 8px 10px;
+        padding-bottom: max(8px, env(safe-area-inset-bottom));
     }
 
     .friend-item,
     .member-item {
-        padding: 10px 8px;
+        padding: 8px 10px;
     }
 }
 
-/* ─── Touch: evitar hover como único feedback ─── */
+/* ─── Touch: áreas de toque mínimas ─── */
 @media (hover: none) and (pointer: coarse) {
     .btn-icon,
     .channel-sidebar-toggle,
     .server-icon,
-    .friend-item,
-    .member-item,
-    .dm-list-item,
     .home-nav-item,
-    .channel-item {
+    .dm-list-item {
         min-height: 44px;
     }
-
     .btn-icon {
         min-width: 44px;
     }
-
-    /* Aumentar área clicável dos botões do input de mensagem */
-    .message-input-wrapper .btn-icon,
-    .input-actions .btn-icon {
-        padding: 10px;
-        min-width: 44px;
-        min-height: 44px;
-    }
-
-    .attach-btn,
-    #emoji-btn,
-    #send-message-btn {
-        min-width: 44px;
-        min-height: 44px;
-    }
-
-    /* Remover hover que depende de cursor para ações críticas */
-    .friend-item:active,
-    .member-item:active {
-        background: rgba(255, 215, 0, 0.12);
-    }
 }
 
-/* Modais em fullscreen em mobile */
+/* Modais em mobile: não sobrepor conteúdo */
 @media (max-width: 480px) {
-    .modal-overlay .modal.modal-full,
-    .settings-overlay {
-        max-height: 100vh;
-        max-height: 100dvh;
-        border-radius: 0;
+    .modal-overlay {
+        padding: 0;
+        align-items: flex-end;
     }
-
-    .modal-overlay .security-warning-modal,
-    .modal-overlay .modal:not(.modal-full) {
-        width: calc(100% - 24px);
+    .modal-overlay .modal {
         max-width: 100%;
+        width: 100%;
+        max-height: 85vh;
+        max-height: 85dvh;
+        border-radius: 16px 16px 0 0;
+        margin-bottom: env(safe-area-inset-bottom);
+    }
+    .player-banner-card {
+        max-width: calc(100% - 24px);
         margin: 12px;
         margin-bottom: max(12px, env(safe-area-inset-bottom));
-    }
-}
-
-/* Input de mensagem: fixo no fundo com safe area */
-@media (max-width: 768px) {
-    .message-input-container {
-        background: rgba(18, 16, 14, 0.98);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border-top: 1px solid rgba(255, 215, 0, 0.08);
     }
 }

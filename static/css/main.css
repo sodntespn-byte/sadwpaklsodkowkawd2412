@@ -1782,3 +1782,96 @@ a:hover {
     .member-item { padding: 6px 8px; }
     .member-item-actions { flex-wrap: wrap; }
 }
+
+/* ═══════════════════════════════════════════
+   UI CLÁSSICA — menos parecido com Discord
+   Bordas mais retas, menos glow, listas tradicionais
+   ═══════════════════════════════════════════ */
+.server-item:hover .server-icon,
+.server-item.active .server-icon {
+    box-shadow: none;
+}
+.server-item:hover .server-icon {
+    background: rgba(255, 215, 0, 0.12);
+    border-color: rgba(255, 215, 0, 0.2);
+}
+.server-item.active .server-icon {
+    background: var(--primary-yellow);
+    color: var(--primary-black);
+}
+.server-indicator {
+    box-shadow: none;
+}
+.channel-item {
+    border-radius: 6px;
+}
+.channel-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+.channel-item.active {
+    background: rgba(255, 215, 0, 0.1);
+    color: var(--primary-yellow);
+}
+.channel-item.active i {
+    color: var(--primary-yellow);
+}
+.member-item {
+    border-radius: 6px;
+}
+.btn-icon {
+    border-radius: 8px;
+}
+.message-input-container .message-input-wrapper {
+    border-radius: 10px;
+}
+
+/* ═══════════════════════════════════════════
+   UI CLÁSSICA — menos parecida com Discord
+   ═══════════════════════════════════════════ */
+.server-indicator {
+    width: 3px;
+    left: 0;
+    border-radius: 0;
+}
+.server-item.active .server-icon {
+    box-shadow: none;
+}
+.server-item:hover .server-icon {
+    box-shadow: none;
+}
+.channel-sidebar {
+    background: #0c0c0c;
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
+}
+.channel-item {
+    margin: 0 8px;
+    padding: 6px 10px;
+    border-left: 3px solid transparent;
+}
+.channel-item.active {
+    border-left-color: var(--primary-yellow);
+    background: rgba(255, 255, 255, 0.04);
+}
+.members-sidebar {
+    background: #0c0c0c;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+.member-item {
+    margin: 0 6px;
+    padding: 6px 8px;
+}
+.channel-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: #0a0a0a;
+}
+.home-nav-item {
+    border-radius: 6px;
+}
+.dm-list-item {
+    border-radius: 6px;
+    margin: 2px 8px;
+}
+.friends-tabs .tab,
+.friends-tab {
+    border-radius: 8px;
+}

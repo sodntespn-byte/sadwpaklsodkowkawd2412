@@ -530,11 +530,32 @@ class LibertyApp {
             } catch (_) {}
         }
         this.showApp();
-        this.renderServers();
-        this.updateUserPanel();
-        this.selectHome();
-        this.loadFriends().catch(() => {});
-        this._startActivityPing();
+        try {
+            this.renderServers();
+            this.updateUserPanel();
+            this.selectHome();
+            this.loadFriends().catch(() => {});
+            this._startActivityPing();
+            this._refreshUIAfterConnect();
+        } catch (e) {
+            console.warn('connect UI:', e);
+            this._refreshUIAfterConnect();
+        }
+    }
+
+    _refreshUIAfterConnect() {
+        requestAnimationFrame(() => {
+            this.updateUserPanel();
+            this.renderServers();
+            if (this.isHomeView) {
+                const dmList = document.getElementById('dm-list');
+                const navArea = document.querySelector('.home-nav');
+                if (dmList && navArea) { dmList.innerHTML = ''; this._loadDMList(dmList, navArea, { mergeFriends: true }); }
+                this.renderFriendsView(this.currentFriendsTab || 'online').catch(() => {});
+            }
+            const channelList = document.getElementById('channel-list');
+            if (channelList && this.currentServer) this.renderChannels();
+        });
     }
 
     _startActivityPing() {
@@ -604,12 +625,15 @@ class LibertyApp {
     }
 
     showApp() {
-        document.getElementById('loading-screen')?.classList?.add('fade-out');
-        document.getElementById('auth-screen')?.classList?.add('hidden');
+        const loading = document.getElementById('loading-screen');
+        const auth = document.getElementById('auth-screen');
+        const app = document.getElementById('app');
+        auth?.classList.add('hidden');
+        loading?.classList.add('fade-out');
+        app?.classList.remove('hidden');
         setTimeout(() => {
-            document.getElementById('loading-screen')?.classList?.add('hidden');
-            document.getElementById('app')?.classList?.remove('hidden');
-        }, 350);
+            loading?.classList.add('hidden');
+        }, 400);
     }
 
     // ═══════════════════════════════════════════
@@ -4093,12 +4117,7 @@ class LibertyApp {
             item.addEventListener('click', () => {
                 const section = item.dataset.section;
                 if (section === 'logout') {
-                    if (this._activityPingInterval) {
-                        clearInterval(this._activityPingInterval);
-                        this._activityPingInterval = null;
-                    }
-                    API.Auth.logout();
-                    window.location.reload();
+                    this._doLogout();
                     return;
                 }
                 if (section === 'delete-server') {
@@ -4502,8 +4521,7 @@ class LibertyApp {
                     if (!confirm('Tem certeza? Todos os dados locais (contas, servidores, mensagens) serão removidos.')) return;
                     ['access_token', 'refresh_token', 'liberty_token', 'token', 'liberty_username'].forEach(k => localStorage.removeItem(k));
                     this.showToast('Dados locais removidos.', 'success');
-                    this.hideSettingsPanel();
-                    setTimeout(() => window.location.reload(), 800);
+                    setTimeout(() => this._doLogout(), 400);
                 });
             }
         }
@@ -4620,6 +4638,27 @@ class LibertyApp {
                 });
             }
         }
+    }
+
+    _doLogout() {
+        if (this._activityPingInterval) {
+            clearInterval(this._activityPingInterval);
+            this._activityPingInterval = null;
+        }
+        if (this.gateway && typeof this.gateway.disconnect === 'function') this.gateway.disconnect();
+        API.Auth.logout();
+        this.currentUser = null;
+        this.servers = [];
+        this.channels = [];
+        this.members = [];
+        this.currentServer = null;
+        this.currentChannel = null;
+        this.isHomeView = true;
+        this.gateway = null;
+        this.hideSettingsPanel();
+        this.hideProfileCard();
+        document.getElementById('app')?.classList.add('hidden');
+        document.getElementById('auth-screen')?.classList.remove('hidden');
     }
 
     hideSettingsPanel() {
