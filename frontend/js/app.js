@@ -740,6 +740,13 @@ class LibertyApp {
     layer.classList.remove('app-bg-layer--image');
     const existingImg = layer.querySelector('.app-bg-layer-img');
     if (existingImg) existingImg.remove();
+    let overlay = layer.querySelector('.app-bg-layer-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'app-bg-layer-overlay';
+      overlay.setAttribute('aria-hidden', 'true');
+      layer.appendChild(overlay);
+    }
 
     if (type === 'solid') {
       layer.style.backgroundRepeat = 'no-repeat';
@@ -771,13 +778,21 @@ class LibertyApp {
         layer.classList.add('app-bg-layer--image');
         layer.style.background = '';
         layer.style.backgroundImage = '';
-        layer.style.backgroundColor = 'transparent';
+        layer.style.backgroundColor = '#000';
         const img = document.createElement('img');
         img.className = 'app-bg-layer-img';
         img.alt = '';
-        img.src = url;
         img.setAttribute('loading', 'eager');
+        img.onerror = () => {
+          img.remove();
+          layer.style.backgroundColor = '#000';
+          if (typeof this !== 'undefined' && this.showToast) this.showToast('Não foi possível carregar a imagem/GIF. Verifique a URL.', 'error');
+        };
+        img.onload = () => { img.style.opacity = '1'; };
+        img.style.opacity = '0';
+        img.src = url;
         layer.appendChild(img);
+        if (overlay && overlay.parentNode === layer) { layer.appendChild(overlay); }
       } else {
         layer.style.backgroundColor = '#000';
         layer.style.backgroundImage = '';
@@ -943,6 +958,37 @@ class LibertyApp {
     }, 60 * 1000);
   }
 
+  _getPlaceholderAvatarUrl(name) {
+    const n = (name || 'U').toString().trim() || 'U';
+    const letter = n.charAt(0).toUpperCase();
+    const colors = [
+      '#E91E63', '#9C27B0', '#673AB7', '#3F51B5', '#2196F3', '#03A9F4', '#00BCD4',
+      '#009688', '#4CAF50', '#8BC34A', '#CDDC39', '#FFEB3B', '#FFC107', '#FF9800', '#FF5722', '#795548'
+    ];
+    let hash = 0;
+    for (let i = 0; i < n.length; i++) hash = ((hash << 5) - hash) + n.charCodeAt(i);
+    const color = colors[Math.abs(hash) % colors.length];
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(64, 64, 64, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 56px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(letter, 64, 64);
+      return canvas.toDataURL('image/png');
+    } catch (_) {
+      return null;
+    }
+  }
+
   _getAvatarUrl() {
     const u = this.currentUser;
     let url = (u && (u.avatar_url || u.avatar)) || null;
@@ -952,7 +998,7 @@ class LibertyApp {
         if (local && local.trim()) url = local.trim();
       } catch (_) {}
     }
-    if (!url) return null;
+    if (!url) return this._getPlaceholderAvatarUrl(u?.username || u?.display_name || 'U');
     const bust = this._avatarCacheBuster;
     const sep = url.includes('?') ? '&' : '?';
     return bust ? `${url}${sep}_=${bust}` : url;
@@ -5833,7 +5879,7 @@ class LibertyApp {
                     <h3>BANNER DO PERFIL (CAPA)</h3>
                     <p>URL da imagem de capa que aparece no seu perfil (ex.: ao abrir o seu perfil no centro do ecrã).</p>
                     <div class="input-row" style="align-items:center;gap:12px;flex-wrap:wrap">
-                        <input type="url" id="settings-banner-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-capa.jpg" value="${this.escapeHtml(this.currentUser?.banner_url || '')}" style="flex:1;min-width:200px" />
+                        <input type="url" id="settings-banner-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-capa.jpg" value="${this.escapeHtml(this.currentUser?.banner_url || (typeof localStorage !== 'undefined' ? localStorage.getItem('liberty_banner_url') : null) || '')}" style="flex:1;min-width:200px" />
                         <button type="button" class="btn-save" id="settings-save-banner-btn">Salvar banner</button>
                     </div>
                 </div>
@@ -5890,7 +5936,10 @@ class LibertyApp {
         const u = this.currentUser;
         const displayName = u?.username || 'User';
         const aboutMe = u?.description || '';
-        const bannerUrl = u?.banner_url || '';
+        let bannerUrl = u?.banner_url || '';
+        if (!bannerUrl && typeof localStorage !== 'undefined') {
+          try { bannerUrl = localStorage.getItem('liberty_banner_url') || ''; } catch (_) {}
+        }
         const profileColor = (typeof localStorage !== 'undefined' && localStorage.getItem('liberty_accent_color')) || '#FFD700';
         const avatarUrl = this._getAvatarUrl ? this._getAvatarUrl() : (u?.avatar_url || u?.avatar || '');
         const hasAvatar = !!avatarUrl;
@@ -5972,10 +6021,16 @@ class LibertyApp {
                     </div>
                 </div>
                 <div id="settings-bg-image-wrap" class="settings-bg-pane" style="display:${bgType === 'image' ? 'block' : 'none'}">
-                    <div class="settings-section-block" style="margin-bottom:0">
+                    <div class="settings-section-block" style="margin-bottom:12px">
                         <h3 style="margin-top:0">URL da imagem ou GIF</h3>
-                        <p class="settings-row-desc" style="margin-bottom:8px">Cole o link de uma imagem ou GIF. Será redimensionada para cobrir o fundo.</p>
+                        <p class="settings-row-desc" style="margin-bottom:10px">Cole o link de uma imagem ou GIF. O fundo ficará coberto com um overlay preto suave para melhor leitura.</p>
                         <input type="url" id="settings-bg-image-url" value="${this.escapeHtml(bgImage)}" placeholder="https://exemplo.com/imagem.jpg ou .gif" style="width:100%;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit;box-sizing:border-box" />
+                    </div>
+                    <div id="settings-bg-image-preview-wrap" class="settings-bg-preview" style="display:${bgImage ? 'block' : 'none'};margin-top:12px">
+                        <div class="settings-bg-preview-label">Pré-visualização do fundo</div>
+                        <div class="settings-bg-preview-box" id="settings-bg-image-preview">
+                            ${bgImage ? `<img src="${this.escapeHtml(bgImage)}" alt="" class="settings-bg-preview-img" onerror="this.parentElement.classList.add('error')" onload="this.parentElement.classList.remove('error')">` : ''}
+                        </div>
                     </div>
                 </div>
                 <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
@@ -6304,9 +6359,8 @@ class LibertyApp {
             this.showToast('URL deve começar por http://, https:// ou /uploads/', 'error');
             return;
           }
-          if (this.currentUser) {
-            this.currentUser.banner_url = url;
-          }
+          if (this.currentUser) this.currentUser.banner_url = url;
+          try { localStorage.setItem('liberty_banner_url', url); } catch (_) {}
           if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
             API.User.updateCurrentUser({ banner_url: url })
               .then(() => {
@@ -6452,6 +6506,7 @@ class LibertyApp {
                 .then(r => {
                   const url = r && r.avatar_url ? r.avatar_url : dataUrl;
                   if (this.currentUser) { this.currentUser.avatar_url = url; this.currentUser.avatar = url; }
+                  try { localStorage.setItem('liberty_avatar_url', url); } catch (_) {}
                   this._avatarCacheBuster = Date.now();
                   this._updateUserAvatarInUI();
                   if (previewAvatar) {
@@ -6476,6 +6531,7 @@ class LibertyApp {
             return;
           }
           if (this.currentUser) this.currentUser.banner_url = url || null;
+          try { if (url) localStorage.setItem('liberty_banner_url', url); else localStorage.removeItem('liberty_banner_url'); } catch (_) {}
           if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
             API.User.updateCurrentUser({ banner_url: url || '' })
               .then(() => {
@@ -6775,6 +6831,19 @@ class LibertyApp {
       const solidWrap = content.querySelector('#settings-bg-solid-wrap');
       const gradientWrap = content.querySelector('#settings-bg-gradient-wrap');
       const imageWrap = content.querySelector('#settings-bg-image-wrap');
+      const bgImageUrlInput = content.querySelector('#settings-bg-image-url');
+      const bgPreviewWrap = content.querySelector('#settings-bg-image-preview-wrap');
+      const bgPreviewBox = content.querySelector('#settings-bg-image-preview');
+      const updateBgImagePreview = () => {
+        const url = (bgImageUrlInput && bgImageUrlInput.value || '').trim();
+        if (bgPreviewWrap) bgPreviewWrap.style.display = url ? 'block' : 'none';
+        if (bgPreviewBox) {
+          bgPreviewBox.classList.remove('error');
+          bgPreviewBox.innerHTML = url ? `<img src="${this.escapeHtml(url)}" alt="" class="settings-bg-preview-img" onerror="this.parentElement.classList.add('error')" onload="this.parentElement.classList.remove('error')">` : '';
+        }
+      };
+      if (bgImageUrlInput) bgImageUrlInput.addEventListener('input', updateBgImagePreview);
+      if (bgImageUrlInput) bgImageUrlInput.addEventListener('change', updateBgImagePreview);
       const applyBtn = content.querySelector('#settings-bg-apply');
       const resetBtn = content.querySelector('#settings-bg-reset');
       const setBgType = type => {
@@ -6881,6 +6950,10 @@ class LibertyApp {
           if (angleEl) angleEl.value = '135';
           const imgUrl = content.querySelector('#settings-bg-image-url');
           if (imgUrl) imgUrl.value = '';
+          const pw = content.querySelector('#settings-bg-image-preview-wrap');
+          const pb = content.querySelector('#settings-bg-image-preview');
+          if (pw) pw.style.display = 'none';
+          if (pb) pb.innerHTML = '';
           this.showToast('Fundo preto restaurado.', 'success');
         });
       }
