@@ -316,6 +316,9 @@
                 <div class="webrtc-call-stage">
                     <div class="webrtc-remote-wrap">
                         <video id="webrtc-remote-video" class="webrtc-video hidden" autoplay playsinline></video>
+                        <div id="webrtc-remote-screen-wrap" class="webrtc-screen-wrap hidden">
+                            <video id="webrtc-remote-screen" class="webrtc-video" autoplay playsinline></video>
+                        </div>
                         <span id="webrtc-screen-badge" class="webrtc-screen-badge hidden"><i class="fas fa-desktop"></i> Compartilhando tela</span>
                         <div class="webrtc-remote-placeholder" id="webrtc-remote-placeholder">
                             <i class="fas fa-user-friends webrtc-placeholder-icon"></i>
@@ -414,6 +417,25 @@
          MODAIS (dentro de modal-overlay)
          ══════════════════════════════ -->
     <div id="modal-overlay" class="modal-overlay hidden" role="presentation">
+
+        <!-- Modal: Aviso de segurança da conta (após login/registo) -->
+        <div id="security-warning-modal" class="modal security-warning-modal hidden" role="dialog" aria-modal="true" aria-labelledby="security-warning-title">
+            <div class="security-warning-card">
+                <div class="security-warning-icon" aria-hidden="true"><i class="fas fa-shield-alt"></i></div>
+                <h2 id="security-warning-title" class="security-warning-title">Segurança da conta</h2>
+                <p class="security-warning-text">Recomendamos que ative uma senha e reveja as opções de privacidade para proteger a sua conta LIBERTY.</p>
+                <div class="security-warning-actions">
+                    <button type="button" class="btn btn-primary" id="security-warning-privacy-btn">
+                        <i class="fas fa-lock" aria-hidden="true"></i>
+                        <span>Privacidade e Segurança</span>
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="security-warning-ignore-btn">
+                        <span>Ignorar</span>
+                    </button>
+                </div>
+                <p class="security-warning-hint">Se ignorar, irá entrar agora. Pode alterar isto depois em Configurações.</p>
+            </div>
+        </div>
 
         <!-- Modal: Criar Servidor -->
         <div id="create-server-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="create-server-title">

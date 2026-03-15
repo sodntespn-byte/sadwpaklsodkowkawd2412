@@ -639,7 +639,7 @@ async function start() {
         [name, emailVal, password_hash]
       );
       const row = r.rows[0];
-      const user = { id: String(row.id), username: row.username, email: row.email };
+      const user = { id: String(row.id), username: row.username, email: row.email, has_password: Boolean(password_hash) };
       await ensureUserInLibertyServer(row.id);
       const access_token = auth.sign(user);
       res.cookie('liberty_token', access_token, {
@@ -1483,8 +1483,8 @@ async function start() {
     }
     const { avatar_url } = req.body || {};
     const url = avatar_url != null ? String(avatar_url).trim() : null;
-    if (url !== null && url.length > 0 && !/^https?:\/\//i.test(url)) {
-      return res.status(400).json({ message: 'avatar_url deve ser uma URL (http ou https)' });
+    if (url !== null && url.length > 0 && !/^https?:\/\//i.test(url) && !/^\//.test(url)) {
+      return res.status(400).json({ message: 'avatar_url deve ser uma URL (http/https) ou caminho (/uploads/...)' });
     }
     try {
       await db.query(

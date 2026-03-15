@@ -115,7 +115,7 @@
 .settings-overlay .settings-sidebar{flex:0 0 auto;background:var(--secondary-black);display:flex;justify-content:flex-end;overflow-y:auto;min-width:218px;padding-left:max(20px,calc(50vw - 480px))}
 .settings-overlay .settings-sidebar-inner{width:218px;padding:60px 6px 20px 20px;flex-shrink:0}
 .settings-overlay .settings-sidebar-profile{display:flex;align-items:center;gap:10px;padding:8px 10px;margin-bottom:4px;border-radius:var(--radius-md);background:rgba(255,255,255,.03)}
-.settings-overlay .settings-sidebar-profile-avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--primary-black);flex-shrink:0}
+.settings-overlay .settings-sidebar-profile-avatar{width:32px;height:32px;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,var(--primary-yellow),var(--dark-yellow));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--primary-black);flex-shrink:0}
 .settings-overlay .settings-sidebar-profile-info{min-width:0}
 .settings-overlay .settings-sidebar-profile-name{font-size:13px;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .settings-overlay .settings-sidebar-profile-link{font-size:11px;color:var(--primary-yellow);cursor:pointer}
@@ -150,6 +150,14 @@
 .settings-overlay .settings-avatar-url-row{display:flex;gap:10px;width:100%;max-width:400px;flex-wrap:wrap}
 .settings-overlay .settings-avatar-url-input{flex:1;min-width:180px;padding:10px 14px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.08);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit}
 .settings-overlay .settings-avatar-url-input:focus{outline:none;border-color:var(--primary-yellow)}
+.settings-overlay .settings-avatar-card-improved{padding:24px;border-radius:var(--radius-lg);border:1px solid rgba(255,215,0,.12)}
+.settings-overlay .settings-avatar-card-title{font-size:15px;font-weight:700;color:var(--text-primary);margin:0 0 6px;display:flex;align-items:center;gap:8px}
+.settings-overlay .settings-avatar-card-title i{color:var(--primary-yellow)}
+.settings-overlay .settings-avatar-card-desc{font-size:13px;color:var(--text-muted);margin:0 0 20px;line-height:1.45}
+.settings-overlay .settings-avatar-preview-wrap{width:180px;height:180px;margin:0 auto 20px}
+.settings-overlay .settings-avatar-remove-btn{display:inline-flex;align-items:center;gap:8px;margin-top:12px;padding:8px 14px;background:rgba(229,57,53,.15);border:1px solid rgba(229,57,53,.3);border-radius:var(--radius-md);color:#ff6b6b;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.settings-overlay .settings-avatar-remove-btn:hover{background:rgba(229,57,53,.25)}
+.settings-overlay .settings-sidebar-profile-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .settings-overlay .settings-subscription-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:24px}
 .settings-overlay .settings-subscription-label{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--text-primary)}
 .settings-overlay .settings-subscription-label i{color:var(--primary-yellow)}
@@ -158,6 +166,8 @@
 .settings-overlay .settings-section-block p{font-size:13px;color:var(--text-secondary);line-height:1.5;margin:0 0 10px}
 .settings-overlay .settings-section-block .input-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
 .settings-overlay .settings-section-block input[type="text"],.settings-overlay .settings-section-block input[type="url"]{flex:1;min-width:200px;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit}
+.settings-overlay .settings-password-input{width:100%;max-width:320px;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit;box-sizing:border-box}
+.settings-overlay .settings-password-input:focus{outline:none;border-color:var(--primary-yellow)}
 .settings-overlay .settings-section-block input:focus{outline:none;border-color:var(--primary-yellow)}
 .settings-overlay .settings-section-block .btn-save{background:var(--primary-yellow);color:var(--primary-black);border:none;padding:10px 18px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 .settings-overlay .settings-section-block .btn-save:hover{background:var(--dark-yellow);color:var(--primary-black)}
@@ -374,13 +384,17 @@ class LibertyApp {
         body.style.backgroundImage = '';
         body.style.backgroundSize = '';
         body.style.backgroundPosition = '';
+        body.style.backgroundRepeat = '';
+        body.style.backgroundAttachment = '';
         if (type === 'default') {
             body.style.background = '#000';
+            body.style.backgroundColor = '#000';
             return;
         }
         if (type === 'solid') {
             const color = localStorage.getItem('liberty-bg-solid') || '#000000';
             body.style.background = color;
+            body.style.backgroundColor = color;
             return;
         }
         if (type === 'gradient') {
@@ -390,16 +404,20 @@ class LibertyApp {
                 const c1 = g.color1 || '#0d0b09';
                 const c2 = g.color2 || '#1a1814';
                 body.style.background = `linear-gradient(${angle}deg, ${c1}, ${c2})`;
-            } catch (_) { body.style.background = '#000'; }
+                body.style.backgroundColor = c1;
+            } catch (_) { body.style.background = '#000'; body.style.backgroundColor = '#000'; }
             return;
         }
         if (type === 'image') {
             const url = (localStorage.getItem('liberty-bg-image') || '').trim();
             body.style.background = '#000';
+            body.style.backgroundColor = '#000';
             if (url) {
                 body.style.backgroundImage = `url(${url})`;
                 body.style.backgroundSize = 'cover';
                 body.style.backgroundPosition = 'center';
+                body.style.backgroundRepeat = 'no-repeat';
+                body.style.backgroundAttachment = 'fixed';
             }
         }
     }
@@ -497,8 +515,29 @@ class LibertyApp {
         }, 60 * 1000);
     }
 
+    _getAvatarUrl() {
+        const u = this.currentUser;
+        const fromUser = u && (u.avatar_url || u.avatar);
+        if (fromUser) return fromUser;
+        try {
+            const local = localStorage.getItem('liberty_avatar_url');
+            if (local && local.trim()) return local.trim();
+        } catch (_) {}
+        return null;
+    }
+
     _updateUserAvatarInUI() {
         this.updateUserPanel();
+        const sidebarAvatar = document.querySelector('.settings-sidebar-profile-avatar');
+        if (sidebarAvatar && this.currentUser) {
+            const avatarSrc = this._getAvatarUrl();
+            const letter = (this.currentUser.username || 'U').charAt(0).toUpperCase();
+            if (avatarSrc) {
+                sidebarAvatar.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--primary-black)">${letter}</span>`;
+            } else {
+                sidebarAvatar.innerHTML = `<span>${letter}</span>`;
+            }
+        }
     }
 
     updateUserPanel() {
@@ -511,7 +550,7 @@ class LibertyApp {
             const letter = (this.currentUser.username || 'U').charAt(0).toUpperCase();
             const statusColor = this.currentStatus === 'invisible' ? 'var(--status-offline)' : `var(--status-${this.currentStatus})`;
             avatarEl.style.setProperty('--status-color', statusColor);
-            const avatarSrc = this.currentUser.avatar_url || this.currentUser.avatar;
+            const avatarSrc = this._getAvatarUrl();
             avatarEl.innerHTML = avatarSrc
                 ? `<img src="${this.escapeHtml(avatarSrc)}" alt="${this.escapeHtml(this.currentUser.username)}"><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`
                 : `<span>${letter}</span><span class="user-avatar-status" id="user-avatar-status" data-status="${this.currentStatus}"></span>`;
@@ -819,9 +858,11 @@ class LibertyApp {
         const remoteS = document.getElementById('webrtc-remote-screen');
         const screenWrap = document.getElementById('webrtc-remote-screen-wrap');
         const placeholder = document.getElementById('webrtc-remote-placeholder');
+        const badge = document.getElementById('webrtc-screen-badge');
         if (remoteV) { remoteV.srcObject = null; remoteV.classList.add('hidden'); }
         if (remoteS) { remoteS.srcObject = null; }
         if (screenWrap) screenWrap.classList.add('hidden');
+        if (badge) badge.classList.add('hidden');
         if (placeholder) placeholder.classList.remove('hidden');
     }
 
@@ -843,8 +884,10 @@ class LibertyApp {
             if (isScreen) {
                 const wrap = document.getElementById('webrtc-remote-screen-wrap');
                 const vid = document.getElementById('webrtc-remote-screen');
+                const badge = document.getElementById('webrtc-screen-badge');
                 if (vid) { vid.srcObject = stream; vid.classList.remove('hidden'); }
                 if (wrap) wrap.classList.remove('hidden');
+                if (badge) badge.classList.remove('hidden');
             } else {
                 const vid = document.getElementById('webrtc-remote-video');
                 if (vid) { vid.srcObject = stream; vid.classList.remove('hidden'); }
@@ -853,8 +896,10 @@ class LibertyApp {
                 if (isScreen) {
                     const wrap = document.getElementById('webrtc-remote-screen-wrap');
                     const vid = document.getElementById('webrtc-remote-screen');
+                    const badge = document.getElementById('webrtc-screen-badge');
                     if (vid) vid.srcObject = null;
                     if (wrap) wrap.classList.add('hidden');
+                    if (badge) badge.classList.add('hidden');
                 } else {
                     const vid = document.getElementById('webrtc-remote-video');
                     if (vid) { vid.srcObject = null; vid.classList.add('hidden'); }
@@ -907,8 +952,10 @@ class LibertyApp {
         g.on('stream_stopped', () => {
             const wrap = document.getElementById('webrtc-remote-screen-wrap');
             const vid = document.getElementById('webrtc-remote-screen');
+            const badge = document.getElementById('webrtc-screen-badge');
             if (vid) vid.srcObject = null;
             if (wrap) wrap.classList.add('hidden');
+            if (badge) badge.classList.add('hidden');
         });
     }
 
@@ -947,6 +994,7 @@ class LibertyApp {
         const payload = pendingOffer.payload;
         this._voiceCallState.pendingOffer = null;
         this._voiceCallState.targetUserId = from;
+        this._voiceCallState.videoEnabled = true;
         try {
             this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
         } catch (e) {
@@ -960,6 +1008,15 @@ class LibertyApp {
         pc.ontrack = (e) => this._attachRemoteTrack(e);
         pc.onicecandidate = (e) => {
             if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: from, payload: e.candidate });
+        };
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                this._webrtcClearRemote();
+                const voiceView = document.getElementById('voice-call-view');
+                if (voiceView) voiceView.classList.add('hidden');
+                const localV = document.getElementById('webrtc-local-video');
+                if (localV) localV.srcObject = null;
+            }
         };
         pc.setRemoteDescription(new RTCSessionDescription(payload))
             .then(() => pc.createAnswer())
@@ -1054,6 +1111,15 @@ class LibertyApp {
             pc.ontrack = (e) => this._attachRemoteTrack(e);
             pc.onicecandidate = (e) => {
                 if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: e.candidate });
+            };
+            pc.onconnectionstatechange = () => {
+                if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+                    this._webrtcClearRemote();
+                    const voiceView = document.getElementById('voice-call-view');
+                    if (voiceView) voiceView.classList.add('hidden');
+                    const localV = document.getElementById('webrtc-local-video');
+                    if (localV) localV.srcObject = null;
+                }
             };
             this._voiceCallState.pc = pc;
             pc.createOffer()
@@ -1815,6 +1881,26 @@ class LibertyApp {
         return minutes + ' min';
     }
 
+    _rankingActivityProgress(minutes) {
+        const m = minutes || 0;
+        if (m < 5) return Math.min(100, (m / 5) * 100);
+        const level = Math.floor(Math.log(m / 5) / Math.log(1.2)) + 1;
+        const minForL = 5 * Math.pow(1.2, level - 1);
+        const minForNext = minForL * 1.2;
+        const pct = ((m - minForL) / (minForNext - minForL)) * 100;
+        return Math.min(100, Math.max(0, pct));
+    }
+
+    _rankingXpProgress(xp) {
+        const x = xp || 0;
+        if (x < 500) return Math.min(100, (x / 500) * 100);
+        const level = Math.floor(Math.log(x / 500) / Math.log(1.2)) + 1;
+        const xpForL = 500 * Math.pow(1.2, level - 1);
+        const xpForNext = xpForL * 1.2;
+        const pct = ((x - xpForL) / (xpForNext - xpForL)) * 100;
+        return Math.min(100, Math.max(0, pct));
+    }
+
     async renderRankingsView() {
         const friendsView = document.getElementById('friends-view');
         const messagesContainer = document.getElementById('messages-container');
@@ -1833,20 +1919,24 @@ class LibertyApp {
             const byActivity = data?.by_activity || [];
             const byContent = data?.by_content || [];
             const renderRankRow = (row, type) => {
-                const initials = (row.username || 'U').slice(0, 2).toUpperCase().replace(/\s/g, '') || 'U';
+                const name = (row.username || 'User').trim();
+                const displayName = name.slice(0, 2).toUpperCase().replace(/\s/g, '') || 'U';
+                const progress = type === 'activity' ? this._rankingActivityProgress(row.minutes) : this._rankingXpProgress(row.xp);
+                const levelLabel = row.level != null && row.level > 0 ? row.level : 'UNKNOWN';
                 const stat = type === 'activity'
-                    ? `${this._formatActivityTime(row.minutes || 0)} · Nível ${row.level || 0 ? row.level : 'UNKNOWN'}`
-                    : `${row.xp || 0} XP · Nível ${row.level || 0 ? row.level : 'UNKNOWN'}`;
+                    ? `${this._formatActivityTime(row.minutes || 0)} · Nível ${levelLabel}`
+                    : `${row.xp || 0} XP · Nível ${levelLabel}`;
                 return `<div class="ranking-item" data-user-id="${this.escapeHtml(row.id)}">
-                    <span class="rank">#${row.rank}</span>
-                    <div class="rank-avatar"><span>${this.escapeHtml(initials)}</span></div>
-                    <div class="rank-info">
-                        <span class="rank-name">${this.escapeHtml(row.username || 'User')}</span>
-                        <span class="rank-stat">${stat}</span>
+                    <span class="ranking-item-rank">#${row.rank}</span>
+                    <div class="ranking-bar-wrap">
+                        <div class="ranking-bar-fill" style="width:${Math.max(12, progress)}%">
+                            <span class="ranking-bar-name">${this.escapeHtml(displayName)}</span>
+                        </div>
                     </div>
+                    <div class="ranking-bar-detail">${this.escapeHtml(name)} ${stat}</div>
                 </div>`;
             };
-            let html = `
+            const html = `
                 <div class="ranking-view">
                     <div class="ranking-header">
                         <i class="fas fa-trophy ranking-icon" aria-hidden="true"></i>
@@ -1870,7 +1960,7 @@ class LibertyApp {
                         </div>
                     </div>
                     <div class="ranking-footer">
-                        <i class="fas fa-shield-alt" aria-hidden="true"></i>
+                        <i class="fas fa-lock" aria-hidden="true"></i>
                         <span class="ranking-footer-encryption">End-to-end encryption</span>
                         <span class="ranking-footer-badge">AES-GCM</span>
                     </div>
@@ -3845,6 +3935,7 @@ class LibertyApp {
 
         const firstSection = categories.find(c => c.id && !c.danger);
         this._renderSettingsSection(overlay, type, firstSection?.id || 'account');
+        this._updateUserAvatarInUI();
 
         overlay.querySelectorAll('.settings-sidebar-item').forEach(item => {
             item.addEventListener('click', () => {
@@ -3889,27 +3980,30 @@ class LibertyApp {
             account: () => {
                 const initial = (this.currentUser?.username || 'U').charAt(0).toUpperCase();
                 const uname = this.escapeHtml(this.currentUser?.username || 'User');
-                const avatarUrl = (this.currentUser && (this.currentUser.avatar_url || this.currentUser.avatar)) ? this.escapeHtml(this.currentUser.avatar_url || this.currentUser.avatar) : '';
-                const avatarHtml = avatarUrl ? `<img src="${avatarUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${initial}</span>` : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${initial}</span>`;
+                const avatarUrl = this._getAvatarUrl() ? this.escapeHtml(this._getAvatarUrl()) : '';
+                const avatarHtml = avatarUrl ? `<img src="${avatarUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${initial}</span>` : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:var(--text-secondary)">${initial}</span>`;
                 return `<h2 class="settings-page-title">Minha Conta</h2>
                 <div class="settings-subscription-row">
                     <div class="settings-subscription-label"><i class="fas fa-crown"></i> Subscription Plan</div>
                     <div><select class="settings-plan-select" disabled><option>Free - 5.000 chars / 100 MB</option></select></div>
                 </div>
                 <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px">Choose your plan to increase character and file size limits.</p>
-                <div class="settings-avatar-card">
+                <div class="settings-avatar-card settings-avatar-card-improved">
+                    <h3 class="settings-avatar-card-title"><i class="fas fa-user-circle"></i> Foto de perfil</h3>
+                    <p class="settings-avatar-card-desc">Envie uma imagem do seu computador ou use um link. JPEG, PNG, GIF ou WebP (máx. 4 MB).</p>
                     <div class="settings-avatar-preview-wrap" id="settings-avatar-drop-zone">
                         <input type="file" id="settings-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" class="settings-avatar-file-input" />
                         <div class="settings-avatar-preview" id="settings-avatar-preview">${avatarHtml}</div>
-                        <div class="settings-avatar-overlay"><i class="fas fa-camera"></i><span>Clique ou arraste uma foto</span></div>
+                        <div class="settings-avatar-overlay"><i class="fas fa-camera"></i><span>Clique ou arraste uma foto aqui</span></div>
                     </div>
                     <div class="settings-avatar-actions">
                         <label for="settings-avatar-file" class="btn btn-primary settings-avatar-btn-file"><i class="fas fa-upload"></i> Enviar arquivo</label>
                         <span class="settings-avatar-divider">ou</span>
                         <div class="settings-avatar-url-row">
-                            <input type="url" id="settings-avatar-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-foto.jpg" value="${avatarUrl}" />
+                            <input type="url" id="settings-avatar-url" class="settings-avatar-url-input" placeholder="https://exemplo.com/sua-foto.jpg ou .png" value="${avatarUrl}" />
                             <button type="button" class="btn-save" id="settings-save-avatar-btn"><i class="fas fa-link"></i> Usar URL</button>
                         </div>
+                        <button type="button" class="settings-avatar-remove-btn" id="settings-avatar-remove-btn"><i class="fas fa-trash-alt"></i> Remover foto</button>
                     </div>
                 </div>
                 <div class="settings-section-block">
@@ -3984,7 +4078,7 @@ class LibertyApp {
                 const current = localStorage.getItem('liberty-theme') || 'Dark-theme';
                 const border = (t) => (t === current ? 'var(--primary-yellow)' : 'transparent');
                 const bgType = localStorage.getItem('liberty-bg-type') || 'default';
-                const bgSolid = localStorage.getItem('liberty-bg-solid') || '#1a1814';
+                const bgSolid = localStorage.getItem('liberty-bg-solid') || '#000000';
                 let bgGrad = { color1: '#0d0b09', color2: '#1a1814', angle: 135 };
                 try { const g = localStorage.getItem('liberty-bg-gradient'); if (g) bgGrad = { ...bgGrad, ...JSON.parse(g) }; } catch (_) {}
                 const bgImage = localStorage.getItem('liberty-bg-image') || '';
@@ -4202,18 +4296,46 @@ class LibertyApp {
                 saveAvatarBtn.addEventListener('click', () => {
                     const url = (avatarUrlInput.value || '').trim();
                     if (!url) { this.showToast('Cole uma URL de imagem ou envie um arquivo.', 'info'); return; }
-                    if (!/^https?:\/\//i.test(url) && !/^\/uploads\//.test(url)) { this.showToast('URL deve começar por http://, https:// ou /uploads/', 'error'); return; }
+                    if (!/^https?:\/\//i.test(url) && !/^\/uploads?\//.test(url)) { this.showToast('URL deve começar por http://, https:// ou /uploads/', 'error'); return; }
+                    const applyUrl = (u) => {
+                        if (this.currentUser) { this.currentUser.avatar_url = u; this.currentUser.avatar = u; }
+                        setPreviewHtml(u);
+                        this._updateUserAvatarInUI();
+                    };
                     if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
                         API.User.updateCurrentUser({ avatar_url: url }).then(() => {
-                            this.showToast('Avatar salvo!', 'success');
-                            if (this.currentUser) { this.currentUser.avatar_url = url; this.currentUser.avatar = url; }
-                            setPreviewHtml(url);
-                            this._updateUserAvatarInUI();
-                        }).catch(e => this.showToast(e.message || 'Erro ao salvar avatar', 'error'));
-                    } else this.showToast('Faça login para salvar o avatar.', 'info');
+                            try { localStorage.setItem('liberty_avatar_url', url); } catch (_) {}
+                            this.showToast('Foto de perfil atualizada!', 'success');
+                            applyUrl(url);
+                        }).catch((e) => {
+                            try { localStorage.setItem('liberty_avatar_url', url); } catch (_) {}
+                            applyUrl(url);
+                            this.showToast('URL guardada localmente. ' + (e.message || ''), 'info');
+                        });
+                    } else {
+                        try { localStorage.setItem('liberty_avatar_url', url); } catch (_) {}
+                        applyUrl(url);
+                        this.showToast('Foto guardada localmente. Faça login para sincronizar.', 'success');
+                    }
                 });
             }
             if (avatarPreview && avatarUrlInput) avatarUrlInput.addEventListener('input', () => { const v = avatarUrlInput.value.trim(); if (v) setPreviewHtml(v); });
+            const removeAvatarBtn = content.querySelector('#settings-avatar-remove-btn');
+            if (removeAvatarBtn) {
+                removeAvatarBtn.addEventListener('click', () => {
+                    const clearAvatar = () => {
+                        if (this.currentUser) { this.currentUser.avatar_url = null; this.currentUser.avatar = null; }
+                        try { localStorage.removeItem('liberty_avatar_url'); } catch (_) {}
+                        setPreviewHtml(null);
+                        if (avatarUrlInput) avatarUrlInput.value = '';
+                        this._updateUserAvatarInUI();
+                        this.showToast('Foto de perfil removida.', 'success');
+                    };
+                    if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
+                        API.User.updateCurrentUser({ avatar_url: '' }).then(() => { clearAvatar(); }).catch(() => { clearAvatar(); });
+                    } else clearAvatar();
+                });
+            }
             if (saveNameBtn && displayNameInput) {
                 saveNameBtn.addEventListener('click', () => {
                     const name = (displayNameInput.value || '').trim().substring(0, 32);
@@ -4332,8 +4454,8 @@ class LibertyApp {
                     localStorage.removeItem('liberty-bg-image');
                     this.applyBackground();
                     setBgType('default');
-                    if (solidHex) solidHex.value = '#1a1814';
-                    if (solidColor) solidColor.value = '#1a1814';
+                    if (solidHex) solidHex.value = '#000000';
+                    if (solidColor) solidColor.value = '#000000';
                     if (gradH1) gradH1.value = '#0d0b09';
                     if (gradC1) gradC1.value = '#0d0b09';
                     if (gradH2) gradH2.value = '#1a1814';
