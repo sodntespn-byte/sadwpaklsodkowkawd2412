@@ -18,8 +18,10 @@ certificate.pem
 **/secrets*.json
 **/credentials*.json
 
-# Uploads de utilizadores (avatares)
+# Uploads de utilizadores (avatares, ícones) — pasta em backend/uploads/
 /uploads/
+backend/uploads/*
+!backend/uploads/.gitkeep
 
 # Sistema e Editores
 .DS_Store

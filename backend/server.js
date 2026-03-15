@@ -146,7 +146,13 @@ function computeContentXpByUser(messagesByChannel) {
 // --- db (inline para deploy sem pasta db/)
 // URL do banco APENAS via variáveis de ambiente. Nunca embutir credenciais no código.
 function _dbGetUrl() {
-  const url = process.env.DATABASE_URL || process.env.BANCO_DADOS || process.env.DB_URL || '';
+  const url =
+    process.env.DATABASE_URL ||
+    process.env.BANCO_DADOS ||
+    process.env.DB_URL ||
+    process.env.Database ||
+    process.env.DATABASE ||
+    '';
   return typeof url === 'string' ? url.trim() : '';
 }
 function _dbLoadMtlsOptions() {
@@ -759,7 +765,10 @@ async function getDefaultChatId() {
 async function start() {
   const hasDbUrl = _dbGetUrl().startsWith('postgres');
   if (process.env.NODE_ENV === 'production' && !hasDbUrl) {
-    logger.error('LIBERTY', 'DATABASE_URL é obrigatória em produção.');
+    logger.error(
+      'LIBERTY',
+      'URL da base de dados obrigatória em produção. Square Cloud: Configurações → Environment → adicione a variável com o nome exato DATABASE_URL (ou BANCO_DADOS / DB_URL) e o valor da connection string. Depois faça Redeploy.'
+    );
     process.exit(1);
   }
   if (hasDbUrl) {

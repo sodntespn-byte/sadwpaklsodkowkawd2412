@@ -2,10 +2,10 @@
 
 ## Arquivo de entrada (evitar MISSING_MAIN)
 
-- O ponto de entrada da aplicação é **`server.js` na raiz** do repositório.
-- O ficheiro **`squarecloud.app`** deve ter exatamente: `MAIN=server.js`
-- O **`package.json`** tem `"main": "server.js"` e o script `"start": "node server.js"`.
-- Ao fazer deploy, a Square Cloud usa a **raiz do repositório**; não coloques o projeto dentro de uma subpasta (ex.: `src/`) se o teu `server.js` estiver na raiz no GitHub.
+- O ponto de entrada da aplicação é **`backend/server.js`** (pasta `backend/`).
+- O ficheiro **`squarecloud.app`** na raiz tem `START=npm install ... && node backend/server.js`.
+- O **`package.json`** na raiz tem `"main": "backend/server.js"` e `"start": "node backend/server.js"`.
+- A Square Cloud usa a **raiz do repositório**; o comando de arranque sobe o backend, que serve a API e o frontend (pasta `frontend/`).
 
 ## 1. Variáveis de ambiente
 
@@ -14,7 +14,7 @@
 | Variável       | Obrigatório | Exemplo / Notas                                                                 |
 | -------------- | ----------- | ------------------------------------------------------------------------------- |
 | `JWT_SECRET`   | **Sim**     | String com **pelo menos 32 caracteres**. Sem isto a app para logo ao iniciar.   |
-| `DATABASE_URL` | **Sim**     | Connection string do Neon (ex.: `postgresql://user:pass@ep-xxx-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require`). Pode incluir `&channel_binding=require`; o servidor remove se necessário. |
+| `DATABASE_URL` | **Sim**     | Connection string do Neon. **Nome exato na Square Cloud:** `DATABASE_URL` (maiúsculas). No painel pode aparecer como "Database" — cria a variável com o **nome** `DATABASE_URL` e o **valor** da URL. Também aceita: `BANCO_DADOS`, `DB_URL`, `Database`, `DATABASE`. |
 | `NODE_ENV`     | Não         | A Square Cloud costuma definir `production` automaticamente.                 |
 
 **Como gerar um JWT_SECRET seguro (32+ caracteres):**
@@ -42,7 +42,7 @@ Para enviar o código e a Square Cloud usar o main:
 
 ```bash
 git add .
-git commit -m "Deploy: entry server.js, schema PostgreSQL"
+git commit -m "Deploy: backend + frontend, schema PostgreSQL"
 git push origin main
 ```
 
@@ -62,12 +62,14 @@ Se quiseres aplicar o schema no Neon sem subir o servidor (por exemplo a partir 
 npm run db:push
 ```
 
-Requer `DATABASE_URL` no `.env` ou no ambiente.
+Requer `DATABASE_URL` no `.env` (na raiz) ou no ambiente.
 
 ## 4. Resumo de ficheiros importantes na raiz
 
-- `server.js` — entrada da app (MAIN)
-- `squarecloud.app` — MAIN=server.js, MEMORY=256, HOST=0.0.0.0
-- `package.json` — main + scripts start / db:push
-- `db/schema.sql` — tabelas PostgreSQL
-- `db/init.js` — aplica o schema ao conectar
+| Ficheiro / Pasta   | Função |
+|--------------------|--------|
+| `backend/server.js` | Entrada da app (Express, API, WebSocket, servir frontend). |
+| `squarecloud.app`   | Configuração Square Cloud (START, MEMORY, HOST). |
+| `package.json`      | Scripts `start`, `db:push`; dependências. |
+| `frontend/`         | Ficheiros estáticos servidos pelo backend. |
+| `backend/db/`       | Schema e helpers PostgreSQL. |

@@ -20,7 +20,10 @@ npm install
 npm start
 ```
 
-O servidor sobe com `node backend/server.js` e serve a API em `/api/v1` e os ficheiros estáticos da pasta `frontend/`. Variáveis de ambiente (`.env` ou painel do host): `DATABASE_URL`, `JWT_SECRET`. Ver `backend/README.md` e `SQUARECLOUD.md`.
+O servidor sobe com `node backend/server.js` e serve a API em `/api/v1` e os ficheiros estáticos da pasta `frontend/`. Variáveis de ambiente (`.env` ou painel do host): `DATABASE_URL`, `JWT_SECRET`.
+
+**Onde está cada coisa:** ver **[ESTRUTURA.md](ESTRUTURA.md)** (mapa do projeto).  
+**Deploy e documentação:** pasta **[docs/](docs/)** (SECURITY, SQUARECLOUD, DATABASE).
 
 ---
 

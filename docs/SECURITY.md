@@ -25,7 +25,7 @@ O `.gitignore` exclui `.env`, `.env.local` e variantes. **Nunca** suba ficheiros
 
 ## Privacidade e logs
 
-- O logger em `src/lib/logger.js` redacta automaticamente: `password`, `token`, `access_token`, `refresh_token`, `authorization`, `cookie`, `secret`, `api_key` e campos similares.
+- O logger em `backend/src/lib/logger.js` redacta automaticamente: `password`, `token`, `access_token`, `refresh_token`, `authorization`, `cookie`, `secret`, `api_key` e campos similares.
 - Em erros e logs, **nunca** são registados: corpo de pedidos com senhas, tokens, ou dados pessoais completos (PII). Apenas mensagens de erro genéricas (ex.: `err.message`).
 - Em produção, evite logar stacks completos ou objetos de request/response que possam conter dados sensíveis.
 

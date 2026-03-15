@@ -30,7 +30,7 @@ A mensagem **"no pg_hba.conf entry for host …"** significa que o **servidor Po
 
 ### Por que o host 162.249.173.59 é rejeitado?
 
-- **162.249.173.59** é o **IP de saída** da sua aplicação quando ela roda na **Square Cloud** (ou outro provedor). Ou seja: o banco “vê” a conexão vindo desse IP.
+- **162.249.173.59** é o **IP de saída** da sua aplicação quando ela roda na **Square Cloud** (ou outro provedor). Ou seja: o banco "vê" a conexão vindo desse IP.
 - Se o banco for:
   - **Neon**: em geral **não** restringe por IP; ele exige SSL. O erro costuma ser por **não usar SSL** ou URL errada. Use `?sslmode=require` na URL.
   - **Square Cloud (banco deles)** ou **outro PostgreSQL gerenciado**: o provedor pode ter **whitelist de IPs**. Nesse caso, é preciso **liberar o IP 162.249.173.59** no painel do banco (ou adicionar uma regra que permita esse IP no `pg_hba.conf`, se você tiver acesso ao servidor do banco).
