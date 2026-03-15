@@ -1275,8 +1275,8 @@ async function start() {
     return res.status(400).json({ message: 'Envie recipient_id (DM) ou recipient_ids (array com 2+) para grupo' });
   });
 
-  // GET /api/v1/users/me — perfil do usuário autenticado (inclui avatar_url)
-  app.get('/api/v1/users/me', auth.requireAuth, async (req, res) => {
+  // GET /api/v1/users/me e GET /api/v1/users/@me — perfil do usuário autenticado (frontend usa @me)
+  const getMe = async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1298,10 +1298,12 @@ async function start() {
       console.error('[LIBERTY] GET /users/me', err);
       return res.status(500).json({ message: err.message || 'Erro ao buscar perfil' });
     }
-  });
+  };
+  app.get('/api/v1/users/me', auth.requireAuth, getMe);
+  app.get('/api/v1/users/@me', auth.requireAuth, getMe);
 
-  // PATCH /api/v1/users/me — atualizar perfil (avatar_url por URL)
-  app.patch('/api/v1/users/me', auth.requireAuth, async (req, res) => {
+  // PATCH /api/v1/users/me e PATCH /api/v1/users/@me — atualizar perfil (avatar_url por URL)
+  const patchMe = async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1330,7 +1332,9 @@ async function start() {
       console.error('[LIBERTY] PATCH /users/me', err);
       return res.status(500).json({ message: err.message || 'Erro ao atualizar perfil' });
     }
-  });
+  };
+  app.patch('/api/v1/users/me', auth.requireAuth, patchMe);
+  app.patch('/api/v1/users/@me', auth.requireAuth, patchMe);
 
   // GET /api/v1/users/@me/relationships — lista de amigos (para modal de grupo)
   app.get('/api/v1/users/@me/relationships', auth.requireAuth, async (req, res) => {

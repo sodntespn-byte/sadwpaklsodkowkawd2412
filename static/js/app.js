@@ -345,8 +345,13 @@ class LibertyApp {
     }
 
     async connect() {
-        const me = await API.User.getCurrentUser();
-        this.currentUser = me && me.user ? me.user : me;
+        try {
+            const me = await API.User.getCurrentUser();
+            this.currentUser = me && me.user ? me.user : me;
+        } catch (e) {
+            console.warn('getCurrentUser failed:', e?.message || e);
+            this.currentUser = null;
+        }
         if (this.currentUser?.username) {
             try { localStorage.setItem('liberty_username', this.currentUser.username); } catch (_) {}
         }
