@@ -1747,7 +1747,6 @@ class LibertyApp {
     const wrap = document.getElementById('webrtc-remote-wrap');
     if (wrap) {
       wrap.classList.remove('webrtc-remote-speaking');
-      wrap.classList.remove('call-neo__tile--speaking');
       wrap.querySelectorAll('audio.webrtc-remote-audio').forEach(a => {
         a.srcObject = null;
         a.remove();
@@ -1835,8 +1834,8 @@ class LibertyApp {
       cancelAnimationFrame(this._voiceCallState.localAudioLevelRAF);
       this._voiceCallState.localAudioLevelRAF = null;
     }
-    const localWrap = document.getElementById('webrtc-local-avatar-wrap');
-    if (localWrap) localWrap.classList.remove('call-neo__player-circle--speaking');
+    const pip = document.getElementById('webrtc-local-pip-wrap');
+    if (pip) pip.classList.remove('call-neo__pip--speaking');
   }
 
   _webrtcRunLocalAudioLevel(stream) {
@@ -1856,15 +1855,15 @@ class LibertyApp {
     }
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     const threshold = 25;
-    const localWrap = document.getElementById('webrtc-local-avatar-wrap');
+    const pip = document.getElementById('webrtc-local-pip-wrap');
     const loop = () => {
-      if (!analyser || !localWrap) return;
+      if (!analyser || !pip) return;
       analyser.getByteFrequencyData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
       const avg = sum / dataArray.length;
       const speaking = avg > threshold;
-      localWrap.classList.toggle('call-neo__player-circle--speaking', speaking);
+      pip.classList.toggle('call-neo__pip--speaking', speaking);
       this._voiceCallState.localAudioLevelRAF = requestAnimationFrame(loop);
     };
     loop();
@@ -1892,8 +1891,6 @@ class LibertyApp {
       }
     } catch (_) {}
     if (placeholderText) placeholderText.textContent = name;
-    const remoteLabel = document.getElementById('webrtc-remote-label');
-    if (remoteLabel) remoteLabel.textContent = name;
     const initialEl = document.getElementById('webrtc-remote-initial');
     if (initialEl) {
       initialEl.textContent = name.charAt(0).toUpperCase();
@@ -2199,24 +2196,13 @@ class LibertyApp {
     const placeholderText = document.querySelector('#webrtc-remote-placeholder .webrtc-placeholder-text');
     if (placeholderText) placeholderText.textContent = 'Aguardando a outra pessoa...';
     const localV = document.getElementById('webrtc-local-video');
-    const localFallback = document.getElementById('webrtc-local-fallback-icon');
-    if (localV) {
-      localV.srcObject = this._voiceCallState.stream;
-      const hasVideo = this._voiceCallState.stream && this._voiceCallState.stream.getVideoTracks().length > 0;
-      localV.classList.toggle('hidden', !hasVideo);
-      if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
-    } else if (localFallback) localFallback.classList.remove('hidden');
+    if (localV) localV.srcObject = this._voiceCallState.stream;
     if (this._voiceCallState.stream) this._webrtcRunLocalAudioLevel(this._voiceCallState.stream);
     const titleEl = document.getElementById('voice-call-channel-name');
     const other =
       (this.currentChannel?.recipients || []).find(r => r.id === from) ||
       this.dmChannels.find(c => c.recipients?.[0]?.id === from)?.recipients?.[0];
-    const displayTitle = other
-      ? (other.global_name ? `${other.username} • ${other.global_name}` : other.username)
-      : 'Chamada';
-    if (titleEl) titleEl.textContent = displayTitle;
-    const remoteLabel = document.getElementById('webrtc-remote-label');
-    if (remoteLabel) remoteLabel.textContent = other?.username || 'Aguardando...';
+    if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
     this._updateVoiceCallParticipantsBar();
     this._updateWebrtcControlButtons();
   }
@@ -2303,22 +2289,11 @@ class LibertyApp {
     if (placeholderText) placeholderText.textContent = 'A chamar...';
     if (placeholder) placeholder.classList.add('webrtc-placeholder-connecting');
     const localV = document.getElementById('webrtc-local-video');
-    const localFallback = document.getElementById('webrtc-local-fallback-icon');
-    if (localV) {
-      localV.srcObject = this._voiceCallState.stream;
-      const hasVideo = this._voiceCallState.stream && this._voiceCallState.stream.getVideoTracks().length > 0;
-      localV.classList.toggle('hidden', !hasVideo);
-      if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
-    } else if (localFallback) localFallback.classList.remove('hidden');
+    if (localV) localV.srcObject = this._voiceCallState.stream;
     if (this._voiceCallState.stream) this._webrtcRunLocalAudioLevel(this._voiceCallState.stream);
     const titleEl = document.getElementById('voice-call-channel-name');
     const other = (this.currentChannel?.recipients || []).find(r => r.id === targetId);
-    const displayTitle = other
-      ? (other.global_name ? `${other.username} • ${other.global_name}` : other.username)
-      : 'Chamada';
-    if (titleEl) titleEl.textContent = displayTitle;
-    const remoteLabel = document.getElementById('webrtc-remote-label');
-    if (remoteLabel) remoteLabel.textContent = other?.username || 'Aguardando...';
+    if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
     this._updateVoiceCallParticipantsBar();
     this._updateWebrtcControlButtons();
     if (typeof API !== 'undefined' && API.Call) {
@@ -2442,45 +2417,12 @@ class LibertyApp {
         }
         if (!this._voiceCallState.pc) return;
         const videoTracks = this._voiceCallState.stream.getVideoTracks();
-        if (videoTracks.length === 0) {
-          try {
-            const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            const videoTrack = videoStream.getVideoTracks()[0];
-            if (!videoTrack) return;
-            this._voiceCallState.stream.addTrack(videoTrack);
-            this._voiceCallState.pc.addTrack(videoTrack, this._voiceCallState.stream);
-            this._voiceCallState.videoEnabled = true;
-            const offer = await this._voiceCallState.pc.createOffer();
-            await this._voiceCallState.pc.setLocalDescription(offer);
-            if (this.gateway)
-              this.gateway.send('webrtc_offer', {
-                target_user_id: this._voiceCallState.targetUserId,
-                payload: this._voiceCallState.pc.localDescription,
-              });
-            const localV = document.getElementById('webrtc-local-video');
-            if (localV) {
-              localV.srcObject = this._voiceCallState.stream;
-              localV.classList.remove('hidden');
-            }
-            const localFallback = document.getElementById('webrtc-local-fallback-icon');
-            if (localFallback) localFallback.classList.add('hidden');
-            this._playCallSound('camera_on');
-            this._updateWebrtcControlButtons();
-          } catch (e) {
-            this.showToast('Não foi possível ativar a câmara.', 'error');
-          }
-          return;
-        }
+        if (videoTracks.length === 0) return;
         this._voiceCallState.videoEnabled = !this._voiceCallState.videoEnabled;
         const track = videoTracks[0];
         track.enabled = this._voiceCallState.videoEnabled;
         const localV = document.getElementById('webrtc-local-video');
-        if (localV) {
-          localV.style.opacity = this._voiceCallState.videoEnabled ? '1' : '0.3';
-          localV.classList.toggle('hidden', !this._voiceCallState.videoEnabled);
-        }
-        const localFallback = document.getElementById('webrtc-local-fallback-icon');
-        if (localFallback) localFallback.classList.toggle('hidden', this._voiceCallState.videoEnabled);
+        if (localV) localV.style.opacity = this._voiceCallState.videoEnabled ? '1' : '0.3';
         this._playCallSound(this._voiceCallState.videoEnabled ? 'camera_on' : 'camera_off');
         this._updateWebrtcControlButtons();
       });
@@ -2511,21 +2453,12 @@ class LibertyApp {
           this._voiceCallState.displayStream = null;
           const senders = pc.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) {
-            const newTrack =
+          if (videoSender)
+            videoSender.replaceTrack(
               this._voiceCallState.videoEnabled && this._voiceCallState.stream
                 ? this._voiceCallState.stream.getVideoTracks()[0] || null
-                : null;
-            videoSender.replaceTrack(newTrack).then(async () => {
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              if (this.gateway)
-                this.gateway.send('webrtc_offer', {
-                  target_user_id: this._voiceCallState.targetUserId,
-                  payload: pc.localDescription,
-                });
-            }).catch(() => {});
-          }
+                : null
+            );
           if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
           screenshareBtn.classList.remove('active');
           screenshareBtn.classList.remove('call-neo__ctrl--active');
@@ -2571,18 +2504,10 @@ class LibertyApp {
               this._voiceCallState.displayStream = null;
               const senders = pc.getSenders();
               const vs = senders.find(s => s.track && s.track.kind === 'video');
-              if (vs) {
-                const newTrack = this._voiceCallState.stream ? this._voiceCallState.stream.getVideoTracks()[0] || null : null;
-                vs.replaceTrack(newTrack).then(async () => {
-                  const offer = await pc.createOffer();
-                  await pc.setLocalDescription(offer);
-                  if (this.gateway)
-                    this.gateway.send('webrtc_offer', {
-                      target_user_id: this._voiceCallState.targetUserId,
-                      payload: pc.localDescription,
-                    });
-                }).catch(() => {});
-              }
+              if (vs)
+                vs.replaceTrack(
+                  this._voiceCallState.stream ? this._voiceCallState.stream.getVideoTracks()[0] || null : null
+                );
               if (this.gateway)
                 this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
               screenshareBtn.classList.remove('active');
