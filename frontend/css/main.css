@@ -1543,7 +1543,7 @@ a:hover {
   overflow-x: hidden;
   padding: var(--spacing-md);
   padding-bottom: var(--spacing-lg);
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
   background: #000;
 }
 
@@ -1736,9 +1736,10 @@ a:hover {
   margin-left: 0;
   margin-bottom: 1px;
   border-radius: 6px;
-  transition: background 0.15s ease;
   position: relative;
   min-height: 1.5em;
+  contain: layout style;
+  transition: none;
 }
 .message-group:hover {
   background: rgba(255, 255, 255, 0.03);

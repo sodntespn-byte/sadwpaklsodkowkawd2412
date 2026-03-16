@@ -1015,13 +1015,24 @@ class LibertyApp {
       if (hasAuth && joinBtn) {
         joinBtn.classList.remove('hidden');
         joinBtn.onclick = () => {
-          if (!this.gateway || !this.gateway.connected) {
-            this.showToast('Liga-te primeiro para entrar no servidor.', 'error');
+          if (this.gateway && this.gateway.connected) {
+            this._pendingInviteCode = code;
+            this.gateway.joinServer(code);
+            this.showToast('A entrar no servidor…', 'info');
             return;
           }
-          this._pendingInviteCode = code;
-          this.gateway.joinServer(code);
-          this.showToast('A entrar no servidor…', 'info');
+          API.Invite.join(code).then((data) => {
+            const server = data.server;
+            const channel = data.channel;
+            if (!server || !server.id) return;
+            if (!this.servers.some((s) => s.id === server.id)) this.servers.push(server);
+            this.renderServers();
+            this.selectServer(server.id, channel ? channel.id : null);
+            this._hideInviteLanding();
+            this.showToast('Entraste no servidor.', 'success');
+          }).catch((err) => {
+            this.showToast(err && err.message ? err.message : 'Convite inválido ou expirado.', 'error');
+          });
         };
       } else {
         loginHint?.classList.remove('hidden');
@@ -4962,7 +4973,7 @@ class LibertyApp {
 
     messageEl.innerHTML = `
             <div class="message-avatar">
-                <img src="${this.escapeHtml(authorAvatarUrl)}" alt="${this.escapeHtml(authorName)}" data-fallback-avatar="${authorAvatarFallback ? this.escapeHtml(authorAvatarFallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }">
+                <img src="${this.escapeHtml(authorAvatarUrl)}" alt="${this.escapeHtml(authorName)}" data-fallback-avatar="${authorAvatarFallback ? this.escapeHtml(authorAvatarFallback) : ''}">
                 <span class="message-avatar-fallback" style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:16px;font-weight:600;color:rgba(255,255,255,.9)">${this.escapeHtml(avatarLetter)}</span>
             </div>
             <div class="message-content${isMentioned ? ' message-mentioned' : ''}">
@@ -5041,6 +5052,20 @@ class LibertyApp {
     this.renderReactions(messageEl, msgId);
 
     container.appendChild(messageEl);
+    const avatarImg = messageEl.querySelector('.message-avatar img');
+    if (avatarImg) {
+      avatarImg.addEventListener('error', function () {
+        const fallback = this.dataset.fallbackAvatar;
+        if (fallback) {
+          this.onerror = null;
+          this.src = fallback;
+        } else {
+          this.style.display = 'none';
+          const s = this.nextElementSibling;
+          if (s) s.style.display = 'flex';
+        }
+      });
+    }
     this._injectYouTubeEmbeds(messageEl, message.content);
     this._injectSpotifyEmbeds(messageEl, message.content);
     this._injectInviteEmbeds(messageEl);
@@ -7923,7 +7948,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
     const threshold = 120;
     const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
     if (!force && !nearBottom) return;
-    last.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    container.scrollTop = container.scrollHeight;
   }
 
   removeMessage(messageId) {
@@ -8107,16 +8132,17 @@ this._injectYouTubeEmbeds(msgEl, newContent);
   _extractInviteCode(url) {
     if (!url || typeof url !== 'string') return null;
     const u = url.trim();
-    // liberty.app (com ou sem subdomínio: www., etc.)
+    const invitePath = /\/invite\/([A-Za-z0-9]+)/i;
     let m = u.match(/https?:\/\/(?:[^/]+\.)*liberty\.app\/invite\/([A-Za-z0-9]+)/i);
     if (m) return m[1];
-    // mesmo origin (localhost, etc.): /invite/CODE ou full URL
+    m = u.match(/https?:\/\/(?:[^/]+\.)*squareweb\.app\/invite\/([A-Za-z0-9]+)/i);
+    if (m) return m[1];
     if (typeof window !== 'undefined' && window.location) {
       const origin = window.location.origin;
       const pathRegex = new RegExp('^' + origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\/invite\\/([A-Za-z0-9]+)', 'i');
       m = u.match(pathRegex);
       if (m) return m[1];
-      if (/^\/invite\/([A-Za-z0-9]+)/i.test(u)) return u.match(/^\/invite\/([A-Za-z0-9]+)/i)[1];
+      if (/^\/invite\/([A-Za-z0-9]+)/i.test(u)) return u.match(invitePath)[1];
     }
     return null;
   }

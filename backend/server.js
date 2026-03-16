@@ -853,6 +853,7 @@ app.use(
           "'sha256-iNdzJueCLgGX4W5su4mORbOameseXUZO+P+Hm0wFzX0='",
           'https://unpkg.com',
         ],
+        scriptSrcAttr: ["'unsafe-hashes'"],
         connectSrc: ["'self'", 'wss:', 'ws:', 'https://unpkg.com'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],

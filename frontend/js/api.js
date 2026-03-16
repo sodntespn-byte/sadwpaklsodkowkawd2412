@@ -330,7 +330,7 @@ const MessageAPI = {
     const channelId = parseRoom(roomOrChannelId);
     const { tts = false, embeds = [], clientId = null, attachments = [] } =
       typeof options === 'object' && options !== null ? options : {};
-    const body = { content: content != null ? String(content) : '', tts, embeds };
+    const body = { content: (content != null && content !== undefined) ? String(content) : '', tts, embeds };
     if (clientId != null) body.client_id = clientId;
     if (Array.isArray(attachments) && attachments.length > 0) body.attachments = attachments;
     return apiRequest(`/channels/${channelId}/messages`, {
