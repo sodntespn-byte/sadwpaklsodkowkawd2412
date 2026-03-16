@@ -3109,6 +3109,62 @@ async function start() {
     res.sendFile(path.join(STATIC_DIR, 'index.html'));
   });
 
+  const CRAWLER_UA = /facebookexternalhit|Twitterbot|Discordbot|TelegramBot|LinkedInBot|WhatsApp|Slurp|bingbot|Googlebot|Applebot|Pinterest|redditbot|ia_archiver/i;
+  app.get('/invite/:code', async (req, res, next) => {
+    const ua = req.get('user-agent') || '';
+    if (!CRAWLER_UA.test(ua)) return next();
+    const code = (req.params.code || '').trim().toUpperCase();
+    if (!code || code.length > 32) return next();
+    const baseUrl = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host') || req.get('x-forwarded-host') || 'localhost'}`.replace(/\/$/, '');
+    const canonicalUrl = `${baseUrl}/invite/${encodeURIComponent(code)}`;
+    let title = 'LIBERTY — Convite';
+    let description = 'Junte-se ao servidor no LIBERTY.';
+    let imageUrl = `${baseUrl}/assets/logo.png`;
+    if (db.isConfigured() && db.isConnected()) {
+      try {
+        const inv = await db.query(
+          `SELECT i.code, i.server_id, i.expires_at, i.max_uses, i.uses,
+                  s.name AS server_name, s.icon_url AS server_icon
+           FROM invites i
+           JOIN servers s ON s.id = i.server_id
+           JOIN chats c ON c.id = i.channel_id AND c.server_id = i.server_id
+           WHERE i.code = $1`,
+          [code]
+        );
+        const row = inv.rows[0];
+        if (row && (!row.expires_at || new Date(row.expires_at) >= new Date()) && (row.max_uses === 0 || (row.uses || 0) < row.max_uses)) {
+          title = `Você foi convidado para ${(row.server_name || 'Servidor').replace(/</g, '&lt;')}`;
+          description = `Entre no servidor ${(row.server_name || '').replace(/</g, '&lt;')} no LIBERTY — Freedom to Connect.`;
+          if (row.server_icon) imageUrl = row.server_icon.startsWith('http') ? row.server_icon : `${baseUrl}${row.server_icon.startsWith('/') ? '' : '/'}${row.server_icon}`;
+        }
+      } catch (_) {}
+    }
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#5865F2" />
+  <meta property="og:title" content="${title.replace(/"/g, '&quot;')}" />
+  <meta property="og:description" content="${description.replace(/"/g, '&quot;')}" />
+  <meta property="og:image" content="${imageUrl.replace(/"/g, '&quot;')}" />
+  <meta property="og:url" content="${canonicalUrl.replace(/"/g, '&quot;')}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="LIBERTY" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${title.replace(/"/g, '&quot;')}" />
+  <meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />
+  <meta name="twitter:image" content="${imageUrl.replace(/"/g, '&quot;')}" />
+  <title>${title.replace(/</g, '&lt;')}</title>
+  <meta http-equiv="refresh" content="0;url=${canonicalUrl.replace(/&/g, '&amp;')}" />
+  <script>window.location.replace(${JSON.stringify(canonicalUrl)});</script>
+</head>
+<body><p>Redirecionando… <a href="${canonicalUrl.replace(/"/g, '&quot;').replace(/</g, '&lt;')}">Abrir convite</a></p></body>
+</html>`;
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.type('html').send(html);
+  });
+
   // SPA fallback: qualquer path não API/static devolve index.html para o cliente tratar (ex.: /channels/@me/:id ao dar F5)
   app.get('*', (_req, res) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
