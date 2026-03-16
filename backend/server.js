@@ -704,6 +704,7 @@ const app = express();
 app.disable('x-powered-by');
 const PORT = config.PORT;
 const STATIC_DIR = config.STATIC_DIR;
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
 const ALLOWED_ORIGINS = config.ALLOWED_ORIGINS;
 const corsOptions = {
   origin:
@@ -2337,7 +2338,6 @@ async function start() {
   });
 
   // POST /api/v1/users/me/avatar — upload de foto (body: { image: "data:image/...;base64,..." })
-  const UPLOADS_DIR = path.join(__dirname, 'uploads');
   const AVATARS_DIR = path.join(UPLOADS_DIR, 'avatars');
   try {
     if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
