@@ -3306,14 +3306,13 @@ class LibertyApp {
           const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
           return tA - tB;
         });
-        const seen = new Set();
+        const seenIds = new Set();
         const unique = [];
         for (const m of merged) {
-          const rawId = m.id ?? m.message_id ?? '';
-          const sig = [String(rawId), String(m.created_at || m.timestamp || ''), String(m.content || '')].join('\0');
-          if (seen.has(sig)) continue;
-          seen.add(sig);
-          unique.push({ ...m, id: String(rawId), message_id: String(rawId) });
+          const id = String(m.id ?? m.message_id ?? '');
+          if (!id || seenIds.has(id)) continue;
+          seenIds.add(id);
+          unique.push({ ...m, id, message_id: id });
         }
         MessageCache.set(dm.id, unique);
         container.innerHTML = '';
@@ -4830,15 +4829,14 @@ class LibertyApp {
         const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
         return tA - tB;
       });
-      // Deduplicar por id normalizado + timestamp + conteúdo (evita duplicados quando API/cache usam tipos diferentes)
-      const seen = new Set();
+      // Uma única mensagem por id (evita duplicados ao dar F5)
+      const seenIds = new Set();
       const unique = [];
       for (const m of merged) {
-        const rawId = m.id ?? m.message_id ?? '';
-        const sig = [String(rawId), String(m.created_at || m.timestamp || ''), String(m.content || '')].join('\0');
-        if (seen.has(sig)) continue;
-        seen.add(sig);
-        unique.push({ ...m, id: String(rawId), message_id: String(rawId) });
+        const id = String(m.id ?? m.message_id ?? '');
+        if (!id || seenIds.has(id)) continue;
+        seenIds.add(id);
+        unique.push({ ...m, id, message_id: id });
       }
       MessageCache.set(channelId, unique);
       if (this._loadingMessagesChannelId !== channelId) return;
@@ -5712,6 +5710,18 @@ this._injectYouTubeEmbeds(msgEl, newContent);
           bannerUrl = profile.banner_url || bannerUrl;
           description = profile.description || description;
         }
+      } catch (_) {}
+    }
+    if (isSelf && !bannerUrl && typeof localStorage !== 'undefined') {
+      try {
+        bannerUrl = localStorage.getItem('liberty_banner_url') || '';
+      } catch (_) {}
+    }
+    if (isSelf && userId && !bannerUrl) {
+      try {
+        const profile = await API.User.getCurrentUser();
+        const data = profile?.user || profile;
+        if (data?.banner_url) bannerUrl = data.banner_url;
       } catch (_) {}
     }
     if (!this._profileCardOpening) return;
