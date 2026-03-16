@@ -630,8 +630,8 @@ const MessageCache = {
       const list = Array.isArray(messages) ? messages : [];
       const byId = new Map();
       list.forEach(m => {
-        const id = m.id || m.message_id;
-        if (id) byId.set(id, m);
+        const id = m.id ?? m.message_id;
+        if (id != null && id !== '') byId.set(String(id), { ...m, id: String(id), message_id: String(id) });
       });
       const sorted = [...byId.values()].sort((a, b) => {
         const tA = (a.created_at && new Date(a.created_at).getTime()) || 0;
@@ -645,9 +645,11 @@ const MessageCache = {
   add(channelId, message) {
     if (!channelId || !message) return;
     const list = this.get(channelId);
-    const id = message.id || message.message_id;
-    const without = id ? list.filter(m => (m.id || m.message_id) !== id) : list;
-    this.set(channelId, [...without, message]);
+    const id = message.id ?? message.message_id;
+    const idStr = id != null && id !== '' ? String(id) : null;
+    const without = idStr ? list.filter(m => String(m.id ?? m.message_id ?? '') !== idStr) : list;
+    const normalized = idStr ? { ...message, id: idStr, message_id: idStr } : message;
+    this.set(channelId, [...without, normalized]);
   },
   clearAll() {
     try {
@@ -3284,15 +3286,20 @@ class LibertyApp {
         if (this._loadingMessagesChannelId !== dm.id) return;
         container.innerHTML = '';
         this.messages.clear();
-        cached.forEach(m => this.addMessage(m, false));
+        const cacheById = new Map();
+        cached.forEach(m => {
+          const id = m.id ?? m.message_id;
+          if (id != null && id !== '') cacheById.set(String(id), { ...m, id: String(id), message_id: String(id) });
+        });
+        [...cacheById.values()].forEach(m => this.addMessage(m, false));
       }
       try {
         const messages = await API.DM.getMessages(dm.id, { limit: 50 });
         if (this._loadingMessagesChannelId !== dm.id || this.currentChannel?.id !== dm.id) return;
         const byId = new Map();
         [...(cached || []), ...(Array.isArray(messages) ? messages : [])].forEach(m => {
-          const id = m.id || m.message_id;
-          if (id) byId.set(id, m);
+          const id = m.id ?? m.message_id;
+          if (id != null && id !== '') byId.set(String(id), m);
         });
         const merged = [...byId.values()].sort((a, b) => {
           const tA = (a.created_at && new Date(a.created_at).getTime()) || 0;
@@ -3302,10 +3309,11 @@ class LibertyApp {
         const seen = new Set();
         const unique = [];
         for (const m of merged) {
-          const sig = [m.id || m.message_id || '', m.created_at || m.timestamp || '', m.content || ''].join('|');
+          const rawId = m.id ?? m.message_id ?? '';
+          const sig = [String(rawId), String(m.created_at || m.timestamp || ''), String(m.content || '')].join('\0');
           if (seen.has(sig)) continue;
           seen.add(sig);
-          unique.push(m);
+          unique.push({ ...m, id: String(rawId), message_id: String(rawId) });
         }
         MessageCache.set(dm.id, unique);
         container.innerHTML = '';
@@ -4799,7 +4807,12 @@ class LibertyApp {
       if (this._loadingMessagesChannelId !== channelId) return;
       container.innerHTML = '';
       this.messages.clear();
-      cached.forEach(msg => this.addMessage(msg, false));
+      const cacheById = new Map();
+      cached.forEach(m => {
+        const id = m.id ?? m.message_id;
+        if (id != null && id !== '') cacheById.set(String(id), { ...m, id: String(id), message_id: String(id) });
+      });
+      [...cacheById.values()].forEach(msg => this.addMessage(msg, false));
       this.scrollToBottom();
     }
     try {
@@ -4809,26 +4822,23 @@ class LibertyApp {
       if (cur && String(cur) !== String(channelId)) return;
       const byId = new Map();
       [...(cached || []), ...(Array.isArray(messages) ? messages : [])].forEach(m => {
-        const id = m.id || m.message_id;
-        if (id) byId.set(id, m);
+        const id = m.id ?? m.message_id;
+        if (id != null && id !== '') byId.set(String(id), m);
       });
       const merged = [...byId.values()].sort((a, b) => {
         const tA = (a.created_at && new Date(a.created_at).getTime()) || 0;
         const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
         return tA - tB;
       });
-      // Deduplicar por combinação de id+timestamp+conteúdo para evitar mensagens duplicadas
+      // Deduplicar por id normalizado + timestamp + conteúdo (evita duplicados quando API/cache usam tipos diferentes)
       const seen = new Set();
       const unique = [];
       for (const m of merged) {
-        const sig = [
-          m.id || m.message_id || '',
-          m.created_at || m.timestamp || '',
-          m.content || '',
-        ].join('|');
+        const rawId = m.id ?? m.message_id ?? '';
+        const sig = [String(rawId), String(m.created_at || m.timestamp || ''), String(m.content || '')].join('\0');
         if (seen.has(sig)) continue;
         seen.add(sig);
-        unique.push(m);
+        unique.push({ ...m, id: String(rawId), message_id: String(rawId) });
       }
       MessageCache.set(channelId, unique);
       if (this._loadingMessagesChannelId !== channelId) return;
@@ -5333,9 +5343,8 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         this.addMessage(normalized, true);
         this.scrollToBottom();
       } else {
-        this.removeMessage(tempId);
-        await this.loadMessages(roomOrId);
-        this.scrollToBottom();
+        /* Não chamar loadMessages aqui: provoca flash tipo F5. Manter mensagem optimista;
+         * se o WebSocket enviar message_created, o handler substitui por conteúdo real. */
       }
     } catch (err) {
       console.error('Erro ao enviar mensagem no front-end:', err);
