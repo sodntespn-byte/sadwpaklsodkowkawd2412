@@ -39,17 +39,17 @@
     }
 
     _resolveConnect(data) {
+      const resolveFn = this._connectResolve;
+      const rejectFn = this._connectReject;
+      this._connectResolve = null;
+      this._connectReject = null;
       this._connectIntent = false;
       this._clearHelloTimeout();
       const wasReconnected = this._hasConnectedOnce;
       this._hasConnectedOnce = true;
       this._resubscribeAll();
       this._flushQueue();
-      if (typeof this._connectResolve === 'function') {
-        this._connectResolve({ ...(data || {}), reconnected: wasReconnected });
-        this._connectResolve = null;
-        this._connectReject = null;
-      }
+      if (typeof resolveFn === 'function') resolveFn({ ...(data || {}), reconnected: wasReconnected });
       this.emit('ready', { ...(data || {}), reconnected: wasReconnected });
     }
 
@@ -122,18 +122,18 @@
         this._scheduleReconnect();
       };
       this.ws.onerror = () => {
+        this._clearHelloTimeout();
         if (this._connectResolve && this._connectIntent) this._rejectConnect(new Error('Erro de conexão'));
       };
     }
 
     _rejectConnect(err) {
-      if (typeof this._connectReject === 'function') {
-        this._connectReject(err);
-        this._connectReject = null;
-        this._connectResolve = null;
-        this._connectIntent = false;
-      }
+      const rejectFn = this._connectReject;
+      this._connectResolve = null;
+      this._connectReject = null;
+      this._connectIntent = false;
       this._clearHelloTimeout();
+      if (typeof rejectFn === 'function') rejectFn(err);
     }
 
     _clearReconnect() {
@@ -221,14 +221,15 @@
         case 'auth_failed': {
           this._clearHelloTimeout();
           this.emit('auth_failed', d || {});
-          if (typeof this._connectReject === 'function') {
-            this._connectReject(new Error((d && d.reason) || 'Auth failed'));
-            this._connectReject = null;
-            this._connectResolve = null;
-            this._connectIntent = false;
+          const rejectFn = this._connectReject;
+          this._connectResolve = null;
+          this._connectReject = null;
+          this._connectIntent = false;
+          if (typeof rejectFn === 'function') {
+            rejectFn(new Error((d && d.reason) || 'Auth failed'));
           } else {
             if (typeof console !== 'undefined' && console.warn) {
-              console.warn('[Gateway] auth_failed sem Promise pendente. op=', op, 'msgId=', msgId);
+              console.warn('[Gateway] auth_failed sem Promise pendente (timeout/duplicado). op=', op, 'msgId=', msgId);
             }
           }
           break;
@@ -320,7 +321,11 @@
           break;
 
         default:
-          if (t) this.emit(t.toLowerCase(), d || {});
+          if (t) {
+            this.emit(t.toLowerCase(), d || {});
+          } else if (op && typeof console !== 'undefined' && console.warn) {
+            console.warn('[Gateway] Mensagem sem handler de promise/resposta. op=', op, 'msgId=', msgId);
+          }
       }
     }
 
@@ -371,7 +376,7 @@
           fn(data);
         } catch (err) {
           if (typeof console !== 'undefined' && console.error) console.error('[Gateway] Handler error:', err);
-        });
+        }
       });
     }
 
