@@ -387,6 +387,10 @@ const InviteAPI = {
     return apiRequest(`/invites/${code}`);
   },
 
+  async join(code) {
+    return apiRequest(`/invites/${code}/join`, { method: 'POST' });
+  },
+
   async create(channelId, options = {}) {
     return apiRequest(`/channels/${channelId}/invites`, {
       method: 'POST',

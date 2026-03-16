@@ -8202,21 +8202,17 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         createdAt &&
         new Date(createdAt).toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' });
       const initial = name.charAt(0).toUpperCase();
-      const bannerStyle = bannerUrl
-        ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"`
-        : '';
       wrap.innerHTML = `
         <div class="message-embed-invite-inner">
-          <div class="message-embed-invite-banner" ${bannerStyle}></div>
           <div class="message-embed-invite-main">
-            <div class="message-embed-invite-icon">
+            <div class="message-embed-invite-icon message-embed-invite-icon--round">
               ${iconUrl ? `<img src="${this.escapeHtml(iconUrl)}" alt="">` : `<span class="message-embed-invite-icon-letter">${this.escapeHtml(initial)}</span>`}
             </div>
             <div class="message-embed-invite-info">
               <span class="message-embed-invite-name">${this.escapeHtml(name)}</span>
               <span class="message-embed-invite-stats">
-                <span class="message-embed-invite-online"><i class="message-embed-invite-dot message-embed-invite-dot--online"></i>${onlineCount} online</span>
-                <span class="message-embed-invite-members"><i class="message-embed-invite-dot message-embed-invite-dot--members"></i>${memberCount} membros</span>
+                <span class="message-embed-invite-online"><span class="message-embed-invite-dot message-embed-invite-dot--online"></span>${onlineCount} online</span>
+                <span class="message-embed-invite-members"><span class="message-embed-invite-dot message-embed-invite-dot--members"></span>${memberCount} membros</span>
               </span>
               ${sinceStr ? `<span class="message-embed-invite-since">Desde ${sinceStr}</span>` : ''}
             </div>
@@ -8238,13 +8234,25 @@ this._injectYouTubeEmbeds(msgEl, newContent);
             }
             return;
           }
-          if (!app.gateway || !app.gateway.connected) {
-            app.showToast('A aguardar ligação… Tenta novamente.', 'error');
+          if (app.gateway && app.gateway.connected) {
+            app._pendingInviteCode = code;
+            app.gateway.joinServer(code);
+            app.showToast('A entrar no servidor…', 'info');
             return;
           }
-          app._pendingInviteCode = code;
-          app.gateway.joinServer(code);
-          app.showToast('A entrar no servidor…', 'info');
+          API.Invite.join(code).then((data) => {
+            const server = data.server;
+            const channel = data.channel;
+            if (!server || !server.id) return;
+            if (!app.servers.some((s) => s.id === server.id)) {
+              app.servers.push(server);
+            }
+            app.renderServers();
+            app.selectServer(server.id, channel ? channel.id : null);
+            app.showToast('Entraste no servidor.', 'success');
+          }).catch((err) => {
+            app.showToast(err && err.message ? err.message : 'Convite inválido ou expirado.', 'error');
+          });
         });
       }
     } catch (_) {
