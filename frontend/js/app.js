@@ -1564,9 +1564,13 @@ class LibertyApp {
   _openFilePicker(accept) {
     const input = document.getElementById('message-file-input');
     if (!input) return;
-    input.accept = accept || 'image/*,video/*,audio/*,.gif,.webp,.pdf,application/pdf,.txt,.doc,.docx,.zip,.rar';
+    input.setAttribute('accept', accept || 'image/*,video/*,audio/*,.gif,.webp,.pdf,application/pdf,.txt,text/plain,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.zip,.rar,application/zip,application/x-rar-compressed');
     input.value = '';
-    input.click();
+    try {
+      input.click();
+    } catch (err) {
+      this.showToast('Não foi possível abrir a janela de ficheiros.', 'error');
+    }
   }
 
   /** Aceita FileList ou array de File; aplica limite de tamanho e quantidade. */
@@ -1748,6 +1752,10 @@ class LibertyApp {
         this.selectServer(serverId);
         this.showToast('Entraste no servidor.', 'success');
       }
+    });
+    g.on('invite_error', data => {
+      this._pendingInviteCode = null;
+      this.showToast(data.message || 'Convite inválido ou expirado.', 'error');
     });
     g.on('server_delete', data => {
       this.servers = this.servers.filter(s => s.id !== data.server_id);
@@ -8194,11 +8202,14 @@ this._injectYouTubeEmbeds(msgEl, newContent);
             </div>
             <div class="message-embed-invite-info">
               <span class="message-embed-invite-name">${this.escapeHtml(name)}</span>
-              <span class="message-embed-invite-stats">• ${onlineCount} online • ${memberCount} membros</span>
+              <span class="message-embed-invite-stats">
+                <span class="message-embed-invite-online"><i class="message-embed-invite-dot message-embed-invite-dot--online"></i>${onlineCount} online</span>
+                <span class="message-embed-invite-members"><i class="message-embed-invite-dot message-embed-invite-dot--members"></i>${memberCount} membros</span>
+              </span>
               ${sinceStr ? `<span class="message-embed-invite-since">Desde ${sinceStr}</span>` : ''}
             </div>
-            <button type="button" class="message-embed-invite-join-btn">Entrar</button>
           </div>
+          <button type="button" class="message-embed-invite-join-btn">Ir para o Servidor</button>
         </div>
       `;
       const btn = wrap.querySelector('.message-embed-invite-join-btn');

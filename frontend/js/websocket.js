@@ -118,6 +118,14 @@ class LibertyGateway {
       this.emit('message', data);
       return;
     }
+    if (type === 'server_created' && message.server) {
+      this.emit('server_create', { server: message.server });
+      return;
+    }
+    if (type === 'invite_error') {
+      this.emit('invite_error', { message: message.message || 'Convite inválido ou expirado' });
+      return;
+    }
     if (type === 'stream_started' && message.from_user_id) {
       this.emit('stream_started', { from_user_id: message.from_user_id, stream_type: message.stream_type });
       return;

@@ -866,7 +866,7 @@ app.use(
     hidePoweredBy: true,
   })
 );
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '20mb' }));
 // Parse Cookie header into req.cookies (evita dependência cookie-parser em deploy)
 app.use((req, _res, next) => {
   req.cookies = Object.create(null);
@@ -1429,6 +1429,7 @@ async function start() {
         author_username: m.author_username || m.author || 'User',
         avatar_url: m.avatar_url || null,
         created_at: (m.created_at instanceof Date ? m.created_at : new Date(m.created_at)).toISOString(),
+        attachments: Array.isArray(m.attachments) && m.attachments.length > 0 ? m.attachments : undefined,
       }));
       if (db.isConfigured() && db.isConnected() && result.length > 0) {
         const authorIds = [...new Set(result.map(m => m.author_id).filter(id => id && isUuid(String(id))))];
