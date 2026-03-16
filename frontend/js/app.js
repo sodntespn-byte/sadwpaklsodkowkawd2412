@@ -1737,8 +1737,20 @@ class LibertyApp {
     remoteAudioStream: null,
     remoteAudioElements: [],
     audioLevelRAF: null,
+    localAudioLevelRAF: null,
     muteRemote: false,
+    pendingIceCandidates: [],
   };
+
+  _callDrainPendingIceCandidates() {
+    const pc = this._voiceCallState.pc;
+    const queue = this._voiceCallState.pendingIceCandidates;
+    if (!pc || pc.signalingState === 'closed' || !queue.length) return;
+    this._voiceCallState.pendingIceCandidates = [];
+    queue.forEach(candidate => {
+      pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+    });
+  }
 
   _webrtcClearRemote() {
     this._webrtcStopAudioLevel();
@@ -1747,6 +1759,7 @@ class LibertyApp {
     const wrap = document.getElementById('webrtc-remote-wrap');
     if (wrap) {
       wrap.classList.remove('webrtc-remote-speaking');
+      wrap.classList.remove('call-neo__tile--speaking');
       wrap.querySelectorAll('audio.webrtc-remote-audio').forEach(a => {
         a.srcObject = null;
         a.remove();
@@ -1834,8 +1847,8 @@ class LibertyApp {
       cancelAnimationFrame(this._voiceCallState.localAudioLevelRAF);
       this._voiceCallState.localAudioLevelRAF = null;
     }
-    const pip = document.getElementById('webrtc-local-pip-wrap');
-    if (pip) pip.classList.remove('call-neo__pip--speaking');
+    const localWrap = document.getElementById('webrtc-local-avatar-wrap');
+    if (localWrap) localWrap.classList.remove('call-neo__player-circle--speaking');
   }
 
   _webrtcRunLocalAudioLevel(stream) {
@@ -1855,15 +1868,15 @@ class LibertyApp {
     }
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     const threshold = 25;
-    const pip = document.getElementById('webrtc-local-pip-wrap');
+    const localWrap = document.getElementById('webrtc-local-avatar-wrap');
     const loop = () => {
-      if (!analyser || !pip) return;
+      if (!analyser || !localWrap) return;
       analyser.getByteFrequencyData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
       const avg = sum / dataArray.length;
       const speaking = avg > threshold;
-      pip.classList.toggle('call-neo__pip--speaking', speaking);
+      localWrap.classList.toggle('call-neo__player-circle--speaking', speaking);
       this._voiceCallState.localAudioLevelRAF = requestAnimationFrame(loop);
     };
     loop();
@@ -1891,6 +1904,8 @@ class LibertyApp {
       }
     } catch (_) {}
     if (placeholderText) placeholderText.textContent = name;
+    const remoteLabel = document.getElementById('webrtc-remote-label');
+    if (remoteLabel) remoteLabel.textContent = name;
     const initialEl = document.getElementById('webrtc-remote-initial');
     if (initialEl) {
       initialEl.textContent = name.charAt(0).toUpperCase();
@@ -1956,10 +1971,11 @@ class LibertyApp {
       audio.className = 'webrtc-remote-audio';
       audio.autoplay = true;
       audio.playsInline = true;
+      audio.setAttribute('playsinline', '');
       audio.srcObject = stream;
       if (this._voiceCallState.muteRemote) audio.muted = true;
       wrap?.appendChild(audio);
-      audio.play().catch(() => {});
+      Promise.resolve().then(() => audio.play().catch(() => {}));
       this._voiceCallState.remoteAudioElements = wrap ? [...wrap.querySelectorAll('audio.webrtc-remote-audio')] : [];
       this._updateRemotePlaceholderProfile(this._voiceCallState.targetUserId);
       this._webrtcRunRemoteAudioLevel(stream);
@@ -2037,12 +2053,20 @@ class LibertyApp {
       this._showIncomingCallAlert(from);
     });
     g.on('webrtc_answer', d => {
-      if (this._voiceCallState.pc && d.payload)
-        this._voiceCallState.pc.setRemoteDescription(new RTCSessionDescription(d.payload)).catch(() => {});
+      if (!this._voiceCallState.pc || !d.payload) return;
+      this._voiceCallState.pc
+        .setRemoteDescription(new RTCSessionDescription(d.payload))
+        .then(() => this._callDrainPendingIceCandidates())
+        .catch(() => {});
     });
     g.on('webrtc_ice', d => {
-      if (this._voiceCallState.pc && d.payload)
-        this._voiceCallState.pc.addIceCandidate(new RTCIceCandidate(d.payload)).catch(() => {});
+      if (!this._voiceCallState.pc || !d.payload) return;
+      const pc = this._voiceCallState.pc;
+      if (pc.signalingState === 'have-local-offer') {
+        this._voiceCallState.pendingIceCandidates.push(d.payload);
+        return;
+      }
+      pc.addIceCandidate(new RTCIceCandidate(d.payload)).catch(() => {});
     });
     g.on('webrtc_reject', () => {
       this._voiceCallState.pendingOffer = null;
@@ -2196,13 +2220,24 @@ class LibertyApp {
     const placeholderText = document.querySelector('#webrtc-remote-placeholder .webrtc-placeholder-text');
     if (placeholderText) placeholderText.textContent = 'Aguardando a outra pessoa...';
     const localV = document.getElementById('webrtc-local-video');
-    if (localV) localV.srcObject = this._voiceCallState.stream;
+    const localFallback = document.getElementById('webrtc-local-fallback-icon');
+    if (localV) {
+      localV.srcObject = this._voiceCallState.stream;
+      const hasVideo = this._voiceCallState.stream && this._voiceCallState.stream.getVideoTracks().length > 0;
+      localV.classList.toggle('hidden', !hasVideo);
+      if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
+    } else if (localFallback) localFallback.classList.remove('hidden');
     if (this._voiceCallState.stream) this._webrtcRunLocalAudioLevel(this._voiceCallState.stream);
     const titleEl = document.getElementById('voice-call-channel-name');
     const other =
       (this.currentChannel?.recipients || []).find(r => r.id === from) ||
       this.dmChannels.find(c => c.recipients?.[0]?.id === from)?.recipients?.[0];
-    if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
+    const displayTitle = other
+      ? (other.global_name ? `${other.username} • ${other.global_name}` : other.username)
+      : 'Chamada';
+    if (titleEl) titleEl.textContent = displayTitle;
+    const remoteLabel = document.getElementById('webrtc-remote-label');
+    if (remoteLabel) remoteLabel.textContent = other?.username || 'Aguardando...';
     this._updateVoiceCallParticipantsBar();
     this._updateWebrtcControlButtons();
   }
@@ -2243,8 +2278,13 @@ class LibertyApp {
         this._voiceCallState.stream = null;
       }
     }
+    if (!this._voiceCallState.stream) {
+      this.showToast('É necessário permitir o microfone para ligar.', 'error');
+      return;
+    }
     this._voiceCallState.targetUserId = targetId;
-    this._voiceCallState.videoEnabled = !!this._voiceCallState.stream;
+    this._voiceCallState.videoEnabled = !!this._voiceCallState.stream.getVideoTracks().length;
+    this._voiceCallState.pendingIceCandidates = [];
     const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     if (this._voiceCallState.stream)
       this._voiceCallState.stream.getTracks().forEach(track => pc.addTrack(track, this._voiceCallState.stream));
@@ -2289,11 +2329,22 @@ class LibertyApp {
     if (placeholderText) placeholderText.textContent = 'A chamar...';
     if (placeholder) placeholder.classList.add('webrtc-placeholder-connecting');
     const localV = document.getElementById('webrtc-local-video');
-    if (localV) localV.srcObject = this._voiceCallState.stream;
+    const localFallback = document.getElementById('webrtc-local-fallback-icon');
+    if (localV) {
+      localV.srcObject = this._voiceCallState.stream;
+      const hasVideo = this._voiceCallState.stream && this._voiceCallState.stream.getVideoTracks().length > 0;
+      localV.classList.toggle('hidden', !hasVideo);
+      if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
+    } else if (localFallback) localFallback.classList.remove('hidden');
     if (this._voiceCallState.stream) this._webrtcRunLocalAudioLevel(this._voiceCallState.stream);
     const titleEl = document.getElementById('voice-call-channel-name');
     const other = (this.currentChannel?.recipients || []).find(r => r.id === targetId);
-    if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
+    const displayTitle = other
+      ? (other.global_name ? `${other.username} • ${other.global_name}` : other.username)
+      : 'Chamada';
+    if (titleEl) titleEl.textContent = displayTitle;
+    const remoteLabel = document.getElementById('webrtc-remote-label');
+    if (remoteLabel) remoteLabel.textContent = other?.username || 'Aguardando...';
     this._updateVoiceCallParticipantsBar();
     this._updateWebrtcControlButtons();
     if (typeof API !== 'undefined' && API.Call) {
@@ -2417,12 +2468,45 @@ class LibertyApp {
         }
         if (!this._voiceCallState.pc) return;
         const videoTracks = this._voiceCallState.stream.getVideoTracks();
-        if (videoTracks.length === 0) return;
+        if (videoTracks.length === 0) {
+          try {
+            const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const videoTrack = videoStream.getVideoTracks()[0];
+            if (!videoTrack) return;
+            this._voiceCallState.stream.addTrack(videoTrack);
+            this._voiceCallState.pc.addTrack(videoTrack, this._voiceCallState.stream);
+            this._voiceCallState.videoEnabled = true;
+            const offer = await this._voiceCallState.pc.createOffer();
+            await this._voiceCallState.pc.setLocalDescription(offer);
+            if (this.gateway)
+              this.gateway.send('webrtc_offer', {
+                target_user_id: this._voiceCallState.targetUserId,
+                payload: this._voiceCallState.pc.localDescription,
+              });
+            const localV = document.getElementById('webrtc-local-video');
+            if (localV) {
+              localV.srcObject = this._voiceCallState.stream;
+              localV.classList.remove('hidden');
+            }
+            const localFallback = document.getElementById('webrtc-local-fallback-icon');
+            if (localFallback) localFallback.classList.add('hidden');
+            this._playCallSound('camera_on');
+            this._updateWebrtcControlButtons();
+          } catch (e) {
+            this.showToast('Não foi possível ativar a câmara.', 'error');
+          }
+          return;
+        }
         this._voiceCallState.videoEnabled = !this._voiceCallState.videoEnabled;
         const track = videoTracks[0];
         track.enabled = this._voiceCallState.videoEnabled;
         const localV = document.getElementById('webrtc-local-video');
-        if (localV) localV.style.opacity = this._voiceCallState.videoEnabled ? '1' : '0.3';
+        if (localV) {
+          localV.style.opacity = this._voiceCallState.videoEnabled ? '1' : '0.3';
+          localV.classList.toggle('hidden', !this._voiceCallState.videoEnabled);
+        }
+        const localFallback = document.getElementById('webrtc-local-fallback-icon');
+        if (localFallback) localFallback.classList.toggle('hidden', this._voiceCallState.videoEnabled);
         this._playCallSound(this._voiceCallState.videoEnabled ? 'camera_on' : 'camera_off');
         this._updateWebrtcControlButtons();
       });
@@ -2453,12 +2537,21 @@ class LibertyApp {
           this._voiceCallState.displayStream = null;
           const senders = pc.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender)
-            videoSender.replaceTrack(
+          if (videoSender) {
+            const newTrack =
               this._voiceCallState.videoEnabled && this._voiceCallState.stream
                 ? this._voiceCallState.stream.getVideoTracks()[0] || null
-                : null
-            );
+                : null;
+            videoSender.replaceTrack(newTrack).then(async () => {
+              const offer = await pc.createOffer();
+              await pc.setLocalDescription(offer);
+              if (this.gateway)
+                this.gateway.send('webrtc_offer', {
+                  target_user_id: this._voiceCallState.targetUserId,
+                  payload: pc.localDescription,
+                });
+            }).catch(() => {});
+          }
           if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
           screenshareBtn.classList.remove('active');
           screenshareBtn.classList.remove('call-neo__ctrl--active');
@@ -2504,10 +2597,18 @@ class LibertyApp {
               this._voiceCallState.displayStream = null;
               const senders = pc.getSenders();
               const vs = senders.find(s => s.track && s.track.kind === 'video');
-              if (vs)
-                vs.replaceTrack(
-                  this._voiceCallState.stream ? this._voiceCallState.stream.getVideoTracks()[0] || null : null
-                );
+              if (vs) {
+                const newTrack = this._voiceCallState.stream ? this._voiceCallState.stream.getVideoTracks()[0] || null : null;
+                vs.replaceTrack(newTrack).then(async () => {
+                  const offer = await pc.createOffer();
+                  await pc.setLocalDescription(offer);
+                  if (this.gateway)
+                    this.gateway.send('webrtc_offer', {
+                      target_user_id: this._voiceCallState.targetUserId,
+                      payload: pc.localDescription,
+                    });
+                }).catch(() => {});
+              }
               if (this.gateway)
                 this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
               screenshareBtn.classList.remove('active');
@@ -6552,14 +6653,13 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         if (!bannerUrl && typeof localStorage !== 'undefined') {
           try { bannerUrl = localStorage.getItem('liberty_banner_url') || ''; } catch (_) {}
         }
-        const profileColor = (typeof localStorage !== 'undefined' && localStorage.getItem('liberty_accent_color')) || '#FFD700';
         const avatarUrl = this._getAvatarUrl ? this._getAvatarUrl() : (u?.avatar_url || u?.avatar || '');
         const hasAvatar = !!avatarUrl;
         const initial = (displayName || 'U').charAt(0).toUpperCase();
         const avatarPreviewHtml = hasAvatar
           ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(initial)}</span>`
           : `<span>${this.escapeHtml(initial)}</span>`;
-        const bannerStyle = bannerUrl ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"` : `style="background:linear-gradient(135deg, ${this.escapeHtml(profileColor)}, ${this.escapeHtml(profileColor)}99)"`;
+        const bannerStyle = bannerUrl ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"` : 'style="background:var(--dark-gray)"';
         const aboutText = aboutMe ? this.escapeHtml(aboutMe) : 'No bio set yet';
         const aboutClass = aboutMe ? '' : ' settings-profile-about-empty';
         return `<h2 class="settings-page-title">Perfil</h2>
@@ -6570,7 +6670,6 @@ this._injectYouTubeEmbeds(msgEl, newContent);
                             <div class="settings-row"><div style="flex:1"><div class="settings-row-label">About Me</div><textarea id="settings-profile-about" maxlength="190" style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:8px 12px;color:var(--text-primary);font-size:14px;width:100%;height:80px;resize:none;margin-top:8px;font-family:inherit;box-sizing:border-box" placeholder="Tell the world about yourself">${this.escapeHtml(aboutMe)}</textarea></div></div>
                             <div class="settings-row" style="align-items:center;gap:12px"><div><div class="settings-row-label">Avatar</div></div><input type="file" id="settings-profile-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none"><button type="button" class="btn btn-primary btn-sm" id="settings-profile-avatar-btn">Change Avatar</button></div>
                             <div class="settings-row" style="align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><div class="settings-row-label">Profile Banner</div><input type="url" id="settings-profile-banner-url" value="${this.escapeHtml(bannerUrl)}" placeholder="https://exemplo.com/banner.jpg" style="background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);padding:8px 12px;color:var(--text-primary);font-size:14px;width:100%;margin-top:8px;box-sizing:border-box"></div><button type="button" class="btn btn-primary btn-sm" id="settings-profile-banner-save">Save Banner</button></div>
-                            <div class="settings-row"><div><div class="settings-row-label">Profile Color</div><div class="settings-row-desc">Cor de destaque no perfil</div></div><input type="color" id="settings-profile-color" value="${this.escapeHtml(profileColor)}" style="width:40px;height:30px;border:none;background:transparent;cursor:pointer"></div>
                             <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"><button type="button" class="btn btn-primary" id="settings-profile-save-btn">Guardar alterações</button></div>
                         </div>
                     </div>
@@ -6588,64 +6687,10 @@ this._injectYouTubeEmbeds(msgEl, newContent);
                 </div>`;
       },
       appearance: () => {
-        const bgType = localStorage.getItem('liberty-bg-type') || 'default';
-        const bgSolid = localStorage.getItem('liberty-bg-solid') || '#000000';
-        let bgGrad = { color1: '#0d0b09', color2: '#1a1814', angle: 135 };
-        try {
-          const g = localStorage.getItem('liberty-bg-gradient');
-          if (g) bgGrad = { ...bgGrad, ...JSON.parse(g) };
-        } catch (_) {}
-        const bgImage = localStorage.getItem('liberty-bg-image') || '';
-        let html = `<h2>Aparência</h2>
-                <div class="settings-card settings-bg-card"><h3 style="margin-top:0">Fundo do site</h3>
-                <p class="settings-row-desc" style="margin-bottom:12px">Escolha cor sólida, gradiente ou imagem/GIF como fundo da aplicação.</p>
-                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-                    <label class="settings-bg-type-opt" data-bg-type="default" style="padding:10px 16px;border-radius:var(--radius-md);border:2px solid ${bgType === 'default' ? 'var(--primary-yellow)' : 'rgba(255,255,255,.1)'};background:${bgType === 'default' ? 'rgba(255,215,0,.1)' : 'transparent'};cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)"><i class="fas fa-square-full" style="font-size:10px;margin-right:6px"></i>Preto</label>
-                    <label class="settings-bg-type-opt" data-bg-type="solid" style="padding:10px 16px;border-radius:var(--radius-md);border:2px solid ${bgType === 'solid' ? 'var(--primary-yellow)' : 'rgba(255,255,255,.1)'};background:${bgType === 'solid' ? 'rgba(255,215,0,.1)' : 'transparent'};cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)"><i class="fas fa-fill-drip" style="margin-right:6px"></i>Cor sólida</label>
-                    <label class="settings-bg-type-opt" data-bg-type="gradient" style="padding:10px 16px;border-radius:var(--radius-md);border:2px solid ${bgType === 'gradient' ? 'var(--primary-yellow)' : 'rgba(255,255,255,.1)'};background:${bgType === 'gradient' ? 'rgba(255,215,0,.1)' : 'transparent'};cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)"><i class="fas fa-fill" style="margin-right:6px"></i>Gradiente</label>
-                    <label class="settings-bg-type-opt" data-bg-type="image" style="padding:10px 16px;border-radius:var(--radius-md);border:2px solid ${bgType === 'image' ? 'var(--primary-yellow)' : 'rgba(255,255,255,.1)'};background:${bgType === 'image' ? 'rgba(255,215,0,.1)' : 'transparent'};cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary)"><i class="fas fa-image" style="margin-right:6px"></i>Imagem / GIF</label>
-                </div>
-                <div id="settings-bg-solid-wrap" class="settings-bg-pane" style="display:${bgType === 'solid' ? 'block' : 'none'}">
-                    <div class="settings-section-block" style="margin-bottom:0">
-                        <h3 style="margin-top:0">Cor</h3>
-                        <div class="input-row" style="align-items:center;gap:12px">
-                            <input type="color" id="settings-bg-solid-color" value="${bgSolid}" style="width:48px;height:36px;padding:2px;border:none;border-radius:var(--radius-sm);cursor:pointer;background:transparent" />
-                            <input type="text" id="settings-bg-solid-hex" value="${bgSolid}" placeholder="#000000" maxlength="7" style="flex:1;min-width:100px;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit" />
-                        </div>
-                    </div>
-                </div>
-                <div id="settings-bg-gradient-wrap" class="settings-bg-pane" style="display:${bgType === 'gradient' ? 'block' : 'none'}">
-                    <div class="settings-section-block" style="margin-bottom:0">
-                        <h3 style="margin-top:0">Gradiente</h3>
-                        <div class="input-row" style="flex-wrap:wrap;gap:12px;margin-bottom:10px">
-                            <div style="display:flex;align-items:center;gap:8px"><label style="font-size:12px;color:var(--text-secondary)">Cor 1</label><input type="color" id="settings-bg-grad-color1" value="${bgGrad.color1}" style="width:40px;height:28px;padding:2px;border:none;border-radius:4px;cursor:pointer" /><input type="text" id="settings-bg-grad-hex1" value="${bgGrad.color1}" maxlength="7" style="width:80px;padding:6px 8px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px" /></div>
-                            <div style="display:flex;align-items:center;gap:8px"><label style="font-size:12px;color:var(--text-secondary)">Cor 2</label><input type="color" id="settings-bg-grad-color2" value="${bgGrad.color2}" style="width:40px;height:28px;padding:2px;border:none;border-radius:4px;cursor:pointer" /><input type="text" id="settings-bg-grad-hex2" value="${bgGrad.color2}" maxlength="7" style="width:80px;padding:6px 8px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px" /></div>
-                            <div style="display:flex;align-items:center;gap:8px"><label style="font-size:12px;color:var(--text-secondary)">Ângulo</label><input type="number" id="settings-bg-grad-angle" value="${bgGrad.angle}" min="0" max="360" style="width:70px;padding:6px 8px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-sm);color:var(--text-primary);font-size:12px" /></div>
-                        </div>
-                    </div>
-                </div>
-                <div id="settings-bg-image-wrap" class="settings-bg-pane" style="display:${bgType === 'image' ? 'block' : 'none'}">
-                    <div class="settings-section-block" style="margin-bottom:12px">
-                        <h3 style="margin-top:0">URL da imagem ou GIF</h3>
-                        <p class="settings-row-desc" style="margin-bottom:10px">Cole o link de uma imagem ou GIF. O fundo ficará coberto com um overlay preto suave para melhor leitura.</p>
-                        <input type="url" id="settings-bg-image-url" value="${this.escapeHtml(bgImage)}" placeholder="https://exemplo.com/imagem.jpg ou .gif" style="width:100%;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit;box-sizing:border-box" />
-                    </div>
-                    <div id="settings-bg-image-preview-wrap" class="settings-bg-preview" style="display:${bgImage ? 'block' : 'none'};margin-top:12px">
-                        <div class="settings-bg-preview-label">Pré-visualização do fundo</div>
-                        <div class="settings-bg-preview-box" id="settings-bg-image-preview">
-                            ${bgImage ? `<img src="${this.escapeHtml(bgImage)}" alt="" class="settings-bg-preview-img" onerror="this.parentElement.classList.add('error')" onload="this.parentElement.classList.remove('error')">` : ''}
-                        </div>
-                    </div>
-                </div>
-                <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-                    <button type="button" class="btn-save" id="settings-bg-apply">Aplicar fundo</button>
-                    <button type="button" class="btn btn-secondary btn-sm" id="settings-bg-reset">Restaurar preto</button>
-                </div>
-                </div>`;
         const layoutCompact = localStorage.getItem('liberty_layout_compact') === 'true';
         const layoutChannelsRight = localStorage.getItem('liberty_layout_channels_right') === 'true';
         const layoutMembersLeft = localStorage.getItem('liberty_layout_members_left') === 'true';
-        html += `<div class="settings-card" style="margin-top:16px"><h3 style="margin-top:0">Layout</h3>
+        let html = `<h2>Aparência</h2><div class="settings-card"><h3 style="margin-top:0">Layout</h3>
                 <div class="settings-row" style="align-items:center;gap:12px">
                 <div><div class="settings-row-label">Modo compacto</div><div class="settings-row-desc">Menos espaço entre elementos e barras mais estreitas</div></div>
                 <div class="toggle-switch ${layoutCompact ? 'active' : ''}" id="settings-layout-compact" role="button" tabindex="0"></div>
@@ -7070,7 +7115,6 @@ this._injectYouTubeEmbeds(msgEl, newContent);
       const avatarBtn = content.querySelector('#settings-profile-avatar-btn');
       const bannerUrlEl = content.querySelector('#settings-profile-banner-url');
       const bannerSaveBtn = content.querySelector('#settings-profile-banner-save');
-      const colorEl = content.querySelector('#settings-profile-color');
       const saveBtn = content.querySelector('#settings-profile-save-btn');
       const previewBanner = content.querySelector('#settings-profile-preview-banner');
       const previewAvatar = content.querySelector('#settings-profile-preview-avatar');
@@ -7081,7 +7125,6 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         const name = (displayNameEl && displayNameEl.value || '').trim() || 'User';
         const about = (aboutEl && aboutEl.value || '').trim();
         const bannerUrl = (bannerUrlEl && bannerUrlEl.value || '').trim();
-        const color = (colorEl && colorEl.value) || '#FFD700';
         if (previewName) previewName.textContent = name;
         if (previewAbout) {
           previewAbout.textContent = about || 'No bio set yet';
@@ -7094,7 +7137,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
             previewBanner.style.backgroundPosition = 'center';
           } else {
             previewBanner.style.backgroundImage = '';
-            previewBanner.style.background = `linear-gradient(135deg, ${color}, ${color}99)`;
+            previewBanner.style.background = 'var(--dark-gray)';
           }
         }
         if (previewAvatar && previewAvatar.querySelector('span') && !previewAvatar.querySelector('img')) {
@@ -7105,10 +7148,6 @@ this._injectYouTubeEmbeds(msgEl, newContent);
       if (displayNameEl) displayNameEl.addEventListener('input', updateProfilePreview);
       if (aboutEl) aboutEl.addEventListener('input', updateProfilePreview);
       if (bannerUrlEl) bannerUrlEl.addEventListener('input', updateProfilePreview);
-      if (colorEl) colorEl.addEventListener('input', () => {
-        try { localStorage.setItem('liberty_accent_color', colorEl.value); } catch (_) {}
-        updateProfilePreview();
-      });
 
       if (avatarBtn && avatarFileEl) {
         avatarBtn.addEventListener('click', () => avatarFileEl.click());
@@ -7175,12 +7214,10 @@ this._injectYouTubeEmbeds(msgEl, newContent);
       const saveProfile = () => {
         const name = (displayNameEl && displayNameEl.value || '').trim().substring(0, 32);
         const about = (aboutEl && aboutEl.value || '').trim().substring(0, 190);
-        const color = (colorEl && colorEl.value) || '#FFD700';
         if (!name) {
           this.showToast('O nome não pode estar vazio.', 'info');
           return;
         }
-        try { localStorage.setItem('liberty_accent_color', color); } catch (_) {}
         if (typeof API !== 'undefined' && API.User && API.Token.getAccessToken()) {
           const payload = { username: name, description: about || null };
           API.User.updateCurrentUser(payload)
@@ -7511,136 +7548,6 @@ this._injectYouTubeEmbeds(msgEl, newContent);
       }
     }
     if (section === 'appearance' && type === 'user') {
-      const bgTypeOpts = content.querySelectorAll('.settings-bg-type-opt');
-      const solidWrap = content.querySelector('#settings-bg-solid-wrap');
-      const gradientWrap = content.querySelector('#settings-bg-gradient-wrap');
-      const imageWrap = content.querySelector('#settings-bg-image-wrap');
-      const bgImageUrlInput = content.querySelector('#settings-bg-image-url');
-      const bgPreviewWrap = content.querySelector('#settings-bg-image-preview-wrap');
-      const bgPreviewBox = content.querySelector('#settings-bg-image-preview');
-      const updateBgImagePreview = () => {
-        const url = (bgImageUrlInput && bgImageUrlInput.value || '').trim();
-        if (bgPreviewWrap) bgPreviewWrap.style.display = url ? 'block' : 'none';
-        if (bgPreviewBox) {
-          bgPreviewBox.classList.remove('error');
-          bgPreviewBox.innerHTML = url ? `<img src="${this.escapeHtml(url)}" alt="" class="settings-bg-preview-img" onerror="this.parentElement.classList.add('error')" onload="this.parentElement.classList.remove('error')">` : '';
-        }
-      };
-      if (bgImageUrlInput) bgImageUrlInput.addEventListener('input', updateBgImagePreview);
-      if (bgImageUrlInput) bgImageUrlInput.addEventListener('change', updateBgImagePreview);
-      const applyBtn = content.querySelector('#settings-bg-apply');
-      const resetBtn = content.querySelector('#settings-bg-reset');
-      const setBgType = type => {
-        [solidWrap, gradientWrap, imageWrap].forEach(el => {
-          if (el) el.style.display = 'none';
-        });
-        if (type === 'solid' && solidWrap) solidWrap.style.display = 'block';
-        if (type === 'gradient' && gradientWrap) gradientWrap.style.display = 'block';
-        if (type === 'image' && imageWrap) imageWrap.style.display = 'block';
-        bgTypeOpts.forEach(opt => {
-          const t = opt.dataset.bgType;
-          opt.style.borderColor = t === type ? 'var(--primary-yellow)' : 'rgba(255,255,255,.1)';
-          opt.style.background = t === type ? 'rgba(255,215,0,.1)' : 'transparent';
-        });
-      };
-      bgTypeOpts.forEach(opt => {
-        opt.addEventListener('click', () => {
-          const t = opt.dataset.bgType;
-          localStorage.setItem('liberty-bg-type', t);
-          setBgType(t);
-        });
-      });
-      const solidColor = content.querySelector('#settings-bg-solid-color');
-      const solidHex = content.querySelector('#settings-bg-solid-hex');
-      if (solidColor && solidHex) {
-        solidColor.addEventListener('input', () => {
-          solidHex.value = solidColor.value;
-        });
-        solidHex.addEventListener('input', () => {
-          const v = solidHex.value.trim();
-          if (/^#[0-9A-Fa-f]{6}$/.test(v)) solidColor.value = v;
-        });
-      }
-      const gradC1 = content.querySelector('#settings-bg-grad-color1');
-      const gradH1 = content.querySelector('#settings-bg-grad-hex1');
-      const gradC2 = content.querySelector('#settings-bg-grad-color2');
-      const gradH2 = content.querySelector('#settings-bg-grad-hex2');
-      if (gradC1 && gradH1) {
-        gradC1.addEventListener('input', () => {
-          gradH1.value = gradC1.value;
-        });
-        gradH1.addEventListener('input', () => {
-          const v = gradH1.value.trim();
-          if (/^#[0-9A-Fa-f]{6}$/.test(v)) gradC1.value = v;
-        });
-      }
-      if (gradC2 && gradH2) {
-        gradC2.addEventListener('input', () => {
-          gradH2.value = gradC2.value;
-        });
-        gradH2.addEventListener('input', () => {
-          const v = gradH2.value.trim();
-          if (/^#[0-9A-Fa-f]{6}$/.test(v)) gradC2.value = v;
-        });
-      }
-      if (applyBtn) {
-        applyBtn.addEventListener('click', () => {
-          const type = localStorage.getItem('liberty-bg-type') || 'default';
-          if (type === 'solid' && solidColor) {
-            const hex = (solidHex && solidHex.value.trim()) || solidColor.value;
-            if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-              localStorage.setItem('liberty-bg-solid', hex);
-              this.applyBackground();
-              this.showToast('Fundo aplicado.', 'success');
-            } else this.showToast('Cor inválida. Use #RRGGBB.', 'error');
-          } else if (type === 'gradient') {
-            const c1 = (gradH1 && gradH1.value.trim()) || gradC1?.value || '#0d0b09';
-            const c2 = (gradH2 && gradH2.value.trim()) || gradC2?.value || '#1a1814';
-            const angle = parseInt(content.querySelector('#settings-bg-grad-angle')?.value, 10) || 135;
-            if (/^#[0-9A-Fa-f]{6}$/.test(c1) && /^#[0-9A-Fa-f]{6}$/.test(c2)) {
-              localStorage.setItem('liberty-bg-gradient', JSON.stringify({ color1: c1, color2: c2, angle }));
-              this.applyBackground();
-              this.showToast('Gradiente aplicado.', 'success');
-            } else this.showToast('Cores inválidas. Use #RRGGBB.', 'error');
-          } else if (type === 'image') {
-            const url = content.querySelector('#settings-bg-image-url')?.value?.trim() || '';
-            if (url) {
-              localStorage.setItem('liberty-bg-image', url);
-              this.applyBackground();
-              this.showToast('Imagem de fundo aplicada.', 'success');
-            } else this.showToast('Cole a URL da imagem ou GIF.', 'error');
-          } else {
-            localStorage.setItem('liberty-bg-type', 'default');
-            this.applyBackground();
-            this.showToast('Fundo preto aplicado.', 'success');
-          }
-        });
-      }
-      if (resetBtn) {
-        resetBtn.addEventListener('click', () => {
-          localStorage.setItem('liberty-bg-type', 'default');
-          localStorage.removeItem('liberty-bg-solid');
-          localStorage.removeItem('liberty-bg-gradient');
-          localStorage.removeItem('liberty-bg-image');
-          this.applyBackground();
-          setBgType('default');
-          if (solidHex) solidHex.value = '#000000';
-          if (solidColor) solidColor.value = '#000000';
-          if (gradH1) gradH1.value = '#0d0b09';
-          if (gradC1) gradC1.value = '#0d0b09';
-          if (gradH2) gradH2.value = '#1a1814';
-          if (gradC2) gradC2.value = '#1a1814';
-          const angleEl = content.querySelector('#settings-bg-grad-angle');
-          if (angleEl) angleEl.value = '135';
-          const imgUrl = content.querySelector('#settings-bg-image-url');
-          if (imgUrl) imgUrl.value = '';
-          const pw = content.querySelector('#settings-bg-image-preview-wrap');
-          const pb = content.querySelector('#settings-bg-image-preview');
-          if (pw) pw.style.display = 'none';
-          if (pb) pb.innerHTML = '';
-          this.showToast('Fundo preto restaurado.', 'success');
-        });
-      }
       const layoutCompactToggle = content.querySelector('#settings-layout-compact');
       if (layoutCompactToggle) {
         layoutCompactToggle.addEventListener('click', () => {

@@ -579,6 +579,24 @@ const auth = {
     if (!req.userId) return res.status(401).json({ message: 'Não autorizado' });
     next();
   },
+  /** Verifica se o utilizador existe na base (evita FK ao criar servidores após limpar a DB). */
+  async requireUserExists(req, res, next) {
+    if (!req.userId) return res.status(401).json({ message: 'Não autorizado' });
+    if (!db.isConfigured() || !db.isConnected()) return next();
+    try {
+      const r = await db.query(`SELECT id FROM users WHERE id = $1::uuid LIMIT 1`, [req.userId]);
+      if (!r.rows[0]) {
+        return res.status(401).json({
+          message: 'Sessão inválida. Faça login ou registe-se novamente.',
+          code: 'USER_NOT_FOUND',
+        });
+      }
+      next();
+    } catch (err) {
+      logger.error('requireUserExists', err);
+      return res.status(500).json({ message: 'Erro ao verificar sessão' });
+    }
+  },
 };
 
 // --- ws (inline para deploy sem ws.js)
@@ -876,6 +894,23 @@ async function start() {
       await db.connect();
       if (db.isConnected()) {
         await dbInit();
+        try {
+          const ex = await db.query(`SELECT id FROM servers WHERE name = $1 LIMIT 1`, ['Liberty']);
+          if (!ex.rows[0]?.id) {
+            const ins = await db.query(
+              `INSERT INTO servers (name, owner_id) VALUES ($1, NULL) RETURNING id`,
+              ['Liberty']
+            );
+            const sid = ins.rows[0].id;
+            await db.query(
+              `INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid)`,
+              [sid]
+            );
+            logger.info('[LIBERTY] Servidor padrão Liberty criado.');
+          }
+        } catch (e) {
+          logger.warn('[LIBERTY] ensureLibertyServer at startup:', e.message);
+        }
       } else {
         logger.warn('[LIBERTY] Primeira conexão falhou; será tentado na primeira requisição.');
       }
@@ -1399,7 +1434,11 @@ async function start() {
   });
 
   // GET /api/v1/servers — lista de servidores do usuário (autenticado); Liberty sempre incluído
-  app.get('/api/v1/servers', auth.requireAuth, async (req, res) => {
+  app.get(
+    '/api/v1/servers',
+    auth.requireAuth,
+    (req, res, next) => auth.requireUserExists(req, res, next).catch(next),
+    async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1450,7 +1489,7 @@ async function start() {
       logger.error('GET /api/v1/servers', err);
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar servidores') });
     }
-  });
+    });
 
   // GET /api/v1/servers/:serverId — detalhes de um servidor (autenticado; 404 se não existir ou sem acesso)
   app.get('/api/v1/servers/:serverId', auth.requireAuth, requireUuidParams(['serverId']), async (req, res) => {
@@ -1599,7 +1638,11 @@ async function start() {
   });
 
   // POST /api/v1/servers — criar servidor (autenticado)
-  app.post('/api/v1/servers', auth.requireAuth, async (req, res) => {
+  app.post(
+    '/api/v1/servers',
+    auth.requireAuth,
+    (req, res, next) => auth.requireUserExists(req, res, next).catch(next),
+    async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
@@ -1692,7 +1735,7 @@ async function start() {
       logger.error('POST /api/v1/servers', err);
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar servidor') });
     }
-  });
+    });
 
   // GET /api/v1/servers/:serverId/channels — lista canais e categorias do servidor
   app.get('/api/v1/servers/:serverId/channels', auth.requireAuth, requireUuidParams(['serverId']), async (req, res) => {
