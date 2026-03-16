@@ -37,6 +37,7 @@ import jwt from 'jsonwebtoken';
 import WebSocket, { WebSocketServer } from 'ws';
 import crypto from 'node:crypto';
 import Joi from 'joi';
+import multer from 'multer';
 import config from './src/config.js';
 import { logger } from './src/lib/logger.js';
 
@@ -796,6 +797,12 @@ app.disable('x-powered-by');
 const PORT = config.PORT;
 const STATIC_DIR = config.STATIC_DIR;
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
+const ATTACHMENTS_DIR = path.join(UPLOADS_DIR, 'attachments');
+try {
+  if (!fs.existsSync(ATTACHMENTS_DIR)) fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
+} catch (e) {
+  logger.warn('[LIBERTY] Não foi possível criar pasta uploads/attachments:', e.message);
+}
 const ALLOWED_ORIGINS = config.ALLOWED_ORIGINS;
 const corsOptions = {
   origin:
@@ -867,7 +874,7 @@ app.use(
     hidePoweredBy: true,
   })
 );
-app.use(express.json({ limit: '20mb' }));
+app.use(express.json({ limit: '70mb' }));
 // Parse Cookie header into req.cookies (evita dependência cookie-parser em deploy)
 app.use((req, _res, next) => {
   req.cookies = Object.create(null);
@@ -1292,13 +1299,44 @@ async function start() {
     return (await getChatIdForServerAndChannel(null, channelId)) || (await getDefaultChatId());
   }
 
-  // Mensagens por canal: cache + persistência no DB (ensureMessageInDb); anexos em base64 ou URL
-  const ATTACHMENTS_DIR = path.join(UPLOADS_DIR, 'attachments');
-  try {
-    if (!fs.existsSync(ATTACHMENTS_DIR)) fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
-  } catch (e) {
-    logger.warn('[LIBERTY] Não foi possível criar pasta uploads/attachments:', e.message);
-  }
+  const uploadAttachment = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, ATTACHMENTS_DIR),
+      filename: (_req, file, cb) => {
+        const ext = (file.originalname && path.extname(file.originalname).slice(1)) || 'bin';
+        const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : 'bin';
+        cb(null, `${crypto.randomUUID()}.${safeExt}`);
+      },
+    }),
+    limits: { fileSize: 1024 * 1024 * 1024 },
+  });
+
+  app.post(
+    '/api/v1/channels/:channelId/attachments',
+    auth.requireAuth,
+    requireUuidParams(['channelId']),
+    (req, res, next) => {
+      resolveChannelToChatId(req.userId, req.params.channelId).then(chatId => {
+        if (!chatId) return res.status(404).json({ message: 'Canal não encontrado' });
+        next();
+      }).catch(err => next(err));
+    },
+    (req, res, next) => {
+      uploadAttachment.single('file')(req, res, (err) => {
+        if (err && err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ message: 'Ficheiro excede 1 GB.' });
+        next(err);
+      });
+    },
+    (req, res) => {
+      if (!req.file) return res.status(400).json({ message: 'Envie um ficheiro (campo "file").' });
+      const url = `/uploads/attachments/${req.file.filename}`;
+      return res.status(201).json({
+        url,
+        filename: req.file.originalname || req.file.filename,
+        mime_type: req.file.mimetype || null,
+      });
+    }
+  );
 
   app.post(
     '/api/v1/channels/:channelId/messages',
@@ -1332,7 +1370,7 @@ async function start() {
           } catch (_) {}
         }
         const savedAttachments = [];
-        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+        const MAX_BASE64_SIZE = 50 * 1024 * 1024;
         if (hasAttachments) {
           for (const att of rawAttachments) {
             if (att.url && (att.url.startsWith('/uploads/') || att.url.startsWith('http://') || att.url.startsWith('https://'))) {
@@ -1354,8 +1392,8 @@ async function start() {
               } catch (_) {
                 continue;
               }
-              if (buf.length > MAX_FILE_SIZE) {
-                return res.status(400).json({ message: `Anexo "${att.filename || 'file'}" excede 10 MB.` });
+              if (buf.length > MAX_BASE64_SIZE) {
+                return res.status(400).json({ message: `Anexo "${att.filename || 'file'}" excede 50 MB. Use o upload de ficheiros.` });
               }
               const ext = mimeType.split('/')[1] || 'bin';
               const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : 'bin';

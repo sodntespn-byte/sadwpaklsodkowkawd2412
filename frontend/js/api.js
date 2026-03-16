@@ -339,6 +339,23 @@ const MessageAPI = {
     });
   },
 
+  async uploadAttachment(channelId, file) {
+    const token = getStoredToken();
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API_BASE}/channels/${channelId}/attachments`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: token ? { Authorization: 'Bearer ' + token, 'X-Auth-Token': token } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: 'Falha no upload' }));
+      throw new Error(err.message || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+
   async get(channelId, messageId) {
     return apiRequest(`/channels/${channelId}/messages/${messageId}`);
   },

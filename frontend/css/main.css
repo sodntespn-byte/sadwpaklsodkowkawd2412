@@ -1729,10 +1729,6 @@ a:hover {
 }
 
 /* ── Message groups: avatar à esquerda, nome + hora na mesma linha, texto abaixo ── */
-@keyframes messageAppear {
-  from { opacity: 0.6; }
-  to { opacity: 1; }
-}
 .message-group {
   display: flex;
   gap: 12px;
@@ -1743,7 +1739,6 @@ a:hover {
   transition: background 0.15s ease;
   position: relative;
   min-height: 1.5em;
-  animation: messageAppear 0.12s ease-out;
 }
 .message-group:hover {
   background: rgba(255, 255, 255, 0.03);

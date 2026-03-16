@@ -1573,17 +1573,16 @@ class LibertyApp {
     }
   }
 
-  /** Aceita FileList ou array de File; aplica limite de tamanho e quantidade. */
+  /** Aceita FileList ou array de File; até 1 GB por ficheiro; fotos, gifs, vídeos, ficheiros. */
   _addFilesToPendingAttachments(fileList) {
     if (!fileList?.length) return;
-    const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+    const MAX_SIZE = 1024 * 1024 * 1024;
     const MAX_FILES = 10;
-    const current = this._pendingAttachments.length;
     const files = Array.from(fileList);
     for (let i = 0; i < files.length && this._pendingAttachments.length < MAX_FILES; i++) {
       const file = files[i];
       if (file.size > MAX_SIZE) {
-        this.showToast(`"${file.name}" excede 10 MB. Não anexado.`, 'error');
+        this.showToast(`"${file.name}" excede 1 GB. Não anexado.`, 'error');
         continue;
       }
       const mimeType = file.type || '';
@@ -1724,13 +1723,12 @@ class LibertyApp {
             );
             if (pending) {
               this.replacePendingWithMessage(pending[0], normalized);
-              this.scrollToBottom();
               return;
             }
             if (this.messages.has(String(msgId)) || document.getElementById('messages-list')?.querySelector(`[data-message="${msgId}"]`)) return;
           }
           this.addMessage(normalized, true);
-          this.scrollToBottom();
+          this.scrollToBottom(true);
         }
       } else if (chId) {
         this.unreadChannels.add(chId);
@@ -5290,18 +5288,22 @@ this._injectYouTubeEmbeds(msgEl, newContent);
     this._sendingMessage = true;
     this._updateSendButtonState();
 
-    // Preparar anexos para a API (base64) e para a mensagem optimista (preview)
     let apiAttachments = [];
     const optimisticAttachmentList = [];
-    if (hasAttachments) {
+    const channelId = this.currentChannel?.id;
+    const BIG_FILE = 25 * 1024 * 1024;
+    if (hasAttachments && channelId) {
       const pending = [...this._pendingAttachments];
       try {
         apiAttachments = await Promise.all(
-          pending.map(async (att) => ({
-            data: await this._fileToDataUrl(att.file),
-            filename: att.name,
-            mime_type: att.mimeType || null,
-          }))
+          pending.map(async (att) => {
+            if (att.file.size > BIG_FILE) {
+              const up = await API.Message.uploadAttachment(channelId, att.file);
+              return { url: up.url, filename: up.filename || att.name, mime_type: up.mime_type || att.mimeType || null };
+            }
+            const data = await this._fileToDataUrl(att.file);
+            return { data, filename: att.name, mime_type: att.mimeType || null };
+          })
         );
         pending.forEach((att) => {
           optimisticAttachmentList.push({
@@ -5336,7 +5338,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
     input.style.height = 'auto';
     this.cancelReply();
     this.addMessage(optimistic, true);
-    this.scrollToBottom();
+    this.scrollToBottom(true);
 
     try {
       const res = await API.Message.create(roomOrId, contentToSend, {
@@ -5354,7 +5356,6 @@ this._injectYouTubeEmbeds(msgEl, newContent);
           attachments: msg.attachments || undefined,
         };
         this.replacePendingWithMessage(tempId, normalized);
-        this.scrollToBottom();
       }
     } catch (err) {
       console.error('Erro ao enviar mensagem no front-end:', err);
@@ -7910,12 +7911,19 @@ this._injectYouTubeEmbeds(msgEl, newContent);
   //  UTILITIES
   // ═══════════════════════════════════════════
 
-  scrollToBottom() {
+  scrollToBottom(force = false) {
     const container = document.getElementById('messages-container');
     if (!container) return;
-    requestAnimationFrame(() => {
+    const list = document.getElementById('messages-list');
+    const last = list?.lastElementChild;
+    if (!last) {
       container.scrollTop = container.scrollHeight;
-    });
+      return;
+    }
+    const threshold = 120;
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= threshold;
+    if (!force && !nearBottom) return;
+    last.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }
 
   removeMessage(messageId) {
