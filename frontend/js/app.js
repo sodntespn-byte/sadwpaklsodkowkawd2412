@@ -4930,6 +4930,44 @@ class LibertyApp {
     return parts.length ? `<div class="message-attachments">${parts.join('')}</div>` : '';
   }
 
+  _messageDateLabel(date) {
+    const d = new Date(date);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return 'Hoje';
+    if (d.toDateString() === yesterday.toDateString()) return 'Ontem';
+    return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+
+  _ensureDateDividerBefore(container, messageDate) {
+    const last = container.lastElementChild;
+    let prevDate = null;
+    if (!last) {
+      const div = document.createElement('div');
+      div.className = 'message-date-divider';
+      div.dataset.date = new Date(messageDate).toDateString();
+      div.innerHTML = `<span class="message-date-divider-label">${this.escapeHtml(this._messageDateLabel(messageDate))}</span>`;
+      container.appendChild(div);
+      return;
+    }
+    if (last.classList.contains('message-group') && last.dataset.message) {
+      const prevMsg = this.messages.get(last.dataset.message);
+      prevDate = prevMsg?.created_at || prevMsg?.timestamp;
+    } else if (last.classList.contains('message-date-divider') && last.dataset.date) {
+      prevDate = last.dataset.date;
+    }
+    const d = new Date(messageDate);
+    const newDateKey = d.toDateString();
+    const prevDateKey = prevDate ? new Date(prevDate).toDateString() : null;
+    if (prevDateKey === newDateKey) return;
+    const div = document.createElement('div');
+    div.className = 'message-date-divider';
+    div.dataset.date = newDateKey;
+    div.innerHTML = `<span class="message-date-divider-label">${this.escapeHtml(this._messageDateLabel(d))}</span>`;
+    container.appendChild(div);
+  }
+
   addMessage(message, scroll = true) {
     const msgId = String(message.id || message.message_id || '');
     if (!msgId) return;
@@ -4941,6 +4979,7 @@ class LibertyApp {
     if (welcomeEl && !container.querySelector('.message-group')) welcomeEl.style.display = 'none';
 
     const time = new Date(message.created_at || Date.now());
+    this._ensureDateDividerBefore(container, time);
     const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const dateStr = this._formatDate(time);
     const isToday = time.toDateString() === new Date().toDateString();
@@ -4965,36 +5004,31 @@ class LibertyApp {
       ((message.content && message.content.includes('@[' + this.currentUser.id + ']')) ||
         (message.mentions && Array.isArray(message.mentions) && message.mentions.includes(this.currentUser.id)));
 
+    const authorColor = this._authorColor(authorName);
     const messageEl = document.createElement('div');
     messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
     messageEl.dataset.message = msgId;
     messageEl.dataset.author = authorName;
+    messageEl.dataset.date = time.toDateString();
     if (authorId) messageEl.dataset.authorId = String(authorId);
 
     messageEl.innerHTML = `
             <div class="message-avatar">
                 <img src="${this.escapeHtml(authorAvatarUrl)}" alt="${this.escapeHtml(authorName)}" data-fallback-avatar="${authorAvatarFallback ? this.escapeHtml(authorAvatarFallback) : ''}">
-                <span class="message-avatar-fallback" style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:16px;font-weight:600;color:rgba(255,255,255,.9)">${this.escapeHtml(avatarLetter)}</span>
+                <span class="message-avatar-fallback">${this.escapeHtml(avatarLetter)}</span>
             </div>
             <div class="message-content${isMentioned ? ' message-mentioned' : ''}">
-                ${message.replyTo ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;display:flex;align-items:center;gap:4px"><i class="fas fa-arrow-turn-up" style="font-size:10px"></i> Replying to <strong style="color:var(--primary-yellow)">${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
-                ${
-                  !isContinuation
-                    ? `<div class="message-header">
-                    <span class="message-author ${isSelf ? 'self' : ''}">${this.escapeHtml(authorName)}</span>
-                    <span class="message-timestamp" title="${time.toLocaleString()}">${headerTimeStr}</span>
-                </div>`
-                    : ''
-                }
+                ${message.replyTo ? `<div class="message-reply-ref"><i class="fas fa-arrow-turn-up"></i> A responder a <strong>${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
+                ${!isContinuation ? `<div class="message-header"><span class="message-author ${isSelf ? 'message-author--self' : ''}" style="color:${isSelf ? '#fff' : this.escapeHtml(authorColor)}">${this.escapeHtml(authorName)}</span><span class="message-timestamp" title="${time.toLocaleString()}">${headerTimeStr}</span></div>` : ''}
                 ${message.content != null ? `<div class="message-text">${this._parseMessageContent(message.content || '')}</div>` : ''}
                 ${this._renderMessageAttachmentsHtml(message.attachments)}
                 <div class="reactions-container"></div>
             </div>
             <div class="message-actions">
-                <button class="btn-icon" data-action="react" title="Add Reaction" style="width:28px;height:28px"><i class="fas fa-face-smile"></i></button>
-                <button class="btn-icon" data-action="reply" title="Reply" style="width:28px;height:28px"><i class="fas fa-arrow-turn-up"></i></button>
-                ${isSelf ? '<button class="btn-icon" data-action="edit" title="Edit" style="width:28px;height:28px"><i class="fas fa-pen"></i></button>' : ''}
-                <button class="btn-icon" data-action="more" title="More" style="width:28px;height:28px"><i class="fas fa-bars"></i></button>
+                <button class="btn-icon" data-action="react" title="Reação"><i class="fas fa-face-smile"></i></button>
+                <button class="btn-icon" data-action="reply" title="Responder"><i class="fas fa-arrow-turn-up"></i></button>
+                ${isSelf ? '<button class="btn-icon" data-action="edit" title="Editar"><i class="fas fa-pen"></i></button>' : ''}
+                <button class="btn-icon" data-action="more" title="Mais"><i class="fas fa-ellipsis"></i></button>
             </div>
         `;
 

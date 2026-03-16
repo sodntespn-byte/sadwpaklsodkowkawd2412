@@ -3,14 +3,16 @@
  *
  * Estratégia: cache em memória para acesso rápido; persistência no DB garante
  * que os dados não se percam (refresh, restart ou cache limpo).
+ * Cache e conteúdo em DB são criptografados com AES-256-GCM quando MESSAGE_ENCRYPTION_KEY está definida.
  *
- * Fluxo de leitura: 1) Buscar no cache. 2) Se vazio, buscar no DB e repopular o cache.
- * Fluxo de escrita: 1) Inserir no cache. 2) Garantir no DB (ensureMessageInDb, sem duplicar por id).
+ * Fluxo de leitura: 1) Buscar no cache (descriptografar). 2) Se vazio, buscar no DB e repopular o cache.
+ * Fluxo de escrita: 1) Inserir no cache (criptografar). 2) Garantir no DB (ensureMessageInDb, content criptografado).
  *
  * Opcional: definir REDIS_URL para usar Redis em vez de memória (útil para múltiplas instâncias).
  * Para Redis, instale: npm install redis
  */
 import { logger } from './src/lib/logger.js';
+import { encrypt, decrypt } from './src/lib/message-crypto.js';
 
 const MAX_CACHE_PER_CHANNEL = 300;
 const PREFIX = 'liberty:msg:';
@@ -60,19 +62,30 @@ function cap(list, max) {
  * Retorna mensagens em cache para o chat.
  * Se usar Redis, retorna Promise; senão retorna Promise resolvida com o array.
  */
+function parseCached(raw) {
+  if (!raw) return [];
+  const decoded = decrypt(raw);
+  try {
+    const list = typeof decoded === 'string' ? JSON.parse(decoded) : decoded;
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
 async function getCachedMessages(chatId) {
   const key = PREFIX + (chatId || '');
   const r = await getRedisClient();
   if (r) {
     try {
       const raw = await r.get(key);
-      const list = raw ? JSON.parse(raw) : [];
-      return Array.isArray(list) ? list : [];
+      return parseCached(raw);
     } catch {
       return [];
     }
   }
-  return memory.get(chatId) || [];
+  const stored = memory.get(chatId);
+  return stored ? parseCached(stored) : [];
 }
 
 /**
@@ -82,17 +95,18 @@ async function getCachedMessages(chatId) {
 async function setCachedMessages(chatId, messages) {
   if (!chatId || !Array.isArray(messages)) return;
   const list = cap(dedupeById(messages), MAX_CACHE_PER_CHANNEL);
+  const payload = encrypt(JSON.stringify(list));
   const key = PREFIX + chatId;
   const r = await getRedisClient();
   if (r) {
     try {
-      await r.setEx(key, TTL_SEC, JSON.stringify(list));
+      await r.setEx(key, TTL_SEC, payload);
     } catch (err) {
       logger.warn('[message-cache] setCachedMessages Redis:', err.message);
     }
     return;
   }
-  memory.set(chatId, list);
+  memory.set(chatId, payload);
 }
 
 /**
@@ -121,7 +135,7 @@ async function getAllMessageLists() {
         keys.map(k =>
           r
             .get(k)
-            .then(raw => (raw ? JSON.parse(raw) : []))
+            .then(raw => parseCached(raw))
             .catch(() => [])
         )
       );
@@ -130,7 +144,7 @@ async function getAllMessageLists() {
       return [];
     }
   }
-  return Array.from(memory.values()).filter(arr => Array.isArray(arr) && arr.length > 0);
+  return Array.from(memory.values()).map(raw => parseCached(raw)).filter(arr => Array.isArray(arr) && arr.length > 0);
 }
 
 export default {

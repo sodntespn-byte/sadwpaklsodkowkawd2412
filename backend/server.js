@@ -64,7 +64,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Cache de mensagens: memória ou Redis (REDIS_URL); persistência no DB garante segurança
+import { encrypt, decrypt } from './src/lib/message-crypto.js';
 import messageCacheModule from './message-cache.js';
 const getCachedMessages = messageCacheModule.getCachedMessages;
 const setCachedMessages = messageCacheModule.setCachedMessages;
@@ -85,13 +85,14 @@ async function ensureMessageInDb(msg, chatId) {
   const userId = msg.author_id && isUuid(String(msg.author_id)) ? msg.author_id : null;
   const content = String(msg.content || '').trim();
   if (!content && (!msg.attachments || !msg.attachments.length)) return;
+  const contentToStore = encrypt(content);
   const createdAt = msg.created_at instanceof Date ? msg.created_at : new Date(msg.created_at || Date.now());
   try {
     await db.query(
       `INSERT INTO messages (id, chat_id, user_id, content, created_at, updated_at)
        VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)
        ON CONFLICT (id) DO NOTHING`,
-      [id, dbChatId, userId, content, createdAt, createdAt]
+      [id, dbChatId, userId, contentToStore, createdAt, createdAt]
     );
   } catch (err) {
     logger.warn('[LIBERTY] ensureMessageInDb:', err.message);
@@ -118,7 +119,7 @@ async function loadMessagesFromDb(chatId, limit = 300) {
     return rows.map(row => ({
       id: String(row.id),
       chat_id: String(row.chat_id),
-      content: row.content || '',
+      content: decrypt(row.content) || '',
       author_id: row.user_id ? String(row.user_id) : null,
       author_username: row.username || 'User',
       author: row.username || 'User',
@@ -1510,7 +1511,7 @@ async function start() {
       );
       const list = (r.rows || []).map(row => ({
         id: String(row.message_id),
-        content: row.content || '',
+        content: decrypt(row.content) || '',
         author_id: row.author_id ? String(row.author_id) : null,
         author_username: row.author_username || 'User',
         pinned_at: row.pinned_at,
@@ -2452,7 +2453,7 @@ async function start() {
         },
         messages: (messages.rows || []).map(m => ({
           id: String(m.id),
-          content: m.content,
+          content: decrypt(m.content),
           created_at: m.created_at,
           chat_id: String(m.chat_id),
         })),
