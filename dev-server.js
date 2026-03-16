@@ -995,13 +995,21 @@ function route(res, method, p, url, body) {
 
   if (msgMatch && method === 'POST') {
     const chId = msgMatch[1];
+    const attachments = Array.isArray(body.attachments)
+      ? body.attachments.map((a) => ({
+          url: a.url || (a.data && a.data.startsWith('data:') ? a.data : null),
+          filename: a.filename || 'file',
+          mime_type: a.mime_type || null,
+        })).filter((a) => a.url)
+      : [];
     const msg = {
       id: 'msg-' + Date.now(),
       channel_id: chId,
       author: { id: MOCK_USER.id, username: MOCK_USER.username },
-      content: body.content,
+      content: body.content != null ? String(body.content) : '',
       created_at: new Date().toISOString(),
       reactions: {},
+      attachments: attachments.length ? attachments : undefined,
     };
     const store = MOCK_MESSAGES[chId] || MOCK_DM_MESSAGES[chId];
     if (store) {
@@ -1009,6 +1017,7 @@ function route(res, method, p, url, body) {
     } else {
       MOCK_MESSAGES[chId] = [msg];
     }
+    if (!msg.content && !attachments.length) return bad('Envie texto e/ou anexos.');
     return ok(msg, 201);
   }
 

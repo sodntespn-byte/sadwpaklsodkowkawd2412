@@ -318,10 +318,13 @@ const MessageAPI = {
     return apiRequest(`/channels/${channelId}/messages${query ? '?' + query : ''}`);
   },
 
-  async create(roomOrChannelId, content, tts = false, embeds = [], clientId = null) {
+  async create(roomOrChannelId, content, options = {}) {
     const channelId = parseRoom(roomOrChannelId);
-    const body = { content: content || '', tts, embeds };
+    const { tts = false, embeds = [], clientId = null, attachments = [] } =
+      typeof options === 'object' && options !== null ? options : {};
+    const body = { content: content != null ? String(content) : '', tts, embeds };
     if (clientId != null) body.client_id = clientId;
+    if (Array.isArray(attachments) && attachments.length > 0) body.attachments = attachments;
     return apiRequest(`/channels/${channelId}/messages`, {
       method: 'POST',
       body,

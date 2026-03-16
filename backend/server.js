@@ -26,6 +26,7 @@ for (const p of pathsToTry) {
 dotenv.config({ override: false });
 import http from 'http';
 import express from 'express';
+import compression from 'compression';
 import helmet from 'helmet';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
@@ -82,7 +83,7 @@ async function ensureMessageInDb(msg, chatId) {
   if (!dbChatId) return;
   const userId = msg.author_id && isUuid(String(msg.author_id)) ? msg.author_id : null;
   const content = String(msg.content || '').trim();
-  if (!content) return;
+  if (!content && (!msg.attachments || !msg.attachments.length)) return;
   const createdAt = msg.created_at instanceof Date ? msg.created_at : new Date(msg.created_at || Date.now());
   try {
     await db.query(
@@ -716,6 +717,9 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
+// Compressão gzip/brotli para todas as respostas (reduz payload em ~70% para texto/JSON)
+app.use(compression({ level: 6, threshold: 1024 }));
+
 // Square Cloud (e outros proxies) enviam X-Forwarded-For; o rate-limit precisa de trust proxy
 app.set('trust proxy', 1);
 
@@ -1137,7 +1141,14 @@ async function start() {
     return (await getChatIdForServerAndChannel(null, channelId)) || (await getDefaultChatId());
   }
 
-  // Mensagens por canal: cache + persistência no DB (ensureMessageInDb)
+  // Mensagens por canal: cache + persistência no DB (ensureMessageInDb); anexos em base64 ou URL
+  const ATTACHMENTS_DIR = path.join(UPLOADS_DIR, 'attachments');
+  try {
+    if (!fs.existsSync(ATTACHMENTS_DIR)) fs.mkdirSync(ATTACHMENTS_DIR, { recursive: true });
+  } catch (e) {
+    logger.warn('[LIBERTY] Não foi possível criar pasta uploads/attachments:', e.message);
+  }
+
   app.post(
     '/api/v1/channels/:channelId/messages',
     auth.requireAuth,
@@ -1145,9 +1156,13 @@ async function start() {
     validateBody(schemas.messageContent),
     async (req, res) => {
       const { channelId } = req.params;
-      const { content, client_id: clientId } = req.body || {};
-      const safeContent = sanitizeMessageContent(content);
+      const { content, client_id: clientId, attachments: rawAttachments } = req.body || {};
+      const safeContent = sanitizeMessageContent(content || '');
       const userId = req.userId;
+      const hasAttachments = Array.isArray(rawAttachments) && rawAttachments.length > 0;
+      if (!safeContent && !hasAttachments) {
+        return res.status(400).json({ message: 'Envie texto e/ou anexos.' });
+      }
       try {
         let chatId = null;
         if (db.isConfigured() && db.isConnected()) {
@@ -1165,6 +1180,51 @@ async function start() {
             }
           } catch (_) {}
         }
+        const savedAttachments = [];
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+        if (hasAttachments) {
+          for (const att of rawAttachments) {
+            if (att.url && (att.url.startsWith('/uploads/') || att.url.startsWith('http://') || att.url.startsWith('https://'))) {
+              savedAttachments.push({
+                url: att.url,
+                filename: att.filename || path.basename(att.url) || 'file',
+                mime_type: att.mime_type || null,
+              });
+              continue;
+            }
+            if (att.data && typeof att.data === 'string') {
+              const match = att.data.match(/^data:([^;]+);base64,(.+)$/);
+              if (!match) continue;
+              const mimeType = (match[1] || '').trim();
+              const base64 = match[2];
+              let buf;
+              try {
+                buf = Buffer.from(base64, 'base64');
+              } catch (_) {
+                continue;
+              }
+              if (buf.length > MAX_FILE_SIZE) {
+                return res.status(400).json({ message: `Anexo "${att.filename || 'file'}" excede 10 MB.` });
+              }
+              const ext = mimeType.split('/')[1] || 'bin';
+              const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : 'bin';
+              const filename = `${crypto.randomUUID()}.${safeExt}`;
+              const filepath = path.join(ATTACHMENTS_DIR, filename);
+              try {
+                fs.writeFileSync(filepath, buf);
+              } catch (e) {
+                logger.error('write attachment', e);
+                return res.status(500).json({ message: 'Erro ao guardar anexo.' });
+              }
+              const url = `/uploads/attachments/${filename}`;
+              savedAttachments.push({
+                url,
+                filename: att.filename || filename,
+                mime_type: mimeType || null,
+              });
+            }
+          }
+        }
         const createdAt = new Date();
         const saved = {
           id: crypto.randomUUID(),
@@ -1178,6 +1238,7 @@ async function start() {
           chat_id: chatId,
           timestamp: createdAt,
           created_at: createdAt,
+          attachments: savedAttachments.length ? savedAttachments : undefined,
         };
         await addCachedMessage(chatId, saved);
         await ensureMessageInDb(saved, chatId);
@@ -2538,15 +2599,39 @@ async function start() {
     }
   });
 
-  // Avatares enviados pelos utilizadores
-  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+  // Avatares enviados pelos utilizadores (cache curto: podem ser atualizados)
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge: '1d', etag: true }));
 
-  // Static + rota raiz
-  app.use(express.static(STATIC_DIR));
-  app.get('/', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+  // Static com cache agressivo para assets e sem cache para HTML (SPA)
+  app.use(
+    express.static(STATIC_DIR, {
+      etag: true,
+      lastModified: true,
+      maxAge: 0,
+      setHeaders: (res, filePath) => {
+        const p = path.normalize(filePath).replace(/\\/g, '/');
+        if (p.endsWith('.html') || p.endsWith('/index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          return;
+        }
+        if (p.includes('/css/') || p.includes('/js/') || p.includes('/assets/') || p.includes('/static/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        } else {
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+        }
+      },
+    })
+  );
+  app.get('/', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.join(STATIC_DIR, 'index.html'));
+  });
 
   // SPA fallback: qualquer path não API/static devolve index.html para o cliente tratar (ex.: /channels/@me/:id ao dar F5)
-  app.get('*', (_req, res) => res.sendFile(path.join(STATIC_DIR, 'index.html')));
+  app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(path.join(STATIC_DIR, 'index.html'));
+  });
 
   // Handler de erros global: evita vazamento de stack/detalhes e garante resposta JSON em rotas API
   app.use((err, req, res, next) => {

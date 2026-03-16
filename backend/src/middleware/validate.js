@@ -22,12 +22,23 @@ export const schemas = {
     token: Joi.string().max(2048).optional(),
     access_token: Joi.string().max(2048).optional(),
   }).or('refresh_token', 'token', 'access_token'),
-  /** content obrigatório; author/client_id ignorados no servidor — utilizador vem sempre do JWT (req.userId). */
+  /** content ou attachments; author/client_id ignorados — utilizador vem do JWT. */
   messageContent: Joi.object({
-    content: Joi.string().min(1).max(MAX_MESSAGE).trim().required(),
+    content: Joi.string().max(MAX_MESSAGE).trim().allow('').optional(),
     author: Joi.string().max(200).strip().optional(),
     client_id: Joi.string().max(200).trim().allow('').optional(),
-  }),
+    attachments: Joi.array()
+      .items(
+        Joi.object({
+          url: Joi.string().max(2048).optional(),
+          data: Joi.string().max(20 * 1024 * 1024).optional(), // base64 data URL
+          filename: Joi.string().max(255).trim().optional(),
+          mime_type: Joi.string().max(100).trim().optional(),
+        }).or('url', 'data')
+      )
+      .max(10)
+      .optional(),
+  }).or('content', 'attachments'),
   changePassword: Joi.object({
     current_password: Joi.string().max(256).allow('').optional(),
     new_password: Joi.string().min(6).max(256).trim().required(),

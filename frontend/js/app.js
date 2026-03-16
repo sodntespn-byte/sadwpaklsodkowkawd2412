@@ -700,6 +700,10 @@ class LibertyApp {
     this.dmChannels = [];
     this.relationships = [];
     this.gateway = null;
+    /** @type {Array<{ file: File; previewUrl?: string; name: string; size: number; mimeType: string }>} */
+    this._pendingAttachments = [];
+    /** @type {boolean} */
+    this._sendingMessage = false;
 
     this.init();
   }
@@ -839,6 +843,8 @@ class LibertyApp {
       this.applyTheme(localStorage.getItem('liberty-theme') || 'Dark-theme');
       this.applyAccentColor(localStorage.getItem('liberty_accent_color'));
       document.body.classList.toggle('layout-compact', localStorage.getItem('liberty_layout_compact') === 'true');
+      document.body.classList.toggle('layout-channels-right', localStorage.getItem('liberty_layout_channels_right') === 'true');
+      document.body.classList.toggle('layout-members-left', localStorage.getItem('liberty_layout_members_left') === 'true');
       this.applyBackground();
       await this.simulateLoading();
       if (typeof API !== 'undefined' && API.Token && API.Token.isAuthenticated()) {
@@ -1166,7 +1172,7 @@ class LibertyApp {
     const sendBtn = document.getElementById('send-message-btn');
     const updateCharCount = () => {
       if (charCountEl && msgInput) charCountEl.textContent = `${msgInput.value.length} / 5.000`;
-      if (sendBtn) sendBtn.disabled = !(msgInput && msgInput.value.trim());
+      if (sendBtn) this._updateSendButtonState();
     };
     if (msgInput) {
       msgInput.addEventListener('keydown', e => {
@@ -1299,6 +1305,11 @@ class LibertyApp {
     const emojiBtn =
       document.getElementById('emoji-btn') || document.querySelector('.input-actions [data-tooltip="Emoji"]');
     if (attachBtn) attachBtn.addEventListener('click', () => this._openFilePicker());
+    const imageOnlyBtn = document.querySelector('.input-actions [data-tooltip="Imagem"]');
+    if (imageOnlyBtn) imageOnlyBtn.addEventListener('click', () => this._openFilePicker('image/*,.gif,.webp'));
+    const fileInput = document.getElementById('message-file-input');
+    if (fileInput) fileInput.addEventListener('change', e => this._onMessageFileInputChange(e));
+    this._setupMessageInputDragAndDropAndPaste();
     if (emojiBtn)
       emojiBtn.addEventListener('click', e => {
         this.showEmojiPicker(emojiBtn, emoji => {
@@ -1441,15 +1452,137 @@ class LibertyApp {
   }
 
   _openFilePicker(accept) {
-    const input = document.createElement('input');
-    input.type = 'file';
-    if (accept) input.accept = accept;
-    input.addEventListener('change', () => {
-      if (input.files.length > 0) {
-        this.showToast(`File "${input.files[0].name}" selected (upload simulated)`, 'success');
-      }
-    });
+    const input = document.getElementById('message-file-input');
+    if (!input) return;
+    input.accept = accept || 'image/*,video/*,audio/*,.gif,.webp,.pdf,application/pdf,.txt,.doc,.docx,.zip,.rar';
+    input.value = '';
     input.click();
+  }
+
+  /** Aceita FileList ou array de File; aplica limite de tamanho e quantidade. */
+  _addFilesToPendingAttachments(fileList) {
+    if (!fileList?.length) return;
+    const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+    const MAX_FILES = 10;
+    const current = this._pendingAttachments.length;
+    const files = Array.from(fileList);
+    for (let i = 0; i < files.length && this._pendingAttachments.length < MAX_FILES; i++) {
+      const file = files[i];
+      if (file.size > MAX_SIZE) {
+        this.showToast(`"${file.name}" excede 10 MB. Não anexado.`, 'error');
+        continue;
+      }
+      const mimeType = file.type || '';
+      const isImage = mimeType.startsWith('image/');
+      const isVideo = mimeType.startsWith('video/');
+      let previewUrl = null;
+      if (isImage || isVideo) previewUrl = URL.createObjectURL(file);
+      this._pendingAttachments.push({
+        file,
+        previewUrl,
+        name: file.name,
+        size: file.size,
+        mimeType,
+      });
+    }
+    if (this._pendingAttachments.length >= MAX_FILES && files.length > 1) {
+      this.showToast(`Máximo ${MAX_FILES} anexos por mensagem.`, 'info');
+    }
+    this._renderAttachmentPreviews();
+    this._updateSendButtonState();
+  }
+
+  _onMessageFileInputChange(e) {
+    const input = e.target;
+    const files = input?.files;
+    if (!files?.length) return;
+    this._addFilesToPendingAttachments(files);
+    input.value = '';
+  }
+
+  _setupMessageInputDragAndDropAndPaste() {
+    const wrapper = document.querySelector('.message-input-container') || document.querySelector('.message-input-wrapper');
+    const msgInput = document.getElementById('message-input');
+    if (!wrapper) return;
+    wrapper.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      wrapper.classList.add('message-input-drag-over');
+    });
+    wrapper.addEventListener('dragleave', e => {
+      e.preventDefault();
+      if (!wrapper.contains(e.relatedTarget)) wrapper.classList.remove('message-input-drag-over');
+    });
+    wrapper.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      wrapper.classList.remove('message-input-drag-over');
+      const files = e.dataTransfer?.files;
+      if (files?.length) this._addFilesToPendingAttachments(files);
+    });
+    if (msgInput) {
+      msgInput.addEventListener('paste', e => {
+        const items = e.clipboardData?.items;
+        if (!items?.length) return;
+        const files = [];
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].kind === 'file') {
+            const f = items[i].getAsFile();
+            if (f) files.push(f);
+          }
+        }
+        if (files.length) {
+          e.preventDefault();
+          this._addFilesToPendingAttachments(files);
+        }
+      });
+    }
+  }
+
+  _renderAttachmentPreviews() {
+    const container = document.getElementById('input-attachments-preview');
+    if (!container) return;
+    container.innerHTML = '';
+    for (let i = 0; i < this._pendingAttachments.length; i++) {
+      const att = this._pendingAttachments[i];
+      const isImage = att.mimeType.startsWith('image/');
+      const isVideo = att.mimeType.startsWith('video/');
+      const div = document.createElement('div');
+      div.className = 'input-attachment-item' + (isImage || isVideo ? ' input-attachment-item--thumb' : ' input-attachment-item--file');
+      if (isImage && att.previewUrl) {
+        div.innerHTML = `<img src="${this.escapeHtml(att.previewUrl)}" alt="">`;
+      } else if (isVideo && att.previewUrl) {
+        div.innerHTML = `<video src="${this.escapeHtml(att.previewUrl)}" muted></video>`;
+      } else {
+        const icon = att.mimeType.includes('pdf') ? 'fa-file-pdf' : 'fa-file';
+        div.innerHTML = `<i class="fas ${icon} input-attachment-icon"></i><span class="input-attachment-name">${this.escapeHtml(att.name)}</span>`;
+      }
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'input-attachment-remove';
+      removeBtn.setAttribute('aria-label', 'Remover anexo');
+      removeBtn.innerHTML = '<i class="fas fa-xmark"></i>';
+      removeBtn.addEventListener('click', () => {
+        if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+        this._pendingAttachments.splice(i, 1);
+        this._renderAttachmentPreviews();
+        this._updateSendButtonState();
+      });
+      div.appendChild(removeBtn);
+      container.appendChild(div);
+    }
+  }
+
+  _updateSendButtonState() {
+    const msgInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-message-btn');
+    if (!sendBtn) return;
+    const hasText = msgInput && msgInput.value.trim().length > 0;
+    const hasAttachments = this._pendingAttachments.length > 0;
+    const canSend = (hasText || hasAttachments) && !this._sendingMessage;
+    sendBtn.disabled = !canSend;
+    sendBtn.classList.toggle('is-sending', this._sendingMessage);
+    sendBtn.setAttribute('aria-busy', this._sendingMessage ? 'true' : 'false');
   }
 
   setupGatewayHandlers() {
@@ -4267,6 +4400,41 @@ class LibertyApp {
     return `hsl(${h % 360}, 55%, 65%)`;
   }
 
+  /** Gera HTML seguro para anexos de uma mensagem (imagem, vídeo, áudio, ficheiro). */
+  _renderMessageAttachmentsHtml(attachments) {
+    if (!Array.isArray(attachments) || attachments.length === 0) return '';
+    const parts = [];
+    for (const att of attachments) {
+      const url = att.url || att.url_path || '';
+      const filename = att.filename || att.name || 'ficheiro';
+      const mime = (att.mime_type || att.mimeType || '').toLowerCase();
+      const isImage = mime.startsWith('image/');
+      const isVideo = mime.startsWith('video/');
+      const isAudio = mime.startsWith('audio/');
+      const safeUrl = this.escapeHtml(url);
+      const safeName = this.escapeHtml(filename);
+      if (isImage && url) {
+        parts.push(
+          `<div class="message-attachment message-attachment--image"><img src="${safeUrl}" alt="${safeName}" loading="lazy"></div>`
+        );
+      } else if (isVideo && url) {
+        parts.push(
+          `<div class="message-attachment message-attachment--video"><video src="${safeUrl}" controls preload="metadata"></video></div>`
+        );
+      } else if (isAudio && url) {
+        parts.push(
+          `<div class="message-attachment message-attachment--audio"><audio src="${safeUrl}" controls preload="metadata"></audio><span class="message-attachment-filename">${safeName}</span></div>`
+        );
+      } else if (url) {
+        const icon = mime.includes('pdf') ? 'fa-file-pdf' : 'fa-file';
+        parts.push(
+          `<div class="message-attachment message-attachment--file"><a href="${safeUrl}" target="_blank" rel="noopener noreferrer"><i class="fas ${icon} message-attachment-icon"></i><span class="message-attachment-filename">${safeName}</span></a></div>`
+        );
+      }
+    }
+    return parts.length ? `<div class="message-attachments">${parts.join('')}</div>` : '';
+  }
+
   addMessage(message, scroll = true) {
     const container = document.getElementById('messages-list');
     if (!container) return;
@@ -4319,7 +4487,8 @@ class LibertyApp {
                 </div>`
                     : ''
                 }
-                <div class="message-text">${this._parseMessageContent(message.content)}</div>
+                ${message.content != null && String(message.content).trim() !== '' ? `<div class="message-text">${this._parseMessageContent(message.content)}</div>` : ''}
+                ${this._renderMessageAttachmentsHtml(message.attachments)}
                 <div class="reactions-container"></div>
             </div>
             <div class="message-actions">
@@ -4382,6 +4551,7 @@ class LibertyApp {
 
     container.appendChild(messageEl);
     this._injectYouTubeEmbeds(messageEl, message.content);
+    this._injectSpotifyEmbeds(messageEl, message.content);
     if (scroll) this.scrollToBottom();
   }
 
@@ -4423,6 +4593,7 @@ class LibertyApp {
     const textEl = msgEl.querySelector('.message-text');
     textEl.innerHTML = this._parseMessageContent(newContent);
     this._injectYouTubeEmbeds(msgEl, newContent);
+    this._injectSpotifyEmbeds(msgEl, newContent);
     textEl.insertAdjacentHTML('beforeend', '<span class="message-edited">(edited)</span>');
     const stored = this.messages.get(messageId);
     if (stored) stored.content = newContent;
@@ -4584,18 +4755,29 @@ class LibertyApp {
     });
   }
 
+  /** Converte um File em data URL (base64) para envio na API. */
+  _fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Falha ao ler ficheiro'));
+      reader.readAsDataURL(file);
+    });
+  }
+
   async handleSendMessage() {
     const input = document.getElementById('message-input');
     if (!input) return;
-    const content = input.value.trim();
-    if (!content) return;
+    const content = (input.value || '').trim();
+    const hasAttachments = this._pendingAttachments.length > 0;
+    if (!content && !hasAttachments) return;
 
     if (!this.currentChannel || !this.currentChannel.id) {
       this.showToast('Selecione um canal para enviar a mensagem.', 'error');
       return;
     }
 
-    const contentToSend = this.contentWithMentions(content);
+    const contentToSend = content ? this.contentWithMentions(content) : '';
 
     if (typeof window.LibertyChatSendMessage === 'function') {
       input.value = '';
@@ -4609,6 +4791,40 @@ class LibertyApp {
 
     const roomOrId = this.currentChannel?.room || this.currentChannel?.id;
     const tempId = 'pending-' + Date.now();
+    this._sendingMessage = true;
+    this._updateSendButtonState();
+
+    // Preparar anexos para a API (base64) e para a mensagem optimista (preview)
+    let apiAttachments = [];
+    const optimisticAttachmentList = [];
+    if (hasAttachments) {
+      const pending = [...this._pendingAttachments];
+      try {
+        apiAttachments = await Promise.all(
+          pending.map(async (att) => ({
+            data: await this._fileToDataUrl(att.file),
+            filename: att.name,
+            mime_type: att.mimeType || null,
+          }))
+        );
+        pending.forEach((att) => {
+          optimisticAttachmentList.push({
+            url: att.previewUrl || '',
+            filename: att.name,
+            mime_type: att.mimeType || null,
+          });
+        });
+      } catch (e) {
+        this._sendingMessage = false;
+        this._updateSendButtonState();
+        this.showToast(e.message || 'Erro ao processar anexos.', 'error');
+        return;
+      }
+      this._pendingAttachments = [];
+      this._renderAttachmentPreviews();
+      this._updateSendButtonState();
+    }
+
     const optimistic = {
       id: tempId,
       content: contentToSend,
@@ -4618,23 +4834,28 @@ class LibertyApp {
       created_at: new Date().toISOString(),
       avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar || null,
       _optimistic: true,
+      attachments: optimisticAttachmentList.length ? optimisticAttachmentList : undefined,
     };
     input.value = '';
     input.style.height = 'auto';
     this.cancelReply();
     this.addMessage(optimistic, true);
     this.scrollToBottom();
+
     try {
-      const res = await API.Message.create(roomOrId, contentToSend);
+      const res = await API.Message.create(roomOrId, contentToSend, {
+        attachments: apiAttachments.length ? apiAttachments : undefined,
+      });
       const msg = res?.message || res?.data?.message || (res && res.id ? res : null);
       if (msg) {
         const normalized = {
           id: msg.id,
-          content: msg.content ?? content,
+          content: msg.content ?? contentToSend,
           author_username: msg.author_username || msg.author || this.currentUser?.username,
           author_id: msg.author_id || this.currentUser?.id,
           created_at: msg.created_at || msg.timestamp || new Date().toISOString(),
           avatar_url: msg.avatar_url || null,
+          attachments: msg.attachments || undefined,
         };
         this.removeMessage(tempId);
         this.addMessage(normalized, true);
@@ -4648,6 +4869,9 @@ class LibertyApp {
       console.error('Erro ao enviar mensagem no front-end:', err);
       this.removeMessage(tempId);
       this.showToast(err.message || 'Falha ao enviar mensagem', 'error');
+    } finally {
+      this._sendingMessage = false;
+      this._updateSendButtonState();
     }
   }
 
@@ -6129,10 +6353,20 @@ class LibertyApp {
                 </div>
                 </div>`;
         const layoutCompact = localStorage.getItem('liberty_layout_compact') === 'true';
+        const layoutChannelsRight = localStorage.getItem('liberty_layout_channels_right') === 'true';
+        const layoutMembersLeft = localStorage.getItem('liberty_layout_members_left') === 'true';
         html += `<div class="settings-card" style="margin-top:16px"><h3 style="margin-top:0">Layout</h3>
                 <div class="settings-row" style="align-items:center;gap:12px">
                 <div><div class="settings-row-label">Modo compacto</div><div class="settings-row-desc">Menos espaço entre elementos e barras mais estreitas</div></div>
                 <div class="toggle-switch ${layoutCompact ? 'active' : ''}" id="settings-layout-compact" role="button" tabindex="0"></div>
+                </div>
+                <div class="settings-row" style="align-items:center;gap:12px;margin-top:12px">
+                <div><div class="settings-row-label">Barra de canais à direita</div><div class="settings-row-desc">Coloca a lista de canais à direita da área de chat</div></div>
+                <div class="toggle-switch ${layoutChannelsRight ? 'active' : ''}" id="settings-layout-channels-right" role="button" tabindex="0"></div>
+                </div>
+                <div class="settings-row" style="align-items:center;gap:12px;margin-top:12px">
+                <div><div class="settings-row-label">Membros entre canais e chat</div><div class="settings-row-desc">Coloca a lista de membros entre canais e a área de mensagens</div></div>
+                <div class="toggle-switch ${layoutMembersLeft ? 'active' : ''}" id="settings-layout-members-left" role="button" tabindex="0"></div>
                 </div></div>`;
         html += `<div class="settings-card"><h3 style="margin-top:0">Message Display</h3>
                 <div class="settings-row"><div><div class="settings-row-label">Chat Font Scaling</div><div class="settings-row-desc">14px</div></div><input type="range" min="12" max="20" value="14" style="width:150px"></div>
@@ -7163,6 +7397,26 @@ class LibertyApp {
           this.showToast(isCompact ? 'Modo compacto ativado.' : 'Modo compacto desativado.', 'success');
         });
       }
+      const layoutChannelsRightToggle = content.querySelector('#settings-layout-channels-right');
+      if (layoutChannelsRightToggle) {
+        layoutChannelsRightToggle.addEventListener('click', () => {
+          layoutChannelsRightToggle.classList.toggle('active');
+          const on = layoutChannelsRightToggle.classList.contains('active');
+          try { localStorage.setItem('liberty_layout_channels_right', on ? 'true' : 'false'); } catch (_) {}
+          document.body.classList.toggle('layout-channels-right', on);
+          this.showToast(on ? 'Barra de canais à direita ativada.' : 'Barra de canais à direita desativada.', 'success');
+        });
+      }
+      const layoutMembersLeftToggle = content.querySelector('#settings-layout-members-left');
+      if (layoutMembersLeftToggle) {
+        layoutMembersLeftToggle.addEventListener('click', () => {
+          layoutMembersLeftToggle.classList.toggle('active');
+          const on = layoutMembersLeftToggle.classList.contains('active');
+          try { localStorage.setItem('liberty_layout_members_left', on ? 'true' : 'false'); } catch (_) {}
+          document.body.classList.toggle('layout-members-left', on);
+          this.showToast(on ? 'Membros entre canais e chat ativado.' : 'Membros entre canais e chat desativado.', 'success');
+        });
+      }
     }
   }
 
@@ -7371,8 +7625,16 @@ class LibertyApp {
     escaped = escaped.replace(/\*(.+?)\*/g, '<em>$1</em>');
     escaped = escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
     escaped = escaped.replace(/(https?:\/\/[^\s<]+)/g, (_, url) => {
-      const safeHref = this.escapeHtml(url);
-      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+      const trimmed = url.replace(/[.,;:!?)]+$/, '');
+      const safeHref = this.escapeHtml(trimmed);
+      const ytId = this._youtubeVideoId(trimmed);
+      if (ytId) {
+        return `<span class="message-embed-placeholder" data-embed-type="youtube" data-embed-url="${safeHref}" data-video-id="${this.escapeHtml(ytId)}"></span>`;
+      }
+      if (this._isSpotifyUrl(trimmed)) {
+        return `<span class="message-embed-placeholder" data-embed-type="spotify" data-embed-url="${safeHref}"></span>`;
+      }
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="message-link">${this.escapeHtml(trimmed)}</a>`;
     });
     escaped = escaped.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
     escaped = escaped.replace(/\n/g, '<br>');
@@ -7386,6 +7648,12 @@ class LibertyApp {
       /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/
     );
     return m ? m[1] : null;
+  }
+
+  _isSpotifyUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    return /https?:\/\/(?:open\.)?spotify\.com\/(track|album|playlist|artist|episode|show)\/[a-zA-Z0-9]+/i.test(url.trim()) ||
+      /https?:\/\/spotify\.link\/[^\s]+/i.test(url.trim());
   }
 
   _extractYouTubeUrls(content) {
@@ -7411,26 +7679,64 @@ class LibertyApp {
   _injectYouTubeEmbeds(messageEl, content) {
     const textEl = messageEl.querySelector('.message-text');
     if (!textEl) return;
-    const items = this._extractYouTubeUrls(content);
-    items.forEach(({ url, videoId }) => {
+    const placeholders = textEl.querySelectorAll('.message-embed-placeholder[data-embed-type="youtube"]');
+    placeholders.forEach((ph) => {
+      const url = ph.getAttribute('data-embed-url');
+      const videoId = ph.getAttribute('data-video-id');
+      if (!videoId || !url) return;
       const thumbUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
       const card = document.createElement('a');
       card.href = url;
       card.target = '_blank';
       card.rel = 'noopener noreferrer';
-      card.className = 'message-embed-youtube-card';
+      card.className = 'message-embed message-embed-youtube-card';
       card.innerHTML = `
-                <span class="message-embed-youtube-source">YouTube</span>
-                <span class="message-embed-youtube-title" data-video-id="${this.escapeHtml(videoId)}">Vídeo do YouTube</span>
-                <span class="message-embed-youtube-author message-embed-youtube-loading" data-video-id="${this.escapeHtml(videoId)}"></span>
-                <div class="message-embed-youtube-thumb-wrap">
-                    <img class="message-embed-youtube-thumb" src="${this.escapeHtml(thumbUrl)}" alt="" loading="lazy"/>
-                    <span class="message-embed-youtube-play"><i class="fas fa-play"></i></span>
-                    <span class="message-embed-youtube-external" title="Abrir em nova janela"><i class="fas fa-external-link"></i></span>
-                </div>
-            `;
-      textEl.appendChild(card);
+        <div class="message-embed-youtube-inner">
+          <div class="message-embed-youtube-thumb-wrap">
+            <img class="message-embed-youtube-thumb" src="${this.escapeHtml(thumbUrl)}" alt="" loading="lazy"/>
+            <span class="message-embed-youtube-play" aria-hidden="true"><i class="fas fa-play"></i></span>
+          </div>
+          <div class="message-embed-youtube-meta">
+            <span class="message-embed-youtube-source">YouTube</span>
+            <span class="message-embed-youtube-title" data-video-id="${this.escapeHtml(videoId)}">Vídeo do YouTube</span>
+            <span class="message-embed-youtube-author message-embed-youtube-loading" data-video-id="${this.escapeHtml(videoId)}"></span>
+            <span class="message-embed-youtube-external" title="Abrir no YouTube"><i class="fas fa-external-link-alt"></i></span>
+          </div>
+        </div>
+      `;
+      ph.replaceWith(card);
       this._fetchYouTubeOEmbed(videoId, card);
+    });
+  }
+
+  _injectSpotifyEmbeds(messageEl, content) {
+    const textEl = messageEl.querySelector('.message-text');
+    if (!textEl) return;
+    const placeholders = textEl.querySelectorAll('.message-embed-placeholder[data-embed-type="spotify"]');
+    placeholders.forEach((ph) => {
+      const url = ph.getAttribute('data-embed-url');
+      if (!url) return;
+      const card = document.createElement('a');
+      card.href = url;
+      card.target = '_blank';
+      card.rel = 'noopener noreferrer';
+      card.className = 'message-embed message-embed-spotify-card';
+      card.innerHTML = `
+        <div class="message-embed-spotify-inner">
+          <div class="message-embed-spotify-art"><span class="message-embed-spotify-art-placeholder"><i class="fab fa-spotify"></i></span></div>
+          <div class="message-embed-spotify-body">
+            <span class="message-embed-spotify-badge">Prévia</span>
+            <span class="message-embed-spotify-title">Carregando…</span>
+            <span class="message-embed-spotify-artist"></span>
+            <div class="message-embed-spotify-actions">
+              <span class="message-embed-spotify-logo" aria-label="Spotify"><i class="fab fa-spotify"></i></span>
+              <span class="message-embed-spotify-play" title="Reproduzir no Spotify"><i class="fas fa-play"></i></span>
+            </div>
+          </div>
+        </div>
+      `;
+      ph.replaceWith(card);
+      this._fetchSpotifyOEmbed(url, card);
     });
   }
 
@@ -7444,13 +7750,39 @@ class LibertyApp {
       const titleEl = cardEl.querySelector('.message-embed-youtube-title');
       const authorEl = cardEl.querySelector('.message-embed-youtube-author');
       if (titleEl && data.title) titleEl.textContent = data.title;
-      if (authorEl && data.author_name) {
-        authorEl.textContent = data.author_name;
+      if (authorEl) {
+        authorEl.textContent = data.author_name || '';
         authorEl.classList.remove('message-embed-youtube-loading');
       }
     } catch (_) {
       const authorEl = cardEl.querySelector('.message-embed-youtube-author');
       if (authorEl) authorEl.classList.remove('message-embed-youtube-loading');
+    }
+  }
+
+  async _fetchSpotifyOEmbed(spotifyUrl, cardEl) {
+    if (!cardEl || !spotifyUrl) return;
+    const encoded = encodeURIComponent(spotifyUrl);
+    const url = `https://open.spotify.com/oembed?url=${encoded}`;
+    const titleEl = cardEl.querySelector('.message-embed-spotify-title');
+    const artistEl = cardEl.querySelector('.message-embed-spotify-artist');
+    const artEl = cardEl.querySelector('.message-embed-spotify-art');
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('oEmbed failed');
+      const data = await res.json();
+      if (titleEl && data.title) titleEl.textContent = data.title;
+      if (artistEl) artistEl.textContent = data.author_name || '';
+      if (artEl && data.thumbnail_url) {
+        artEl.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = data.thumbnail_url;
+        img.alt = '';
+        img.loading = 'lazy';
+        artEl.appendChild(img);
+      }
+    } catch (_) {
+      if (titleEl) titleEl.textContent = 'Abrir no Spotify';
     }
   }
 
