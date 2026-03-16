@@ -995,6 +995,8 @@ function route(res, method, p, url, body) {
 
   if (msgMatch && method === 'POST') {
     const chId = msgMatch[1];
+    if (body.content == null && (!Array.isArray(body.attachments) || body.attachments.length === 0))
+      return bad('Envie texto e/ou anexos.');
     const attachments = Array.isArray(body.attachments)
       ? body.attachments.map((a) => ({
           url: a.url || (a.data && a.data.startsWith('data:') ? a.data : null),
@@ -1017,7 +1019,6 @@ function route(res, method, p, url, body) {
     } else {
       MOCK_MESSAGES[chId] = [msg];
     }
-    if (!msg.content && !attachments.length) return bad('Envie texto e/ou anexos.');
     return ok(msg, 201);
   }
 

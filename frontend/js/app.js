@@ -3498,9 +3498,18 @@ class LibertyApp {
     actions?.querySelectorAll('.channel-header-dm-only').forEach(el => {
       el.style.display = isDM ? '' : 'none';
     });
-    if (isDM && this.currentChannel?.recipients?.length === 1) {
-      const recipientId = this.currentChannel.recipients[0]?.id;
-      if (recipientId) this.renderDMProfileSidebar(recipientId);
+    // Perfil do outro user na sidebar quando estamos numa DM de 1 pessoa
+    const dmChannel =
+      this.currentChannel?.id && this.dmChannels
+        ? this.dmChannels.find((d) => d.id === this.currentChannel.id)
+        : null;
+    const isSingleDM =
+      (isDM && this.currentChannel?.recipients?.length === 1) ||
+      (dmChannel && !dmChannel.server_id && dmChannel.recipients?.length === 1 && dmChannel.type !== 'group_dm');
+    const recipientId =
+      this.currentChannel?.recipients?.[0]?.id || dmChannel?.recipients?.[0]?.id || null;
+    if (isSingleDM && recipientId) {
+      this.renderDMProfileSidebar(recipientId);
     } else if (!this.isHomeView && this.currentServer?.id && this.members) {
       this.renderMembers();
     } else if (this.isHomeView) {
@@ -3572,9 +3581,13 @@ class LibertyApp {
     const el = document.getElementById('members-sidebar');
     if (!el) return;
     const inServer = !this.isHomeView;
+    const isChannelInDmList =
+      this.currentChannel?.id && this.dmChannels && this.dmChannels.some((d) => d.id === this.currentChannel.id);
     const inDmOrGroup =
       this.currentChannel &&
-      (this.currentChannel.type === 'dm' || this.currentChannel.type === 'group_dm');
+      (this.currentChannel.type === 'dm' ||
+        this.currentChannel.type === 'group_dm' ||
+        isChannelInDmList);
     const show = inServer || inDmOrGroup;
     el.classList.toggle('members-sidebar--hidden', !show);
   }
@@ -4834,7 +4847,8 @@ class LibertyApp {
 
     const contentToSend = content ? this.contentWithMentions(content) : '';
 
-    if (typeof window.LibertyChatSendMessage === 'function') {
+    // Se houver anexos, usar sempre o fluxo completo (React send não envia anexos)
+    if (typeof window.LibertyChatSendMessage === 'function' && !hasAttachments) {
       input.value = '';
       input.style.height = 'auto';
       this.cancelReply();
