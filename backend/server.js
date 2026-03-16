@@ -674,6 +674,9 @@ const ws = {
           } else if (type === 'webrtc_reject') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
             if (target && isUuid(String(target))) _wsSendToUser(target, { type: 'webrtc_reject', from_user_id: userId });
+          } else if (type === 'webrtc_hangup') {
+            const target = msg.target_user_id || msg.to || d.target_user_id;
+            if (target && isUuid(String(target))) _wsSendToUser(target, { type: 'webrtc_hangup', from_user_id: userId });
           } else if (type === 'stream_started') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
             if (target && isUuid(String(target)))
@@ -2243,6 +2246,66 @@ async function start() {
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Usuário não encontrado' });
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao buscar perfil') });
+    }
+  });
+
+  // GET /api/v1/users/:userId/mutual-servers — servidores em comum entre o utilizador autenticado e userId
+  app.get('/api/v1/users/:userId/mutual-servers', auth.requireAuth, requireUuidParams(['userId']), async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    const me = req.userId;
+    const other = req.params.userId;
+    if (other === me) return res.status(200).json([]);
+    try {
+      const r = await db.query(
+        `SELECT s.id, s.name, s.icon_url
+         FROM servers s
+         INNER JOIN server_members sm1 ON sm1.server_id = s.id AND sm1.user_id = $1::uuid
+         INNER JOIN server_members sm2 ON sm2.server_id = s.id AND sm2.user_id = $2::uuid
+         ORDER BY s.name ASC`,
+        [me, other]
+      );
+      const list = (r.rows || []).map(row => ({
+        id: String(row.id),
+        name: row.name,
+        icon_url: row.icon_url || null,
+      }));
+      return res.status(200).json(list);
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Utilizador não encontrado' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar servidores em comum') });
+    }
+  });
+
+  // GET /api/v1/users/:userId/mutual-friends — amigos em comum (aceites) entre o utilizador autenticado e userId
+  app.get('/api/v1/users/:userId/mutual-friends', auth.requireAuth, requireUuidParams(['userId']), async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
+    const me = req.userId;
+    const other = req.params.userId;
+    if (other === me) return res.status(200).json([]);
+    try {
+      const r = await db.query(
+        `SELECT u.id, u.username, u.avatar_url
+         FROM users u
+         INNER JOIN friendships f1 ON (
+           (f1.user_id = $1::uuid AND f1.friend_id = u.id) OR (f1.friend_id = $1::uuid AND f1.user_id = u.id)
+         ) AND f1.status = 'accepted'
+         INNER JOIN friendships f2 ON (
+           (f2.user_id = $2::uuid AND f2.friend_id = u.id) OR (f2.friend_id = $2::uuid AND f2.user_id = u.id)
+         ) AND f2.status = 'accepted'
+         WHERE u.id != $1::uuid AND u.id != $2::uuid
+         ORDER BY u.username ASC
+         LIMIT 50`,
+        [me, other]
+      );
+      const list = (r.rows || []).map(row => ({
+        id: String(row.id),
+        username: row.username,
+        avatar_url: row.avatar_url || null,
+      }));
+      return res.status(200).json(list);
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Utilizador não encontrado' });
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar amigos em comum') });
     }
   });
 

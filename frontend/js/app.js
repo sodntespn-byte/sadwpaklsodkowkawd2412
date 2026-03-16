@@ -1869,18 +1869,27 @@ class LibertyApp {
       const freq =
         type === 'join'
           ? 520
-          : type === 'screen_share'
-            ? 660
-            : type === 'mute' || type === 'mute_remote'
-              ? 320
-              : type === 'unmute'
-                ? 440
-                : 400;
+          : type === 'leave'
+            ? 280
+            : type === 'screen_share'
+              ? 660
+              : type === 'mute' || type === 'mute_remote'
+                ? 320
+                : type === 'unmute'
+                  ? 440
+                  : 400;
       osc.frequency.setValueAtTime(freq, ctx.currentTime);
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.15);
       if (type === 'join' || type === 'screen_share') {
         osc.frequency.setValueAtTime(freq + 80, ctx.currentTime + 0.08);
+      }
+      if (type === 'leave') {
+        const osc2 = ctx.createOscillator();
+        osc2.connect(gain);
+        osc2.frequency.setValueAtTime(260, ctx.currentTime + 0.12);
+        osc2.start(ctx.currentTime + 0.12);
+        osc2.stop(ctx.currentTime + 0.28);
       }
     } catch (_) {}
   }
@@ -1898,6 +1907,7 @@ class LibertyApp {
       audio.srcObject = stream;
       if (this._voiceCallState.muteRemote) audio.muted = true;
       wrap?.appendChild(audio);
+      audio.play().catch(() => {});
       this._voiceCallState.remoteAudioElements = wrap ? [...wrap.querySelectorAll('audio.webrtc-remote-audio')] : [];
       this._updateRemotePlaceholderProfile(this._voiceCallState.targetUserId);
       this._webrtcRunRemoteAudioLevel(stream);
@@ -2000,6 +2010,38 @@ class LibertyApp {
         if (localV) localV.srcObject = null;
       }
       this.showToast('Chamada recusada.', 'info');
+    });
+    g.on('webrtc_hangup', () => {
+      this._playCallSound('leave');
+      if (this._voiceCallState.pc) {
+        this._voiceCallState.pc.close();
+        this._voiceCallState.pc = null;
+      }
+      if (this._voiceCallState.stream) {
+        this._voiceCallState.stream.getTracks().forEach(t => t.stop());
+        this._voiceCallState.stream = null;
+      }
+      if (this._voiceCallState.displayStream) {
+        this._voiceCallState.displayStream.getTracks().forEach(t => t.stop());
+        this._voiceCallState.displayStream = null;
+      }
+      this._voiceCallState.targetUserId = null;
+      this._voiceCallState.pendingOffer = null;
+      this._voiceCallState.callId = null;
+      this._webrtcClearRemote();
+      const voiceView = document.getElementById('voice-call-view');
+      if (voiceView) voiceView.classList.add('hidden');
+      const localV = document.getElementById('webrtc-local-video');
+      if (localV) localV.srcObject = null;
+      const screenshareBtn = document.getElementById('voice-call-screenshare');
+      if (screenshareBtn) {
+        screenshareBtn.classList.remove('active');
+        const s = screenshareBtn.querySelector('span');
+        const i = screenshareBtn.querySelector('i');
+        if (s) s.textContent = 'Compartilhar tela';
+        if (i) i.className = 'fas fa-display';
+      }
+      this.showToast('A outra pessoa desligou.', 'info');
     });
     g.on('stream_started', () => {
       const wrap = document.getElementById('webrtc-remote-screen-wrap');
@@ -2189,6 +2231,10 @@ class LibertyApp {
     const muteBtn = document.getElementById('voice-call-mute');
     if (!btn) return;
     const closeVoiceCall = () => {
+      const targetId = this._voiceCallState.targetUserId;
+      if (targetId && this.gateway) {
+        this.gateway.send('webrtc_hangup', { target_user_id: targetId });
+      }
       if (this._voiceCallState.callId && typeof API !== 'undefined' && API.Call) {
         API.Call.end(this._voiceCallState.callId).catch(() => {});
       }
@@ -3184,6 +3230,7 @@ class LibertyApp {
                     history.replaceState({}, '', `/channels/@me/${channel.id}`);
                   } catch (_) {}
                 this._refreshDMListSidebar();
+                this._updateChannelHeaderForContext();
               } catch (err) {
                 this.showToast(err.message || 'Não foi possível abrir a conversa', 'error');
               }
@@ -3451,6 +3498,14 @@ class LibertyApp {
     actions?.querySelectorAll('.channel-header-dm-only').forEach(el => {
       el.style.display = isDM ? '' : 'none';
     });
+    if (isDM && this.currentChannel?.recipients?.length === 1) {
+      const recipientId = this.currentChannel.recipients[0]?.id;
+      if (recipientId) this.renderDMProfileSidebar(recipientId);
+    } else if (!this.isHomeView && this.currentServer?.id && this.members) {
+      this.renderMembers();
+    } else if (this.isHomeView) {
+      this.renderActiveNow();
+    }
   }
 
   _updateUserControlsVoiceVisibility() {
@@ -3508,8 +3563,8 @@ class LibertyApp {
     const otherName = other?.username || 'Outro';
     const otherInitial = otherName.charAt(0).toUpperCase();
     bar.innerHTML = `
-            <span class="participant-avatar you" title="${this.escapeHtml(me)}">${this.escapeHtml(meInitial)}</span>
-            <span class="participant-avatar" title="${this.escapeHtml(otherName)}">${this.escapeHtml(otherInitial)}</span>
+            <span class="webrtc-participant-chip webrtc-participant-you" title="${this.escapeHtml(me)}"><span class="webrtc-participant-dot" aria-hidden="true"></span>${this.escapeHtml(me)}</span>
+            <span class="webrtc-participant-chip" title="${this.escapeHtml(otherName)}"><span class="webrtc-participant-dot" aria-hidden="true"></span>${this.escapeHtml(otherName)}</span>
         `;
   }
 
@@ -4979,6 +5034,108 @@ class LibertyApp {
   //  MEMBERS
   // ═══════════════════════════════════════════
 
+  async renderDMProfileSidebar(userId) {
+    const headerEl = document.getElementById('members-sidebar-header');
+    const onlineTitleEl = document.getElementById('members-online-title');
+    const container = document.getElementById('members-list');
+    if (!container) return;
+    if (headerEl) headerEl.classList.add('hidden');
+    if (onlineTitleEl) onlineTitleEl.classList.add('hidden');
+    container.innerHTML = '<div class="dm-profile-sidebar-loading"><i class="fas fa-spinner fa-spin"></i><span>A carregar perfil…</span></div>';
+
+    let profile = null;
+    let mutualServers = [];
+    let mutualFriends = [];
+    try {
+      [profile, mutualServers, mutualFriends] = await Promise.all([
+        API.User.getUser(userId).catch(() => null),
+        API.User.getMutualServers(userId).catch(() => []),
+        API.User.getMutualFriends(userId).catch(() => []),
+      ]);
+    } catch (_) {}
+
+    const name = profile?.username || 'Utilizador';
+    const tag = (profile?.username || name).replace(/\s/g, '');
+    const avatarUrl = profile?.avatar_url || '';
+    const bannerUrl = profile?.banner_url || '';
+    const description = profile?.description || '';
+    const created = profile?.created_at ? new Date(profile.created_at) : null;
+    const memberSinceStr = created
+      ? created.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric' })
+      : '—';
+    const initial = name.charAt(0).toUpperCase();
+    const avatarFallback = this._getPlaceholderAvatarUrl ? this._getPlaceholderAvatarUrl(name) : '';
+
+    const bannerStyle = bannerUrl
+      ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"`
+      : '';
+    const avatarImg = avatarUrl
+      ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" onerror="this.style.display='none';var s=this.nextElementSibling;if(s)s.style.display='flex';"><span style="display:none">${this.escapeHtml(initial)}</span>`
+      : `<span>${this.escapeHtml(initial)}</span>`;
+
+    const mutualServersCount = Array.isArray(mutualServers) ? mutualServers.length : 0;
+    const mutualFriendsCount = Array.isArray(mutualFriends) ? mutualFriends.length : 0;
+
+    container.innerHTML = `
+      <div class="dm-profile-sidebar" data-dm-profile-user="${this.escapeHtml(userId)}">
+        <div class="dm-profile-banner" ${bannerStyle}></div>
+        <div class="dm-profile-avatar-wrap">
+          <div class="dm-profile-avatar">${avatarImg}</div>
+        </div>
+        <div class="dm-profile-body">
+          <h2 class="dm-profile-name">${this.escapeHtml(name)}</h2>
+          <p class="dm-profile-tag">@${this.escapeHtml(tag)}</p>
+          ${description ? `<p class="dm-profile-desc">${this.escapeHtml(description)}</p>` : ''}
+          <div class="dm-profile-cards">
+            <div class="dm-profile-card">
+              <span class="dm-profile-card-label">Membro desde</span>
+              <span class="dm-profile-card-value">${this.escapeHtml(memberSinceStr)}</span>
+            </div>
+            <div class="dm-profile-card dm-profile-card-link" data-action="mutual-servers" role="button" tabindex="0">
+              <span class="dm-profile-card-label">Servidores em comum</span>
+              <span class="dm-profile-card-value">${mutualServersCount}</span>
+              <i class="fas fa-chevron-right dm-profile-card-arrow" aria-hidden="true"></i>
+            </div>
+            <div class="dm-profile-card dm-profile-card-link" data-action="mutual-friends" role="button" tabindex="0">
+              <span class="dm-profile-card-label">Amigos em comum</span>
+              <span class="dm-profile-card-value">${mutualFriendsCount}</span>
+              <i class="fas fa-chevron-right dm-profile-card-arrow" aria-hidden="true"></i>
+            </div>
+          </div>
+          <button type="button" class="dm-profile-view-full">Ver perfil completo</button>
+        </div>
+      </div>
+    `;
+
+    const viewFull = container.querySelector('.dm-profile-view-full');
+    if (viewFull) {
+      viewFull.addEventListener('click', e => {
+        const recipient = (this.currentChannel?.recipients || [])[0] || {};
+        this.showProfileCard(
+          { user_id: userId, username: name, status: recipient.status || 'offline', ...profile },
+          e
+        );
+      });
+    }
+
+    container.querySelectorAll('.dm-profile-card-link').forEach(el => {
+      const action = el.dataset.action;
+      el.addEventListener('click', () => {
+        if (action === 'mutual-servers' && mutualServersCount > 0) {
+          this.showToast(`${mutualServersCount} servidor(es) em comum`, 'info');
+        } else if (action === 'mutual-friends' && mutualFriendsCount > 0) {
+          this.showToast(`${mutualFriendsCount} amigo(s) em comum`, 'info');
+        }
+      });
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          el.click();
+        }
+      });
+    });
+  }
+
   renderMembers() {
     const container = document.getElementById('members-list');
     const headerEl = document.getElementById('members-sidebar-header');
@@ -6274,9 +6431,6 @@ class LibertyApp {
                 </div>`;
       },
       appearance: () => {
-        const current = localStorage.getItem('liberty-theme') || 'Dark-theme';
-        const border = t => (t === current ? 'var(--primary-yellow)' : 'transparent');
-        const accentColor = localStorage.getItem('liberty_accent_color') || '#FFD700';
         const bgType = localStorage.getItem('liberty-bg-type') || 'default';
         const bgSolid = localStorage.getItem('liberty-bg-solid') || '#000000';
         let bgGrad = { color1: '#0d0b09', color2: '#1a1814', angle: 135 };
@@ -6286,27 +6440,6 @@ class LibertyApp {
         } catch (_) {}
         const bgImage = localStorage.getItem('liberty-bg-image') || '';
         let html = `<h2>Aparência</h2>
-                <div class="settings-card"><h3 style="margin-top:0">Tema</h3>
-                <p class="settings-row-desc" style="margin-bottom:12px">Base escura ou clara. O fundo (incluindo GIFs) é configurado abaixo e não é alterado pelo tema.</p>
-                <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
-                    <div class="theme-option" data-theme="Dark-theme" style="width:72px;height:52px;background:var(--primary-black);border:2px solid ${border('Dark-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-primary);font-weight:600" onclick="app.applyTheme('Dark-theme')">Dark</div>
-                    <div class="theme-option" data-theme="Light-theme" style="width:72px;height:52px;background:#f5f2eb;border:2px solid ${border('Light-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#1a1814;font-weight:600" onclick="app.applyTheme('Light-theme')">Light</div>
-                    <div class="theme-option" data-theme="Dark-Accent-theme" style="width:72px;height:52px;background:linear-gradient(135deg,#1a1814,#2a2520);border:2px solid ${border('Dark-Accent-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-primary);font-weight:600;text-align:center;padding:2px" onclick="app.applyTheme('Dark-Accent-theme')">Accent</div>
-                    <div class="theme-option" data-theme="Dark-Blue-theme" style="width:72px;height:52px;background:#0d1117;border:2px solid ${border('Dark-Blue-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#4fc3f7;font-weight:600" onclick="app.applyTheme('Dark-Blue-theme')">Blue</div>
-                    <div class="theme-option" data-theme="Dark-Green-theme" style="width:72px;height:52px;background:#0d130d;border:2px solid ${border('Dark-Green-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#66bb6a;font-weight:600" onclick="app.applyTheme('Dark-Green-theme')">Green</div>
-                    <div class="theme-option" data-theme="Dark-Purple-theme" style="width:72px;height:52px;background:#120d14;border:2px solid ${border('Dark-Purple-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#ab47bc;font-weight:600" onclick="app.applyTheme('Dark-Purple-theme')">Purple</div>
-                    <div class="theme-option" data-theme="Dark-Red-theme" style="width:72px;height:52px;background:#140d0d;border:2px solid ${border('Dark-Red-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#ef5350;font-weight:600" onclick="app.applyTheme('Dark-Red-theme')">Red</div>
-                    <div class="theme-option" data-theme="Dark-Cyan-theme" style="width:72px;height:52px;background:#0d1214;border:2px solid ${border('Dark-Cyan-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#26c6da;font-weight:600" onclick="app.applyTheme('Dark-Cyan-theme')">Cyan</div>
-                    <div class="theme-option" data-theme="Dark-Orange-theme" style="width:72px;height:52px;background:#14100d;border:2px solid ${border('Dark-Orange-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#ff9800;font-weight:600" onclick="app.applyTheme('Dark-Orange-theme')">Orange</div>
-                </div></div>
-                <div class="settings-card" style="margin-top:16px"><h3 style="margin-top:0">Cor de destaque do site</h3>
-                <p class="settings-row-desc" style="margin-bottom:12px">Altera botões, links e destaques da interface. <strong>Não altera o fundo</strong> — imagens e GIFs mantêm-se iguais.</p>
-                <div class="input-row" style="align-items:center;gap:12px;flex-wrap:wrap">
-                    <input type="color" id="settings-accent-color" value="${accentColor}" style="width:48px;height:40px;padding:2px;border:none;border-radius:var(--radius-sm);cursor:pointer;background:transparent" />
-                    <input type="text" id="settings-accent-hex" value="${accentColor}" placeholder="#FFD700" maxlength="7" style="width:100px;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit" />
-                    <button type="button" class="btn btn-primary btn-sm" id="settings-accent-apply">Aplicar cor</button>
-                    <button type="button" class="btn btn-secondary btn-sm" id="settings-accent-reset">Restaurar (ouro)</button>
-                </div></div>
                 <div class="settings-card settings-bg-card"><h3 style="margin-top:0">Fundo do site</h3>
                 <p class="settings-row-desc" style="margin-bottom:12px">Escolha cor sólida, gradiente ou imagem/GIF como fundo da aplicação.</p>
                 <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
@@ -7349,42 +7482,6 @@ class LibertyApp {
           if (pw) pw.style.display = 'none';
           if (pb) pb.innerHTML = '';
           this.showToast('Fundo preto restaurado.', 'success');
-        });
-      }
-      const accentColorEl = content.querySelector('#settings-accent-color');
-      const accentHexEl = content.querySelector('#settings-accent-hex');
-      const accentApplyBtn = content.querySelector('#settings-accent-apply');
-      const accentResetBtn = content.querySelector('#settings-accent-reset');
-      if (accentColorEl && accentHexEl) {
-        accentColorEl.addEventListener('input', () => { accentHexEl.value = accentColorEl.value; });
-        accentHexEl.addEventListener('input', () => {
-          const v = accentHexEl.value.trim();
-          if (/^#[0-9A-Fa-f]{6}$/.test(v)) accentColorEl.value = v;
-        });
-      }
-      if (accentApplyBtn && accentHexEl) {
-        accentApplyBtn.addEventListener('click', () => {
-          const hex = (accentHexEl.value || accentColorEl?.value || '').trim();
-          if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-            this.showToast('Cor inválida. Use #RRGGBB.', 'error');
-            return;
-          }
-          try { localStorage.setItem('liberty_accent_color', hex); } catch (_) {}
-          this.applyAccentColor(hex);
-          if (accentColorEl) accentColorEl.value = hex;
-          this.updateThemeButtons();
-          this.showToast('Cor de destaque aplicada.', 'success');
-        });
-      }
-      if (accentResetBtn) {
-        accentResetBtn.addEventListener('click', () => {
-          try { localStorage.removeItem('liberty_accent_color'); } catch (_) {}
-          this.applyAccentColor(null);
-          const def = '#FFD700';
-          if (accentHexEl) accentHexEl.value = def;
-          if (accentColorEl) accentColorEl.value = def;
-          this.updateThemeButtons();
-          this.showToast('Cor de destaque restaurada (ouro).', 'success');
         });
       }
       const layoutCompactToggle = content.querySelector('#settings-layout-compact');

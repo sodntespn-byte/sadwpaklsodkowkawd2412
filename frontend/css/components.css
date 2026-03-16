@@ -1720,6 +1720,42 @@
   margin: 0;
 }
 
+.webrtc-participants-bar {
+  position: absolute;
+  top: 52px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 2;
+  flex-wrap: wrap;
+}
+.webrtc-participant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-full);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.webrtc-participant-chip.webrtc-participant-you {
+  border-color: rgba(255, 215, 0, 0.35);
+  background: rgba(255, 215, 0, 0.08);
+}
+.webrtc-participant-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-online);
+  flex-shrink: 0;
+  animation: voice-pulse 1.5s ease-in-out infinite;
+}
+
 .webrtc-call-controls {
   display: flex;
   align-items: center;

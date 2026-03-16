@@ -168,6 +168,14 @@ const UserAPI = {
     return apiRequest(`/users/${userId}`);
   },
 
+  async getMutualServers(userId) {
+    return apiRequest(`/users/${userId}/mutual-servers`);
+  },
+
+  async getMutualFriends(userId) {
+    return apiRequest(`/users/${userId}/mutual-friends`);
+  },
+
   /** Envia foto de perfil (data URL base64). Retorna { avatar_url }. */
   async uploadAvatar(imageDataUrl) {
     return apiRequest('/users/me/avatar', {

@@ -2129,6 +2129,137 @@ a:hover {
   text-align: center;
 }
 
+/* ── DM Profile Sidebar (perfil do outro utilizador na DM) ── */
+.dm-profile-sidebar-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px 16px;
+  color: var(--text-secondary, #b0b0b0);
+  font-size: 14px;
+}
+.dm-profile-sidebar-loading i { font-size: 18px; }
+
+.dm-profile-sidebar {
+  width: 100%;
+  background: var(--bg-secondary, #111);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  margin: 0 8px;
+  flex-shrink: 0;
+}
+.dm-profile-banner {
+  height: 60px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background-size: cover;
+  background-position: center;
+}
+.dm-profile-avatar-wrap {
+  margin-top: -28px;
+  padding-left: 16px;
+  margin-bottom: 4px;
+}
+.dm-profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid var(--bg-secondary, #111);
+  background: var(--bg-tertiary, #1a1a1a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+.dm-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.dm-profile-body {
+  padding: 8px 12px 16px;
+}
+.dm-profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 2px;
+  line-height: 1.2;
+}
+.dm-profile-tag {
+  font-size: 13px;
+  color: var(--text-muted, #8a8a8a);
+  margin: 0 0 10px;
+}
+.dm-profile-desc {
+  font-size: 13px;
+  color: var(--text-secondary, #b0b0b0);
+  margin: 0 0 12px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.dm-profile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.dm-profile-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.dm-profile-card-label {
+  color: var(--text-muted, #8a8a8a);
+}
+.dm-profile-card-value {
+  color: #fff;
+  font-weight: 600;
+}
+.dm-profile-card-link {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.dm-profile-card-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.dm-profile-card-arrow {
+  font-size: 10px;
+  color: var(--text-muted, #8a8a8a);
+  margin-left: 4px;
+}
+.dm-profile-view-full {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent, #5865f2);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+.dm-profile-view-full:hover {
+  background: var(--accent-hover, #4752c4);
+}
+.dm-profile-view-full:active {
+  transform: scale(0.98);
+}
+.members-sidebar-header.hidden,
+.members-section-title#members-online-title.hidden {
+  display: none !important;
+}
+
 .member-item {
   display: flex;
   align-items: center;
