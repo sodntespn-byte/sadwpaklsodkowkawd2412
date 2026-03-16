@@ -1139,7 +1139,7 @@ class LibertyApp {
     const sidebarAvatar = document.querySelector('.settings-sidebar-profile-avatar');
     if (sidebarAvatar && this.currentUser) {
       if (avatarSrc) {
-        sidebarAvatar.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--primary-black)">${this.escapeHtml(letter)}</span>`;
+        sidebarAvatar.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" data-fallback-avatar=""><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--primary-black)">${this.escapeHtml(letter)}</span>`;
       } else {
         sidebarAvatar.innerHTML = `<span>${this.escapeHtml(letter)}</span>`;
       }
@@ -1147,7 +1147,7 @@ class LibertyApp {
     const heroPreview = document.querySelector('#settings-avatar-preview');
     if (heroPreview && this.currentUser) {
       if (avatarSrc) {
-        heroPreview.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${this.escapeHtml(letter)}</span>`;
+        heroPreview.innerHTML = `<img src="${this.escapeHtml(avatarSrc)}" alt="" data-fallback-avatar=""><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${this.escapeHtml(letter)}</span>`;
       } else {
         heroPreview.innerHTML = `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(letter)}</span>`;
       }
@@ -1245,7 +1245,6 @@ class LibertyApp {
       this._applyRouteFromPath(path);
     });
 
-    // Links internos /channels/* e /invite/*: evitar reload, aplicar rota no cliente
     document.addEventListener('click', (e) => {
       const a = e.target.closest('a[href^="/channels/"], a[href^="/invite/"]');
       if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
@@ -1258,6 +1257,8 @@ class LibertyApp {
         this._applyRouteFromPath(path);
       }
     }, true);
+
+    this._startAvatarFallbackObserver();
 
     // Add server
     document.getElementById('add-server-btn')?.addEventListener('click', () => this.showModal('create-server-modal'));
@@ -1570,6 +1571,42 @@ class LibertyApp {
         reader.readAsDataURL(file);
       });
     }
+  }
+
+  _bindOneAvatarFallback(img) {
+    if (img._avatarFallbackBound) return;
+    img._avatarFallbackBound = true;
+    img.addEventListener('error', function () {
+      const fallback = this.dataset.fallbackAvatar;
+      if (fallback) {
+        this.onerror = null;
+        this.src = fallback;
+      } else {
+        this.style.display = 'none';
+        const s = this.nextElementSibling;
+        if (s) s.style.display = 'flex';
+      }
+    });
+  }
+
+  _startAvatarFallbackObserver() {
+    this._bindAvatarFallbacks(document.body);
+    const obs = new MutationObserver((records) => {
+      for (const r of records) {
+        for (const node of r.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          const el = node;
+          if (el.matches && el.matches('img[data-fallback-avatar]')) this._bindOneAvatarFallback(el);
+          if (el.querySelectorAll) el.querySelectorAll('img[data-fallback-avatar]').forEach((im) => this._bindOneAvatarFallback(im));
+        }
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+  }
+
+  _bindAvatarFallbacks(container) {
+    if (!container || !container.querySelectorAll) return;
+    container.querySelectorAll('img[data-fallback-avatar]').forEach((img) => this._bindOneAvatarFallback(img));
   }
 
   _openFilePicker(accept) {
@@ -3168,7 +3205,7 @@ class LibertyApp {
         (this.unreadChannels.has(dm.id) ? 1 : 0);
       const hasUnread = unreadCount > 0;
       if (hasUnread) item.classList.add('dm-list-item-unread');
-      const avatarHtml = `<img src="${this.escapeHtml(avatarSrc)}" alt="" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }"><span style="display:none;color:#fff">${this.escapeHtml(letter)}</span>`;
+      const avatarHtml = `<img src="${this.escapeHtml(avatarSrc)}" alt="" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}"><span style="display:none;color:#fff">${this.escapeHtml(letter)}</span>`;
       const badgeHtml = hasUnread
         ? `<span class="dm-unread-badge" aria-label="Mensagens não lidas">${unreadCount > 99 ? '99+' : String(unreadCount)}</span>`
         : '';
@@ -3718,7 +3755,7 @@ class LibertyApp {
             ? `${this._formatActivityTime(row.minutes || 0)} · Nível ${levelLabel}`
             : `${(row.xp || 0).toLocaleString()} XP · Nível ${levelLabel}`;
         const rankClass = row.rank === 1 ? 'rank-1' : row.rank === 2 ? 'rank-2' : row.rank === 3 ? 'rank-3' : '';
-        const avatarHtml = `<img src="${this.escapeHtml(avatarSrc)}" alt="" loading="lazy" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }"><span style="display:none">${this.escapeHtml(initial)}</span>`;
+        const avatarHtml = `<img src="${this.escapeHtml(avatarSrc)}" alt="" loading="lazy" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}"><span style="display:none">${this.escapeHtml(initial)}</span>`;
         return `<div class="ranking-row ${rankClass}" data-user-id="${this.escapeHtml(row.id)}" data-rank="${row.rank}">
                     <div class="ranking-row-rank">${row.rank}</div>
                     <div class="ranking-row-avatar" aria-hidden="true">${avatarHtml}</div>
@@ -3779,7 +3816,7 @@ class LibertyApp {
     const L = letter != null ? letter : name.charAt(0).toUpperCase();
     const src = this._getAvatarUrlForUser(typeof user === 'string' ? name : user);
     const fallback = this._getPlaceholderAvatarUrl(name);
-    return `<img src="${this.escapeHtml(src)}" alt="" data-fallback-avatar="${fallback ? this.escapeHtml(fallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(L)}</span>`;
+    return `<img src="${this.escapeHtml(src)}" alt="" data-fallback-avatar="${fallback ? this.escapeHtml(fallback) : ''}"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(L)}</span>`;
   }
 
   _friendItemHtml(rel) {
@@ -3840,7 +3877,7 @@ class LibertyApp {
       const avatarFallback = this._getPlaceholderAvatarUrl(name);
       const initial = name.charAt(0).toUpperCase();
       info.innerHTML = `
-                <div class="dm-header-avatar ${status}" aria-hidden="true"><img src="${this.escapeHtml(avatarSrc)}" alt="" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }"><span style="display:none">${this.escapeHtml(initial)}</span></div>
+                <div class="dm-header-avatar ${status}" aria-hidden="true"><img src="${this.escapeHtml(avatarSrc)}" alt="" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}"><span style="display:none">${this.escapeHtml(initial)}</span></div>
                 <h3 id="channel-name">${this.escapeHtml(name)}</h3>
                 <div class="channel-header-divider" aria-hidden="true"></div>
                 <span class="channel-topic dm-status" id="channel-topic">${this._statusLabel(status)}</span>
@@ -4441,17 +4478,19 @@ class LibertyApp {
     const muteBtn = document.getElementById('voice-call-mute');
     const deafenBtn = document.getElementById('voice-call-deafen');
     const disconnectBtn = document.getElementById('voice-call-disconnect');
-    if (muteBtn)
-      muteBtn.onclick = () => {
+    if (muteBtn) {
+      muteBtn.addEventListener('click', () => {
         this.toggleMute();
         this._updateVoiceCallControlsState();
-      };
-    if (deafenBtn)
-      deafenBtn.onclick = () => {
+      });
+    }
+    if (deafenBtn) {
+      deafenBtn.addEventListener('click', () => {
         this.toggleDeafen();
         this._updateVoiceCallControlsState();
-      };
-    if (disconnectBtn) disconnectBtn.onclick = () => this.disconnectVoice();
+      });
+    }
+    if (disconnectBtn) disconnectBtn.addEventListener('click', () => this.disconnectVoice());
     this._updateVoiceCallControlsState();
   }
 
@@ -5566,7 +5605,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
       ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"`
       : '';
     const avatarImg = avatarUrl
-      ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" onerror="this.style.display='none';var s=this.nextElementSibling;if(s)s.style.display='flex';"><span style="display:none">${this.escapeHtml(initial)}</span>`
+      ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" data-fallback-avatar=""><span style="display:none">${this.escapeHtml(initial)}</span>`
       : `<span>${this.escapeHtml(initial)}</span>`;
 
     const mutualServersCount = Array.isArray(mutualServers) ? mutualServers.length : 0;
@@ -6817,7 +6856,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         const uname = this.escapeHtml(this.currentUser?.username || 'User');
         const avatarUrl = this._getAvatarUrl() ? this.escapeHtml(this._getAvatarUrl()) : '';
         const avatarHtml = avatarUrl
-          ? `<img src="${avatarUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${initial}</span>`
+          ? `<img src="${avatarUrl}" alt="" data-fallback-avatar="" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">${initial}</span>`
           : `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:var(--text-secondary)">${initial}</span>`;
         const userIdDisplay = this.escapeHtml(this.currentUser?.id?.slice(0, 11) || this.currentUser?.username || '');
         return `<h2 class="settings-page-title">Minha Conta</h2>
@@ -6915,7 +6954,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         const hasAvatar = !!avatarUrl;
         const initial = (displayName || 'U').charAt(0).toUpperCase();
         const avatarPreviewHtml = hasAvatar
-          ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(initial)}</span>`
+          ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" data-fallback-avatar=""><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(initial)}</span>`
           : `<span>${this.escapeHtml(initial)}</span>`;
         const bannerStyle = bannerUrl ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"` : 'style="background:var(--dark-gray)"';
         const aboutText = aboutMe ? this.escapeHtml(aboutMe) : 'No bio set yet';
@@ -7161,7 +7200,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
           avatarPreview.innerHTML =
             '<img src="' +
             url.replace(/"/g, '&quot;') +
-            '" alt="" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">' +
+            '" alt="" data-fallback-avatar="" /><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:28px;font-weight:700;color:#fff">' +
             initial +
             '</span>';
         else
@@ -7434,7 +7473,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
                   this._updateUserAvatarInUI();
                   if (previewAvatar) {
                     const letter = (this.currentUser?.username || 'U').charAt(0).toUpperCase();
-                    previewAvatar.innerHTML = `<img src="${this.escapeHtml(this._getAvatarUrl())}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(letter)}</span>`;
+                    previewAvatar.innerHTML = `<img src="${this.escapeHtml(this._getAvatarUrl())}" alt="" data-fallback-avatar=""><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:32px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(letter)}</span>`;
                   }
                   this.showToast('Avatar atualizado!', 'success');
                 })
@@ -8062,6 +8101,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         this._injectYouTubeEmbeds(msgEl, content);
         this._injectSpotifyEmbeds(msgEl, content);
         this._injectInviteEmbeds(msgEl);
+        this._injectGenericLinkEmbeds(msgEl);
       }
     });
   }
@@ -8128,7 +8168,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         const safeCode = this.escapeHtml(inviteCode);
         return `<span class="message-embed-placeholder" data-embed-type="invite" data-embed-code="${safeCode}"></span>`;
       }
-      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="message-link">${this.escapeHtml(trimmed)}</a>`;
+      return `<span class="message-embed-placeholder" data-embed-type="generic" data-embed-url="${safeHref}">${this.escapeHtml(trimmed)}</span>`;
     });
     escaped = escaped.replace(/@(\w+)/g, '<span class="mention">@$1</span>');
     escaped = escaped.replace(/\n/g, '<br>');
@@ -8380,6 +8420,36 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         </div>
       `;
     }
+  }
+
+  _injectGenericLinkEmbeds(messageEl) {
+    const textEl = messageEl.querySelector('.message-text');
+    if (!textEl) return;
+    const placeholders = textEl.querySelectorAll('.message-embed-placeholder[data-embed-type="generic"]');
+    placeholders.forEach((ph) => {
+      const url = ph.getAttribute('data-embed-url');
+      if (!url) return;
+      let domain = url;
+      try {
+        domain = new URL(url).hostname.replace(/^www\./, '');
+      } catch (_) {}
+      const card = document.createElement('a');
+      card.href = url;
+      card.target = '_blank';
+      card.rel = 'noopener noreferrer';
+      card.className = 'message-embed message-embed-generic-card';
+      card.innerHTML = `
+        <div class="message-embed-generic-inner">
+          <div class="message-embed-generic-icon"><i class="fas fa-link"></i></div>
+          <div class="message-embed-generic-info">
+            <span class="message-embed-generic-domain">${this.escapeHtml(domain)}</span>
+            <span class="message-embed-generic-label">Abrir link</span>
+          </div>
+          <span class="message-embed-generic-external"><i class="fas fa-external-link-alt"></i></span>
+        </div>
+      `;
+      ph.replaceWith(card);
+    });
   }
 
   async _fetchYouTubeOEmbed(videoId, cardEl) {
