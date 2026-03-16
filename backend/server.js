@@ -40,6 +40,7 @@ import Joi from 'joi';
 import multer from 'multer';
 import config from './src/config.js';
 import { logger } from './src/lib/logger.js';
+import { sanitizeAttachmentFilename, isAllowedFile } from './src/lib/upload-security.js';
 
 /** Em produção não expõe mensagens de erro internas ao cliente (evita vazamento de stack/paths). */
 function safeApiMessage(err, fallback) {
@@ -688,16 +689,35 @@ const ws = {
   },
   attach(server) {
     const wss = new WebSocketServer({ server, path: '/ws' });
+    const sendJson = (ws, obj) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+    };
     wss.on('connection', (wsClient, req) => {
       const url = new URL(req.url || '', 'http://localhost');
       const token =
         url.searchParams.get('token') ||
         (req.headers['sec-websocket-protocol'] &&
           req.headers['sec-websocket-protocol'].split(',').map(s => s.trim())[0]);
-      const payload = token ? auth.verify(token) : null;
-      const userId = payload ? payload.sub : null;
+      let payload = null;
+      try {
+        payload = token ? auth.verify(token) : null;
+      } catch (_) {}
+      let userId = payload ? payload.sub : null;
       wsClient.userId = userId;
       wsClient.subscribedChats = new Set();
+      sendJson(wsClient, { op: 'hello', d: { heartbeat_interval: 45000, server_version: '1.0' } });
+      if (userId && payload) {
+        (async () => {
+          try {
+            const u = await db.query('SELECT id, username, avatar_url FROM users WHERE id = $1::uuid LIMIT 1', [userId]);
+            const row = u.rows[0];
+            const user = row ? { id: String(row.id), username: row.username || 'User', avatar_url: row.avatar_url || null } : { id: String(userId), username: 'User', avatar_url: null };
+            sendJson(wsClient, { op: 'authenticated', d: { user, session_id: payload.jti || userId } });
+          } catch (_) {
+            sendJson(wsClient, { op: 'authenticated', d: { user: { id: String(userId), username: 'User', avatar_url: null }, session_id: userId } });
+          }
+        })();
+      }
       _wsAddUserConnection(userId, wsClient);
       wsClient.on('message', raw => {
         try {
@@ -705,6 +725,34 @@ const ws = {
           const type = msg.type || msg.op;
           const d = msg.d || msg;
           const chatId = msg.chat_id || d.chat_id;
+          if (type === 'authenticate' && (d.token || msg.token)) {
+            const t = d.token || msg.token;
+            let p = null;
+            try {
+              p = auth.verify(t);
+            } catch (_) {}
+            if (p && p.sub) {
+              const prevUserId = userId;
+              userId = p.sub;
+              wsClient.userId = userId;
+              if (prevUserId) _wsRemoveUserConnection(prevUserId, wsClient);
+              _wsAddUserConnection(userId, wsClient);
+              db.query('SELECT id, username, avatar_url FROM users WHERE id = $1::uuid LIMIT 1', [userId]).then((r) => {
+                const row = r.rows[0];
+                const user = row ? { id: String(row.id), username: row.username || 'User', avatar_url: row.avatar_url || null } : { id: String(userId), username: 'User', avatar_url: null };
+                sendJson(wsClient, { op: 'authenticated', d: { user, session_id: p.jti || userId } });
+              }).catch(() => {
+                sendJson(wsClient, { op: 'authenticated', d: { user: { id: String(userId), username: 'User', avatar_url: null }, session_id: userId } });
+              });
+            } else {
+              sendJson(wsClient, { op: 'auth_failed', d: { reason: 'Token inválido' } });
+            }
+            return;
+          }
+          if (type === 'heartbeat') {
+            sendJson(wsClient, { op: 'heartbeat_ack', d: { seq: d.seq != null ? d.seq : msg.seq } });
+            return;
+          }
           if (type === 'subscribe' && chatId) {
             wsClient.subscribedChats.add(chatId);
             _wsSubscribe(chatId, wsClient);
@@ -820,8 +868,14 @@ app.use(cors(corsOptions));
 // Compressão gzip/brotli para todas as respostas (reduz payload em ~70% para texto/JSON)
 app.use(compression({ level: 6, threshold: 1024 }));
 
-// Square Cloud (e outros proxies) enviam X-Forwarded-For; o rate-limit precisa de trust proxy
 app.set('trust proxy', 1);
+
+if (config.FORCE_HTTPS) {
+  app.use((req, res, next) => {
+    if (req.secure) return next();
+    return res.status(403).json({ message: 'HTTPS obrigatório. Use uma ligação segura para enviar dados.' });
+  });
+}
 
 const limiterGeneral = rateLimit({
   windowMs: 60 * 1000,
@@ -1305,12 +1359,17 @@ async function start() {
     storage: multer.diskStorage({
       destination: (_req, _file, cb) => cb(null, ATTACHMENTS_DIR),
       filename: (_req, file, cb) => {
-        const ext = (file.originalname && path.extname(file.originalname).slice(1)) || 'bin';
-        const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : 'bin';
-        cb(null, `${crypto.randomUUID()}.${safeExt}`);
+        const { ext } = sanitizeAttachmentFilename(file.originalname);
+        cb(null, `${crypto.randomUUID()}.${ext}`);
       },
     }),
-    limits: { fileSize: 1024 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (!isAllowedFile(file.originalname || '', file.mimetype || '')) {
+        return cb(new Error('Tipo de ficheiro não permitido. São aceites imagens, vídeos, áudio, documentos e arquivos (ex.: .exe, .php não são permitidos).'));
+      }
+      cb(null, true);
+    },
+    limits: { fileSize: config.MAX_UPLOAD_BYTES },
   });
 
   app.post(
@@ -1325,16 +1384,22 @@ async function start() {
     },
     (req, res, next) => {
       uploadAttachment.single('file')(req, res, (err) => {
-        if (err && err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ message: 'Ficheiro excede 1 GB.' });
+        if (err && err.code === 'LIMIT_FILE_SIZE') {
+          const maxMB = Math.round(config.MAX_UPLOAD_BYTES / (1024 * 1024));
+          return res.status(400).json({ message: `Ficheiro excede o limite de ${maxMB} MB.` });
+        }
+        if (err && err.message && err.message.includes('Tipo de ficheiro')) return res.status(400).json({ message: err.message });
         next(err);
       });
     },
     (req, res) => {
       if (!req.file) return res.status(400).json({ message: 'Envie um ficheiro (campo "file").' });
       const url = `/uploads/attachments/${req.file.filename}`;
+      const { safeBasename, ext } = sanitizeAttachmentFilename(req.file.originalname);
+      const safeDisplayName = `${safeBasename}.${ext}`.slice(0, 200);
       return res.status(201).json({
         url,
-        filename: req.file.originalname || req.file.filename,
+        filename: safeDisplayName,
         mime_type: req.file.mimetype || null,
       });
     }
@@ -1397,9 +1462,12 @@ async function start() {
               if (buf.length > MAX_BASE64_SIZE) {
                 return res.status(400).json({ message: `Anexo "${att.filename || 'file'}" excede 50 MB. Use o upload de ficheiros.` });
               }
-              const ext = mimeType.split('/')[1] || 'bin';
-              const safeExt = /^[a-z0-9]+$/i.test(ext) ? ext : 'bin';
-              const filename = `${crypto.randomUUID()}.${safeExt}`;
+              const origName = att.filename || `file.${mimeType.split('/')[1] || 'bin'}`;
+              if (!isAllowedFile(origName, mimeType)) {
+                return res.status(400).json({ message: 'Tipo de ficheiro não permitido para anexos em base64.' });
+              }
+              const { ext } = sanitizeAttachmentFilename(origName);
+              const filename = `${crypto.randomUUID()}.${ext}`;
               const filepath = path.join(ATTACHMENTS_DIR, filename);
               try {
                 fs.writeFileSync(filepath, buf);

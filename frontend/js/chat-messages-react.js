@@ -98,11 +98,13 @@
               normalized.author_id &&
               currentUserRef.current &&
               String(normalized.author_id) === String(currentUserRef.current.id);
+            var replacedPending = null;
             if (fromSelf) {
               for (var entry of byId.entries()) {
                 var m = entry[1];
                 var mid = m.id || m.message_id;
                 if (mid && String(mid).indexOf('pending-') === 0 && m.content === normalized.content) {
+                  replacedPending = mid;
                   byId.delete(String(mid));
                   break;
                 }
@@ -111,11 +113,14 @@
             byId.set(serverId, normalized);
             var next = sortMessages(Array.from(byId.values()));
             if (appRef.current) {
-              appRef.current.setMessagesFromList(next);
               var cur = appRef.current.currentChannel;
-              if (cur && typeof MessageCache !== 'undefined' && MessageCache.add) {
-                var cacheKey = cur.room && cur.room.indexOf('dm:') === 0 ? cur.id : cur.room || cur.id;
-                if (cacheKey) MessageCache.add(cacheKey, normalized);
+              var cacheKey = cur && (cur.room && cur.room.indexOf('dm:') === 0 ? cur.id : cur.room || cur.id);
+              if (replacedPending) {
+                appRef.current.replacePendingWithMessage(replacedPending, normalized);
+              } else {
+                appRef.current.messages.set(serverId, normalized);
+                appRef.current.addMessage(normalized, true);
+                if (cacheKey && typeof MessageCache !== 'undefined' && MessageCache.add) MessageCache.add(cacheKey, normalized);
               }
             }
             return next;
@@ -150,7 +155,10 @@
           };
           setMessages(function (prev) {
             var next = sortMessages(prev.concat([optimistic]));
-            appInst.setMessagesFromList(next);
+            appInst.messages.set(tempIdVal, optimistic);
+            appInst.addMessage(optimistic, true);
+            var ck = chId && String(chId).indexOf('dm:') === 0 ? String(chId).substring(3) : chId;
+            if (typeof MessageCache !== 'undefined' && MessageCache.add) MessageCache.add(ck, optimistic);
             return next;
           });
           var roomOrId = (appInst.currentChannel && (appInst.currentChannel.room || appInst.currentChannel.id)) || chId;
@@ -172,15 +180,12 @@
                     created_at: msg.created_at || msg.timestamp || new Date().toISOString(),
                     avatar_url: msg.avatar_url || null,
                   };
-                  var hasId =
-                    normalized.id &&
-                    without.some(function (m) {
-                      return (m.id || m.message_id) === normalized.id;
-                    });
+                  appInst.replacePendingWithMessage(tempIdVal, normalized);
+                  var hasId = normalized.id && without.some(function (m) { return (m.id || m.message_id) === normalized.id; });
                   if (!hasId) without = without.concat([normalized]);
-                  without = sortMessages(without);
                   var ck = chId && String(chId).indexOf('dm:') === 0 ? String(chId).substring(3) : chId;
                   if (typeof MessageCache !== 'undefined' && MessageCache.add) MessageCache.add(ck, normalized);
+                  return sortMessages(without);
                 }
                 appInst.setMessagesFromList(without);
                 return without;

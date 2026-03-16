@@ -1749,6 +1749,12 @@ class LibertyApp {
   setupGatewayHandlers() {
     if (!this.gateway) return;
     const g = this.gateway;
+    g.on('ready', (data) => {
+      if (data && data.reconnected) {
+        if (this.currentChannel?.id && this.gateway) this.gateway.subscribeChannel(this.currentChannel.id);
+        this.showToast('Reconectado.', 'success');
+      }
+    });
     g.on('message', msg => {
       const chId = msg.channel_id || msg.channelId || msg.chat_id;
       const msgId = msg.id || msg.message_id;
@@ -8068,6 +8074,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
     this._injectYouTubeEmbeds(el, realMessage.content);
     this._injectSpotifyEmbeds(el, realMessage.content);
     this._injectInviteEmbeds(el);
+    this._injectGenericLinkEmbeds(el);
     this.messages.delete(pendingId);
     const authorName = realMessage.author?.username || realMessage.author_username || realMessage.username || this.currentUser?.username || 'User';
     const isSelf = this.currentUser && (realMessage.author_id === this.currentUser.id || realMessage.author?.id === this.currentUser.id);
