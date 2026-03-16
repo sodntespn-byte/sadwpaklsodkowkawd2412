@@ -492,6 +492,23 @@ async function dbInit() {
   } catch (err) {
     if (err.code !== '42P07') logger.warn('[LIBERTY] Migração server_members:', err.message);
   }
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS invites (
+        code       VARCHAR(32) PRIMARY KEY,
+        server_id  UUID NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        channel_id UUID NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+        created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        expires_at TIMESTAMPTZ,
+        max_uses   INT NOT NULL DEFAULT 0,
+        uses       INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_invites_server ON invites(server_id)`);
+  } catch (err) {
+    if (err.code !== '42P07') logger.warn('[LIBERTY] Migração invites:', err.message);
+  }
   logger.info('[LIBERTY] Schema PostgreSQL aplicado (' + applied + ' statements)');
 }
 
@@ -521,6 +538,13 @@ function isOfficialLibertyServer(row) {
   if (!row) return false;
   const name = (row.name || '').trim();
   return name.toLowerCase() === 'liberty' && (row.owner_id == null || row.owner_id === '');
+}
+
+const INVITE_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+function generateInviteCode(len = 8) {
+  let s = '';
+  for (let i = 0; i < len; i++) s += INVITE_CODE_CHARS[Math.floor(Math.random() * INVITE_CODE_CHARS.length)];
+  return s;
 }
 
 // --- auth (inline para deploy sem auth.js)
@@ -706,6 +730,51 @@ const ws = {
           } else if (type === 'stream_stopped') {
             const target = msg.target_user_id || msg.to || d.target_user_id;
             if (target && isUuid(String(target))) _wsSendToUser(target, { type: 'stream_stopped', from_user_id: userId });
+          } else if (type === 'join_server' && userId) {
+            const code = (d.invite_code || msg.invite_code || '').trim().toUpperCase();
+            if (!code) return;
+            (async () => {
+              try {
+                const inv = await db.query(
+                  `SELECT i.server_id, i.channel_id, i.expires_at, i.max_uses, i.uses,
+                          s.name AS server_name, s.icon_url AS server_icon
+                   FROM invites i JOIN servers s ON s.id = i.server_id
+                   WHERE i.code = $1`,
+                  [code]
+                );
+                if (!inv.rows[0]) {
+                  wsClient.send(JSON.stringify({ type: 'invite_error', message: 'Convite inválido ou expirado' }));
+                  return;
+                }
+                const row = inv.rows[0];
+                if (row.expires_at && new Date(row.expires_at) < new Date()) {
+                  wsClient.send(JSON.stringify({ type: 'invite_error', message: 'Convite expirado' }));
+                  return;
+                }
+                if (row.max_uses > 0 && (row.uses || 0) >= row.max_uses) {
+                  wsClient.send(JSON.stringify({ type: 'invite_error', message: 'Convite já não está disponível' }));
+                  return;
+                }
+                await db.query(
+                  `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (server_id, user_id) DO NOTHING`,
+                  [row.server_id, userId]
+                );
+                await db.query(
+                  `INSERT INTO chat_members (chat_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (chat_id, user_id) DO NOTHING`,
+                  [row.channel_id, userId]
+                );
+                await db.query(`UPDATE invites SET uses = uses + 1 WHERE code = $1`, [code]);
+                const server = { id: String(row.server_id), name: row.server_name, icon_url: row.server_icon || null };
+                if (wsClient.readyState === WebSocket.OPEN) {
+                  wsClient.send(JSON.stringify({ type: 'server_created', server }));
+                }
+              } catch (e) {
+                logger.warn('[WS] join_server:', e.message);
+                if (wsClient.readyState === WebSocket.OPEN) {
+                  wsClient.send(JSON.stringify({ type: 'invite_error', message: 'Erro ao entrar no servidor' }));
+                }
+              }
+            })();
           }
         } catch (_) {}
       });
@@ -895,18 +964,45 @@ async function start() {
       if (db.isConnected()) {
         await dbInit();
         try {
+          let libertyServerId = null;
           const ex = await db.query(`SELECT id FROM servers WHERE name = $1 LIMIT 1`, ['Liberty']);
-          if (!ex.rows[0]?.id) {
+          if (ex.rows[0]?.id) {
+            libertyServerId = ex.rows[0].id;
+          } else {
             const ins = await db.query(
               `INSERT INTO servers (name, owner_id) VALUES ($1, NULL) RETURNING id`,
               ['Liberty']
             );
-            const sid = ins.rows[0].id;
+            libertyServerId = ins.rows[0].id;
             await db.query(
               `INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid)`,
-              [sid]
+              [libertyServerId]
             );
             logger.info('[LIBERTY] Servidor padrão Liberty criado.');
+          }
+          if (libertyServerId) {
+            const chatRow = await db.query(
+              `SELECT id FROM chats WHERE server_id = $1::uuid AND type = 'channel' LIMIT 1`,
+              [libertyServerId]
+            );
+            const generalChatId = chatRow.rows[0]?.id;
+            if (generalChatId) {
+              const usersResult = await db.query(`SELECT id FROM users`);
+              for (const u of usersResult.rows) {
+                const uid = u.id;
+                await db.query(
+                  `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (server_id, user_id) DO NOTHING`,
+                  [libertyServerId, uid]
+                );
+                await db.query(
+                  `INSERT INTO chat_members (chat_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (chat_id, user_id) DO NOTHING`,
+                  [generalChatId, uid]
+                );
+              }
+              if (usersResult.rows.length > 0) {
+                logger.info('[LIBERTY] Todos os membros adicionados ao servidor Liberty.');
+              }
+            }
           }
         } catch (e) {
           logger.warn('[LIBERTY] ensureLibertyServer at startup:', e.message);
@@ -1456,7 +1552,7 @@ async function start() {
          ORDER BY s.created_at ASC`,
         [userId]
       );
-      const servers = r.rows.map(row => ({
+      let servers = r.rows.map(row => ({
         id: String(row.id),
         name: row.name,
         owner_id: row.owner_id ? String(row.owner_id) : null,
@@ -1464,6 +1560,27 @@ async function start() {
         icon: row.icon_url || null,
         icon_url: row.icon_url || null,
       }));
+      const hasLiberty = servers.some(s => s.name === 'Liberty');
+      if (!hasLiberty) {
+        const libertyRow = await db.query(
+          `SELECT id, name, owner_id, created_at, icon_url FROM servers WHERE name = $1 LIMIT 1`,
+          ['Liberty']
+        );
+        if (libertyRow.rows[0]) {
+          const row = libertyRow.rows[0];
+          servers = [
+            {
+              id: String(row.id),
+              name: row.name,
+              owner_id: row.owner_id ? String(row.owner_id) : null,
+              created_at: row.created_at,
+              icon: row.icon_url || null,
+              icon_url: row.icon_url || null,
+            },
+            ...servers,
+          ];
+        }
+      }
       return res.status(200).json(servers);
     } catch (err) {
       if (err.message && err.message.includes('does not exist')) {
@@ -1504,7 +1621,8 @@ async function start() {
          FROM servers s
          LEFT JOIN chats c ON c.server_id = s.id
          LEFT JOIN chat_members cm ON cm.chat_id = c.id AND cm.user_id = $2::uuid
-         WHERE s.id = $1::uuid AND (s.owner_id = $2::uuid OR cm.user_id = $2::uuid)
+         LEFT JOIN server_members sm ON sm.server_id = s.id AND sm.user_id = $2::uuid
+         WHERE s.id = $1::uuid AND (s.owner_id = $2::uuid OR cm.user_id = $2::uuid OR sm.user_id = $2::uuid)
          LIMIT 1`,
         [serverId, userId]
       );
@@ -2682,6 +2800,156 @@ async function start() {
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao remover') });
     }
   });
+
+  // ── Invites ─────────────────────────────────────────────────────
+  const INVITE_CODE_LEN = 8;
+  const INVITE_CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  function generateInviteCode() {
+    let s = '';
+    for (let i = 0; i < INVITE_CODE_LEN; i++) s += INVITE_CODE_CHARS[Math.floor(Math.random() * INVITE_CODE_CHARS.length)];
+    return s;
+  }
+
+  // GET /api/v1/invites/:code — dados do convite (embed; pode ser sem auth para ver servidor)
+  app.get('/api/v1/invites/:code', async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Serviço indisponível' });
+    }
+    const code = (req.params.code || '').trim().toUpperCase();
+    if (!code || code.length > 32) return res.status(404).json({ message: 'Convite não encontrado' });
+    try {
+      const inv = await db.query(
+        `SELECT i.code, i.server_id, i.channel_id, i.expires_at, i.max_uses, i.uses,
+                s.name AS server_name, s.icon_url AS server_icon, s.created_at AS server_created_at
+         FROM invites i
+         JOIN servers s ON s.id = i.server_id
+         JOIN chats c ON c.id = i.channel_id AND c.server_id = i.server_id
+         WHERE i.code = $1`,
+        [code]
+      );
+      if (!inv.rows[0]) return res.status(404).json({ message: 'Convite inválido ou expirado' });
+      const row = inv.rows[0];
+      if (row.expires_at && new Date(row.expires_at) < new Date()) return res.status(404).json({ message: 'Convite expirado' });
+      if (row.max_uses > 0 && (row.uses || 0) >= row.max_uses) return res.status(404).json({ message: 'Convite já não está disponível' });
+      const memberCount = await db.query(
+        `SELECT COUNT(*) AS n FROM server_members WHERE server_id = $1::uuid`,
+        [row.server_id]
+      );
+      const onlineCount = memberCount.rows[0]?.n || 0;
+      return res.status(200).json({
+        code: row.code,
+        server_id: String(row.server_id),
+        channel_id: String(row.channel_id),
+        server: {
+          id: String(row.server_id),
+          name: row.server_name,
+          icon_url: row.server_icon || null,
+          approximate_member_count: parseInt(memberCount.rows[0]?.n || 0, 10),
+          approximate_presence_count: parseInt(onlineCount, 10),
+          created_at: row.server_created_at,
+        },
+        expires_at: row.expires_at,
+        max_uses: row.max_uses,
+        uses: row.uses || 0,
+      });
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Convite não encontrado' });
+      logger.error('GET /api/v1/invites/:code', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao obter convite') });
+    }
+  });
+
+  // POST /api/v1/invites/:code/join — entrar no servidor por convite (autenticado)
+  app.post('/api/v1/invites/:code/join', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Serviço indisponível' });
+    }
+    const code = (req.params.code || '').trim().toUpperCase();
+    const userId = req.userId;
+    if (!code || code.length > 32) return res.status(404).json({ message: 'Convite não encontrado' });
+    try {
+      const inv = await db.query(
+        `SELECT i.server_id, i.channel_id, i.expires_at, i.max_uses, i.uses,
+                s.name AS server_name, s.icon_url AS server_icon,
+                c.name AS channel_name
+         FROM invites i
+         JOIN servers s ON s.id = i.server_id
+         JOIN chats c ON c.id = i.channel_id
+         WHERE i.code = $1`,
+        [code]
+      );
+      if (!inv.rows[0]) return res.status(404).json({ message: 'Convite inválido ou expirado' });
+      const row = inv.rows[0];
+      if (row.expires_at && new Date(row.expires_at) < new Date()) return res.status(404).json({ message: 'Convite expirado' });
+      if (row.max_uses > 0 && (row.uses || 0) >= row.max_uses) return res.status(404).json({ message: 'Convite já não está disponível' });
+      await db.query(
+        `INSERT INTO server_members (server_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (server_id, user_id) DO NOTHING`,
+        [row.server_id, userId]
+      );
+      await db.query(
+        `INSERT INTO chat_members (chat_id, user_id, role) VALUES ($1::uuid, $2::uuid, 'member') ON CONFLICT (chat_id, user_id) DO NOTHING`,
+        [row.channel_id, userId]
+      );
+      await db.query(`UPDATE invites SET uses = uses + 1 WHERE code = $1`, [code]);
+      return res.status(200).json({
+        server: { id: String(row.server_id), name: row.server_name, icon_url: row.server_icon || null },
+        channel: { id: String(row.channel_id), name: row.channel_name },
+      });
+    } catch (err) {
+      if (err.code === '22P02') return res.status(404).json({ message: 'Convite não encontrado' });
+      logger.error('POST /api/v1/invites/:code/join', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao entrar no servidor') });
+    }
+  });
+
+  // POST /api/v1/channels/:channelId/invites — criar convite (autenticado; canal do servidor)
+  app.post(
+    '/api/v1/channels/:channelId/invites',
+    auth.requireAuth,
+    requireUuidParams(['channelId']),
+    validateBody(Joi.object({ max_uses: Joi.number().optional(), max_age: Joi.number().optional() }).optional()),
+    async (req, res) => {
+      if (!db.isConfigured() || !db.isConnected()) {
+        return res.status(503).json({ message: 'Serviço indisponível' });
+      }
+      const channelId = req.params.channelId;
+      const userId = req.userId;
+      try {
+        const ch = await db.query(
+          `SELECT c.id, c.server_id FROM chats c
+           INNER JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = $2::uuid
+           WHERE c.id = $1::uuid AND c.type = 'channel' LIMIT 1`,
+          [channelId, userId]
+        );
+        if (!ch.rows[0]) return res.status(404).json({ message: 'Canal não encontrado' });
+        const serverId = ch.rows[0].server_id;
+        let code = generateInviteCode();
+        for (let i = 0; i < 5; i++) {
+          const ex = await db.query(`SELECT 1 FROM invites WHERE code = $1`, [code]);
+          if (!ex.rows[0]) break;
+          code = generateInviteCode();
+        }
+        const maxAge = (req.body && req.body.max_age) ? Math.min(604800, Math.max(0, Number(req.body.max_age))) : 604800;
+        const expiresAt = new Date(Date.now() + maxAge * 1000);
+        const maxUses = (req.body && req.body.max_uses) ? Math.min(100, Math.max(0, Number(req.body.max_uses))) : 0;
+        await db.query(
+          `INSERT INTO invites (code, server_id, channel_id, created_by, expires_at, max_uses) VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5, $6)`,
+          [code, serverId, channelId, userId, expiresAt, maxUses]
+        );
+        return res.status(201).json({
+          code,
+          server_id: String(serverId),
+          channel_id: String(channelId),
+          expires_at: expiresAt.toISOString(),
+          max_uses: maxUses,
+          uses: 0,
+        });
+      } catch (err) {
+        logger.error('POST /api/v1/channels/:channelId/invites', err);
+        return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar convite') });
+      }
+    }
+  );
 
   // Favicon — evita 404 nos logs
   app.get('/favicon.ico', (req, res) => {

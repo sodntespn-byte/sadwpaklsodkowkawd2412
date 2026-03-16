@@ -847,6 +847,8 @@ class LibertyApp {
       document.body.classList.toggle('layout-members-left', localStorage.getItem('liberty_layout_members_left') === 'true');
       this.applyBackground();
       await this.simulateLoading();
+      const path = typeof location !== 'undefined' && location.pathname ? location.pathname : '';
+      const isInviteRoute = path && /^\/invite\/[A-Za-z0-9]+\/?$/.test(path);
       if (typeof API !== 'undefined' && API.Token && API.Token.isAuthenticated()) {
         try {
           await Promise.race([
@@ -857,6 +859,9 @@ class LibertyApp {
           if (API.Token.clearTokens) API.Token.clearTokens();
           this.showAuth();
         }
+      } else if (isInviteRoute) {
+        this.showApp();
+        await this._applyRouteFromPath(path);
       } else {
         this.showAuth();
       }
@@ -928,6 +933,13 @@ class LibertyApp {
   }
 
   async _applyRouteFromPath(path) {
+    const inviteMatch = path && path.match(/^\/invite\/([A-Za-z0-9]+)\/?$/);
+    if (inviteMatch) {
+      const code = inviteMatch[1];
+      await this._showInviteLanding(code);
+      return;
+    }
+    this._hideInviteLanding();
     if (!path) {
       this.selectHome();
       return;
@@ -949,6 +961,74 @@ class LibertyApp {
       }
     }
     this.selectHome();
+  }
+
+  _hideInviteLanding() {
+    const el = document.getElementById('invite-landing');
+    if (el) el.classList.add('hidden');
+  }
+
+  async _showInviteLanding(code) {
+    const landing = document.getElementById('invite-landing');
+    const cardWrap = document.getElementById('invite-landing-card');
+    const errEl = document.getElementById('invite-landing-error');
+    const loginHint = document.getElementById('invite-landing-login-hint');
+    const joinBtn = document.getElementById('invite-landing-join-btn');
+    const backLink = document.getElementById('invite-landing-back');
+    if (!landing || !cardWrap) return;
+    this._hideInviteLanding();
+    landing.classList.remove('hidden');
+    errEl?.classList.add('hidden');
+    loginHint?.classList.add('hidden');
+    joinBtn?.classList.add('hidden');
+    cardWrap.innerHTML = '<p class="invite-landing-error">A carregar convite…</p>';
+    if (backLink) {
+      backLink.onclick = (e) => {
+        e.preventDefault();
+        if (history.replaceState) history.replaceState(null, '', '/');
+        this._applyRouteFromPath('/');
+      };
+    }
+    try {
+      const data = await API.Invite.get(code);
+      const server = data.server || data;
+      const name = server.name || 'Servidor';
+      const iconUrl = server.icon_url || server.icon || null;
+      const memberCount = server.approximate_member_count ?? data.member_count ?? server.member_count ?? 0;
+      const onlineCount = server.approximate_presence_count ?? data.presence_count ?? server.presence_count ?? 0;
+      const createdAt = server.created_at || data.created_at;
+      const sinceStr = createdAt ? new Date(createdAt).toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' }) : '';
+      const avatarUrl = iconUrl && iconUrl.trim() ? iconUrl.trim() : this._getPlaceholderAvatarUrl(name);
+      cardWrap.innerHTML = `
+        <div class="message-embed-invite">
+          <div class="message-embed-invite-icon" style="background-image:url(${this.escapeHtml(avatarUrl)})"></div>
+          <div class="message-embed-invite-body">
+            <span class="message-embed-invite-name">${this.escapeHtml(name)}</span>
+            <span class="message-embed-invite-stats">• ${onlineCount} online • ${memberCount} membros</span>
+            ${sinceStr ? `<span class="message-embed-invite-since">Desde ${sinceStr}</span>` : ''}
+          </div>
+        </div>
+      `;
+      const hasAuth = !!(API.Token?.getAccessToken?.());
+      if (hasAuth && joinBtn) {
+        joinBtn.classList.remove('hidden');
+        joinBtn.onclick = () => {
+          if (!this.gateway || !this.gateway.connected) {
+            this.showToast('Liga-te primeiro para entrar no servidor.', 'error');
+            return;
+          }
+          this._pendingInviteCode = code;
+          this.gateway.joinServer(code);
+          this.showToast('A entrar no servidor…', 'info');
+        };
+      } else {
+        loginHint?.classList.remove('hidden');
+      }
+    } catch (_) {
+      errEl.textContent = 'Convite inválido ou expirado.';
+      errEl?.classList.remove('hidden');
+      cardWrap.innerHTML = '';
+    }
   }
 
   _refreshDMListSidebar() {
@@ -1106,6 +1186,24 @@ class LibertyApp {
     }, 400);
   }
 
+  _logoutWithoutReload() {
+    this.currentUser = null;
+    this.servers = [];
+    this.currentServer = null;
+    this.currentChannel = null;
+    this.isHomeView = true;
+    this.messages.clear();
+    this._hideInviteLanding();
+    if (this.gateway && this.gateway.disconnect) {
+      try { this.gateway.disconnect(); } catch (_) {}
+    }
+    const app = document.getElementById('app');
+    if (app) app.classList.add('hidden');
+    const auth = document.getElementById('auth-screen');
+    if (auth) auth.classList.remove('hidden');
+    if (history.replaceState) history.replaceState(null, '', '/');
+  }
+
   // ═══════════════════════════════════════════
   //  EVENT LISTENERS
   // ═══════════════════════════════════════════
@@ -1134,15 +1232,16 @@ class LibertyApp {
       this._applyRouteFromPath(path);
     });
 
-    // Links internos /channels/*: evitar reload, aplicar rota no cliente
+    // Links internos /channels/* e /invite/*: evitar reload, aplicar rota no cliente
     document.addEventListener('click', (e) => {
-      const a = e.target.closest('a[href^="/channels/"]');
+      const a = e.target.closest('a[href^="/channels/"], a[href^="/invite/"]');
       if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
       const href = a.getAttribute('href');
       if (!href || href.startsWith('http')) return;
       const path = href.split('?')[0];
-      if (path.startsWith('/channels/') && (!a.origin || a.origin === location.origin)) {
+      if ((path.startsWith('/channels/') || path.startsWith('/invite/')) && (!a.origin || a.origin === location.origin)) {
         e.preventDefault();
+        if (history.pushState) history.pushState(null, '', path);
         this._applyRouteFromPath(path);
       }
     }, true);
@@ -4746,6 +4845,7 @@ class LibertyApp {
   }
 
   addMessage(message, scroll = true) {
+    if (this.messages.has(message.id)) return;
     const container = document.getElementById('messages-list');
     if (!container) return;
     const welcomeEl = container.querySelector('.welcome-message');
@@ -7529,7 +7629,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
               API.Token.clearTokens();
               this.showToast('Conta eliminada. Até à próxima.', 'success');
               this.hideSettingsPanel();
-              setTimeout(() => window.location.reload(), 800);
+              this._logoutWithoutReload();
             } catch (e) {
               this.showToast(e.message || 'Erro ao eliminar conta.', 'error');
             }
@@ -7539,7 +7639,7 @@ this._injectYouTubeEmbeds(msgEl, newContent);
               API.Token.clearTokens();
               this.showToast('Conta eliminada. Até à próxima.', 'success');
               this.hideSettingsPanel();
-              setTimeout(() => window.location.reload(), 800);
+              this._logoutWithoutReload();
             } catch (e) {
               this.showToast(e.message || 'Erro ao eliminar conta.', 'error');
             }

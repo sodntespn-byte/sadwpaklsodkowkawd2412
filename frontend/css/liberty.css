@@ -2175,8 +2175,9 @@ body {
 .invite-landing.hidden {
   display: none !important;
 }
-.invite-landing:not(.hidden) ~ .server-bar,
-.invite-landing:not(.hidden) ~ .channel-bar,
+.invite-landing:not(.hidden) ~ .server-sidebar,
+.invite-landing:not(.hidden) ~ .channel-sidebar,
+.invite-landing:not(.hidden) ~ .channel-sidebar-backdrop,
 .invite-landing:not(.hidden) ~ .main-content {
   display: none !important;
 }

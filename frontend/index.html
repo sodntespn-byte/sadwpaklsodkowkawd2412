@@ -149,6 +149,16 @@
          APP PRINCIPAL
          ══════════════════════════════ -->
     <div id="app" class="app hidden" role="application" aria-label="LIBERTY App">
+      <!-- ─── Invite landing (liberty.app/invite/CODE) ─── -->
+      <div id="invite-landing" class="invite-landing hidden" role="region" aria-label="Convite de servidor">
+        <div class="invite-landing-inner">
+          <a href="/" class="invite-landing-link" id="invite-landing-back">← Voltar ao LIBERTY</a>
+          <div id="invite-landing-card" class="invite-landing-card"></div>
+          <p id="invite-landing-error" class="invite-landing-error hidden"></p>
+          <p id="invite-landing-login-hint" class="invite-landing-login-hint hidden">Inicia sessão para entrares neste servidor.</p>
+          <button type="button" class="btn btn-primary invite-landing-btn hidden" id="invite-landing-join-btn">Entrar no servidor</button>
+        </div>
+      </div>
       <!-- ─── Server Sidebar (72px) ─── -->
       <nav class="server-sidebar" aria-label="Servidores">
         <ul class="server-list" role="list">
