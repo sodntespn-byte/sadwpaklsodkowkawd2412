@@ -162,7 +162,6 @@
 
     handleMessage(message) {
       const { op, type, d, t, data, s } = message;
-      const msgId = message.id || message.s || op || type || 'unknown';
       if (type === 'message' && data) {
         this.emit('message', data);
         return;
@@ -193,7 +192,7 @@
       switch (op) {
         case 'hello': {
           this._clearHelloTimeout();
-          this.startHeartbeat((d && d.heartbeat_interval) || 45000);
+          this.startHeartbeat(d && d.heartbeat_interval ? d.heartbeat_interval : 45000);
           const tok =
             typeof API !== 'undefined' && API.Token ? API.Token.getAccessToken() : localStorage.getItem('access_token') || localStorage.getItem('token') || '';
           if (tok) this.send('authenticate', { token: tok });
@@ -204,17 +203,7 @@
           this._clearHelloTimeout();
           this.authenticated = true;
           this.sessionId = (d && d.session_id) || null;
-          if (typeof this._connectResolve === 'function') {
-            this._resolveConnect(d || {});
-          } else {
-            if (typeof console !== 'undefined' && console.warn) {
-              console.warn('[Gateway] authenticated sem Promise pendente (reconexão/duplicado). op=', op, 'msgId=', msgId);
-            }
-            this._hasConnectedOnce = true;
-            this._resubscribeAll();
-            this._flushQueue();
-            this.emit('ready', { ...(d || {}), reconnected: true });
-          }
+          this._resolveConnect(d || {});
           break;
         }
 
@@ -225,13 +214,7 @@
           this._connectResolve = null;
           this._connectReject = null;
           this._connectIntent = false;
-          if (typeof rejectFn === 'function') {
-            rejectFn(new Error((d && d.reason) || 'Auth failed'));
-          } else {
-            if (typeof console !== 'undefined' && console.warn) {
-              console.warn('[Gateway] auth_failed sem Promise pendente (timeout/duplicado). op=', op, 'msgId=', msgId);
-            }
-          }
+          if (typeof rejectFn === 'function') rejectFn(new Error((d && d.reason) || 'Auth failed'));
           break;
         }
 
@@ -321,11 +304,7 @@
           break;
 
         default:
-          if (t) {
-            this.emit(t.toLowerCase(), d || {});
-          } else if (op && typeof console !== 'undefined' && console.warn) {
-            console.warn('[Gateway] Mensagem sem handler de promise/resposta. op=', op, 'msgId=', msgId);
-          }
+          if (t) this.emit(t.toLowerCase(), d || {});
       }
     }
 
