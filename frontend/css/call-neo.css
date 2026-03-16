@@ -59,15 +59,48 @@
   box-shadow: var(--call-shadow);
 }
 
-/* ─── Área do grid de vídeo ─── */
+/* ─── Área do grid de vídeo (redimensionável) ─── */
 .call-neo__stage {
-  flex: 1;
-  min-height: 0;
+  flex: 1 1 auto;
+  min-height: 200px;
+  max-height: calc(100vh - 140px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
   transition: padding var(--call-transition);
+  position: relative;
+}
+
+/* Pega para redimensionar pela borda inferior */
+.call-neo__resize-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 12px;
+  cursor: ns-resize;
+  z-index: 20;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.35), transparent);
+  transition: background 0.15s ease;
+}
+.call-neo__resize-handle:hover,
+.call-neo__resize-handle:active {
+  background: linear-gradient(to top, var(--call-accent-muted), transparent);
+}
+.call-neo__resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--call-glass-border);
+}
+.call-neo__resize-handle:hover::after {
+  background: var(--call-accent);
 }
 
 .call-neo__grid {

@@ -401,7 +401,7 @@
             <h2 id="voice-call-channel-name" class="call-neo__title">Chamada</h2>
             <div id="voice-call-participants-bar" class="webrtc-participants-bar" aria-label="Quem está na chamada" style="margin-left:auto;display:flex;align-items:center;gap:8px;"></div>
           </div>
-          <div class="call-neo__stage">
+          <div class="call-neo__stage" id="call-neo-stage">
             <div id="call-neo-grid" class="call-neo__grid call-neo__grid--1">
               <div class="call-neo__tile call-neo__tile--remote" id="webrtc-remote-wrap">
                 <video id="webrtc-remote-video" class="call-neo__tile-video webrtc-video hidden" autoplay playsinline></video>
@@ -424,6 +424,7 @@
               <video id="webrtc-local-video" class="webrtc-video" autoplay playsinline muted></video>
               <span class="call-neo__pip-label webrtc-pip-label">Você</span>
             </div>
+            <div class="call-neo__resize-handle" id="call-neo-resize-handle" title="Arrastar para redimensionar" aria-label="Redimensionar área da chamada"></div>
           </div>
           <div class="call-neo__controls">
             <button type="button" class="call-neo__ctrl" id="voice-call-mute" title="Mutar">

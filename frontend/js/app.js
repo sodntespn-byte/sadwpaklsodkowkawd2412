@@ -1911,36 +1911,37 @@ class LibertyApp {
   _playCallSound(type) {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.connect(gain);
       gain.connect(ctx.destination);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-      const freq =
-        type === 'join'
-          ? 520
-          : type === 'leave'
-            ? 280
-            : type === 'screen_share'
-              ? 660
-              : type === 'mute' || type === 'mute_remote'
-                ? 320
-                : type === 'unmute'
-                  ? 440
-                  : 400;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.15);
-      if (type === 'join' || type === 'screen_share') {
-        osc.frequency.setValueAtTime(freq + 80, ctx.currentTime + 0.08);
-      }
-      if (type === 'leave') {
-        const osc2 = ctx.createOscillator();
-        osc2.connect(gain);
-        osc2.frequency.setValueAtTime(260, ctx.currentTime + 0.12);
-        osc2.start(ctx.currentTime + 0.12);
-        osc2.stop(ctx.currentTime + 0.28);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      const playTone = (freq, start, dur) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+        osc.connect(gain);
+        osc.start(start);
+        osc.stop(start + dur);
+      };
+      if (type === 'join') {
+        playTone(523.25, ctx.currentTime, 0.12);
+        playTone(659.25, ctx.currentTime + 0.08, 0.14);
+        playTone(783.99, ctx.currentTime + 0.16, 0.16);
+      } else if (type === 'leave') {
+        playTone(392, ctx.currentTime, 0.1);
+        playTone(293.66, ctx.currentTime + 0.1, 0.2);
+      } else if (type === 'screen_share') {
+        playTone(587.33, ctx.currentTime, 0.1);
+        playTone(783.99, ctx.currentTime + 0.06, 0.12);
+      } else if (type === 'mute' || type === 'mute_remote') {
+        playTone(349.23, ctx.currentTime, 0.15);
+      } else if (type === 'unmute') {
+        playTone(440, ctx.currentTime, 0.1);
+        playTone(554.37, ctx.currentTime + 0.06, 0.1);
+      } else if (type === 'camera_on') {
+        playTone(493.88, ctx.currentTime, 0.08);
+      } else {
+        playTone(400, ctx.currentTime, 0.12);
       }
     } catch (_) {}
   }
@@ -2235,8 +2236,12 @@ class LibertyApp {
     this._voiceCallState.stream = null;
     try {
       this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-    } catch (_) {
-      this._voiceCallState.stream = null;
+    } catch (e1) {
+      try {
+        this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (_) {
+        this._voiceCallState.stream = null;
+      }
     }
     this._voiceCallState.targetUserId = targetId;
     this._voiceCallState.videoEnabled = !!this._voiceCallState.stream;
@@ -2300,12 +2305,42 @@ class LibertyApp {
     }
   }
 
+  _setupCallResizeHandle() {
+    const stage = document.getElementById('call-neo-stage');
+    const handle = document.getElementById('call-neo-resize-handle');
+    if (!stage || !handle) return;
+    let startY = 0;
+    let startHeight = 0;
+    handle.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startY = e.clientY;
+      const h = stage.getBoundingClientRect().height;
+      startHeight = h;
+      const onMove = (e2) => {
+        const dy = e2.clientY - startY;
+        let newH = Math.round(startHeight + dy);
+        const minH = 200;
+        const maxH = Math.max(minH, window.innerHeight - 140);
+        newH = Math.min(maxH, Math.max(minH, newH));
+        stage.style.height = newH + 'px';
+        stage.style.flex = '0 0 auto';
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
   _setupVoiceCallButton() {
     const btn = document.getElementById('voice-call-btn');
     const voiceView = document.getElementById('voice-call-view');
     const disconnectBtn = document.getElementById('voice-call-disconnect');
     const muteBtn = document.getElementById('voice-call-mute');
     if (!btn) return;
+    this._setupCallResizeHandle();
     const closeVoiceCall = () => {
       const targetId = this._voiceCallState.targetUserId;
       if (targetId && this.gateway) {
@@ -2333,6 +2368,11 @@ class LibertyApp {
         voiceView.classList.add('hidden');
         voiceView.classList.add('call-neo--hidden');
         voiceView.classList.remove('call-neo--visible');
+      }
+      const stage = document.getElementById('call-neo-stage');
+      if (stage) {
+        stage.style.height = '';
+        stage.style.flex = '';
       }
       this._webrtcStopLocalAudioLevel();
       this._webrtcClearRemote();
@@ -4656,7 +4696,7 @@ class LibertyApp {
                 </div>`
                     : ''
                 }
-                ${message.content != null && String(message.content).trim() !== '' ? `<div class="message-text">${this._parseMessageContent(message.content)}</div>` : ''}
+                ${message.content != null ? `<div class="message-text">${this._parseMessageContent(message.content || '')}</div>` : ''}
                 ${this._renderMessageAttachmentsHtml(message.attachments)}
                 <div class="reactions-container"></div>
             </div>
@@ -7790,7 +7830,23 @@ this._injectYouTubeEmbeds(msgEl, newContent);
     container.innerHTML = '';
     this.messages.clear();
     (list || []).forEach(msg => this.addMessage(msg, false));
+    this._injectEmbedsInAllMessages();
     this.scrollToBottom();
+  }
+
+  _injectEmbedsInAllMessages() {
+    const container = document.getElementById('messages-list');
+    if (!container) return;
+    container.querySelectorAll('[data-message]').forEach((msgEl) => {
+      const id = msgEl.dataset.message;
+      const data = this.messages.get(id);
+      const content = data?.content ?? '';
+      if (msgEl.querySelector('.message-embed-placeholder')) {
+        this._injectYouTubeEmbeds(msgEl, content);
+        this._injectSpotifyEmbeds(msgEl, content);
+        this._injectInviteEmbeds(msgEl);
+      }
+    });
   }
 
   autoResizeTextarea(el) {
@@ -7956,27 +8012,37 @@ this._injectYouTubeEmbeds(msgEl, newContent);
     placeholders.forEach((ph) => {
       const url = ph.getAttribute('data-embed-url');
       if (!url) return;
-      const card = document.createElement('a');
-      card.href = url;
-      card.target = '_blank';
-      card.rel = 'noopener noreferrer';
-      card.className = 'message-embed message-embed-spotify-card';
-      card.innerHTML = `
-        <div class="message-embed-spotify-inner">
-          <div class="message-embed-spotify-art"><span class="message-embed-spotify-art-placeholder"><i class="fab fa-spotify"></i></span></div>
-          <div class="message-embed-spotify-body">
-            <span class="message-embed-spotify-badge">Prévia</span>
-            <span class="message-embed-spotify-title">Carregando…</span>
-            <span class="message-embed-spotify-artist"></span>
-            <div class="message-embed-spotify-actions">
-              <span class="message-embed-spotify-logo" aria-label="Spotify"><i class="fab fa-spotify"></i></span>
-              <span class="message-embed-spotify-play" title="Reproduzir no Spotify"><i class="fas fa-play"></i></span>
+      try {
+        const card = document.createElement('a');
+        card.href = url;
+        card.target = '_blank';
+        card.rel = 'noopener noreferrer';
+        card.className = 'message-embed message-embed-spotify-card';
+        card.innerHTML = `
+          <div class="message-embed-spotify-inner">
+            <div class="message-embed-spotify-art"><span class="message-embed-spotify-art-placeholder"><i class="fab fa-spotify"></i></span></div>
+            <div class="message-embed-spotify-body">
+              <span class="message-embed-spotify-badge">Spotify</span>
+              <span class="message-embed-spotify-title">Abrir no Spotify</span>
+              <span class="message-embed-spotify-artist"></span>
+              <div class="message-embed-spotify-actions">
+                <span class="message-embed-spotify-logo" aria-label="Spotify"><i class="fab fa-spotify"></i></span>
+                <span class="message-embed-spotify-play" title="Reproduzir no Spotify"><i class="fas fa-play"></i></span>
+              </div>
             </div>
           </div>
-        </div>
-      `;
-      ph.replaceWith(card);
-      this._fetchSpotifyOEmbed(url, card);
+        `;
+        ph.replaceWith(card);
+        this._fetchSpotifyOEmbed(url, card);
+      } catch (_) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'message-embed message-embed-spotify-card';
+        link.textContent = 'Abrir no Spotify';
+        ph.replaceWith(link);
+      }
     });
   }
 
@@ -8057,7 +8123,13 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         });
       }
     } catch (_) {
-      wrap.innerHTML = '<div class="message-embed-invite-error">Convite inválido ou expirado.</div>';
+      const base = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+      wrap.innerHTML = `
+        <div class="message-embed-invite-error">
+          <p>Convite inválido ou expirado.</p>
+          <a href="${base}/invite/${encodeURIComponent(code)}" target="_blank" rel="noopener noreferrer" class="message-embed-invite-retry">Tentar abrir link</a>
+        </div>
+      `;
     }
   }
 

@@ -2776,8 +2776,17 @@ a:hover {
   text-decoration: underline;
 }
 
+/* Placeholder antes do embed ser injetado (mantém espaço e permite re-inject) */
+.message-embed-placeholder {
+  display: inline-block;
+  min-width: 220px;
+  min-height: 80px;
+  margin-top: 8px;
+  vertical-align: top;
+}
+
 .message-embed {
-  display: block;
+  display: block !important;
   margin-top: 10px;
   border-radius: 12px;
   overflow: hidden;
@@ -3011,6 +3020,15 @@ a:hover {
 }
 .message-embed-invite-error {
   color: var(--text-secondary, #b0b0b0);
+  flex-direction: column;
+}
+.message-embed-invite-error p { margin: 0 0 8px; }
+.message-embed-invite-retry {
+  color: #00D4AA;
+  text-decoration: underline;
+}
+.message-embed-invite-retry:hover {
+  color: #00f5c4;
 }
 .message-embed-invite-inner {
   display: flex;
