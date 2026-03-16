@@ -1628,6 +1628,12 @@ class LibertyApp {
         this.servers.push(data.server);
         this.renderServers();
       }
+      if (this._pendingInviteCode && data.server?.id) {
+        const serverId = data.server.id;
+        this._pendingInviteCode = null;
+        this.selectServer(serverId);
+        this.showToast('Entraste no servidor.', 'success');
+      }
     });
     g.on('server_delete', data => {
       this.servers = this.servers.filter(s => s.id !== data.server_id);
@@ -1816,8 +1822,49 @@ class LibertyApp {
       const avg = sum / dataArray.length;
       const speaking = avg > threshold;
       wrap.classList.toggle('webrtc-remote-speaking', speaking);
+      wrap.classList.toggle('call-neo__tile--speaking', speaking);
       if (avatarWrap) avatarWrap.classList.toggle('speaking', speaking);
       this._voiceCallState.audioLevelRAF = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  _webrtcStopLocalAudioLevel() {
+    if (this._voiceCallState.localAudioLevelRAF) {
+      cancelAnimationFrame(this._voiceCallState.localAudioLevelRAF);
+      this._voiceCallState.localAudioLevelRAF = null;
+    }
+    const pip = document.getElementById('webrtc-local-pip-wrap');
+    if (pip) pip.classList.remove('call-neo__pip--speaking');
+  }
+
+  _webrtcRunLocalAudioLevel(stream) {
+    if (!stream || !stream.getAudioTracks().length) return;
+    this._webrtcStopLocalAudioLevel();
+    let audioContext = null;
+    let analyser = null;
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.6;
+      source.connect(analyser);
+    } catch (e) {
+      return;
+    }
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const threshold = 25;
+    const pip = document.getElementById('webrtc-local-pip-wrap');
+    const loop = () => {
+      if (!analyser || !pip) return;
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+      const avg = sum / dataArray.length;
+      const speaking = avg > threshold;
+      pip.classList.toggle('call-neo__pip--speaking', speaking);
+      this._voiceCallState.localAudioLevelRAF = requestAnimationFrame(loop);
     };
     loop();
   }
@@ -1844,7 +1891,12 @@ class LibertyApp {
       }
     } catch (_) {}
     if (placeholderText) placeholderText.textContent = name;
-    if (placeholderIcon) placeholderIcon.classList.add('hidden');
+    const initialEl = document.getElementById('webrtc-remote-initial');
+    if (initialEl) {
+      initialEl.textContent = name.charAt(0).toUpperCase();
+      initialEl.classList.toggle('hidden', !!avatarUrl);
+    }
+    if (placeholderIcon) placeholderIcon.classList.toggle('hidden', !!avatarUrl);
     if (avatarEl) {
       if (avatarUrl) {
         avatarEl.src = avatarUrl;
@@ -1852,7 +1904,6 @@ class LibertyApp {
         avatarEl.classList.remove('hidden');
       } else {
         avatarEl.classList.add('hidden');
-        if (placeholderIcon) placeholderIcon.classList.remove('hidden');
       }
     }
   }
@@ -2005,7 +2056,11 @@ class LibertyApp {
         }
         this._webrtcClearRemote();
         const voiceView = document.getElementById('voice-call-view');
-        if (voiceView) voiceView.classList.add('hidden');
+        if (voiceView) {
+          voiceView.classList.add('hidden');
+          voiceView.classList.add('call-neo--hidden');
+          voiceView.classList.remove('call-neo--visible');
+        }
         const localV = document.getElementById('webrtc-local-video');
         if (localV) localV.srcObject = null;
       }
@@ -2028,14 +2083,20 @@ class LibertyApp {
       this._voiceCallState.targetUserId = null;
       this._voiceCallState.pendingOffer = null;
       this._voiceCallState.callId = null;
+      this._webrtcStopLocalAudioLevel();
       this._webrtcClearRemote();
       const voiceView = document.getElementById('voice-call-view');
-      if (voiceView) voiceView.classList.add('hidden');
+      if (voiceView) {
+        voiceView.classList.add('hidden');
+        voiceView.classList.add('call-neo--hidden');
+        voiceView.classList.remove('call-neo--visible');
+      }
       const localV = document.getElementById('webrtc-local-video');
       if (localV) localV.srcObject = null;
       const screenshareBtn = document.getElementById('voice-call-screenshare');
       if (screenshareBtn) {
         screenshareBtn.classList.remove('active');
+        screenshareBtn.classList.remove('call-neo__ctrl--active');
         const s = screenshareBtn.querySelector('span');
         const i = screenshareBtn.querySelector('i');
         if (s) s.textContent = 'Compartilhar tela';
@@ -2125,12 +2186,17 @@ class LibertyApp {
       })
       .catch(err => console.error('Voice answer error', err));
     const voiceView = document.getElementById('voice-call-view');
-    if (voiceView) voiceView.classList.remove('hidden');
+    if (voiceView) {
+      voiceView.classList.remove('hidden');
+      voiceView.classList.add('call-neo--visible');
+      voiceView.classList.remove('call-neo--hidden');
+    }
     this._webrtcClearRemote();
     const placeholderText = document.querySelector('#webrtc-remote-placeholder .webrtc-placeholder-text');
     if (placeholderText) placeholderText.textContent = 'Aguardando a outra pessoa...';
     const localV = document.getElementById('webrtc-local-video');
     if (localV) localV.srcObject = this._voiceCallState.stream;
+    if (this._voiceCallState.stream) this._webrtcRunLocalAudioLevel(this._voiceCallState.stream);
     const titleEl = document.getElementById('voice-call-channel-name');
     const other =
       (this.currentChannel?.recipients || []).find(r => r.id === from) ||
@@ -2184,9 +2250,14 @@ class LibertyApp {
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        this._webrtcStopLocalAudioLevel();
         this._webrtcClearRemote();
         const vv = document.getElementById('voice-call-view');
-        if (vv) vv.classList.add('hidden');
+        if (vv) {
+          vv.classList.add('hidden');
+          vv.classList.add('call-neo--hidden');
+          vv.classList.remove('call-neo--visible');
+        }
         const localV = document.getElementById('webrtc-local-video');
         if (localV) localV.srcObject = null;
       }
@@ -2202,7 +2273,11 @@ class LibertyApp {
           });
       })
       .catch(err => console.error('Voice offer error', err));
-    if (voiceView) voiceView.classList.remove('hidden');
+    if (voiceView) {
+      voiceView.classList.remove('hidden');
+      voiceView.classList.add('call-neo--visible');
+      voiceView.classList.remove('call-neo--hidden');
+    }
     this._webrtcClearRemote();
     const placeholder = document.getElementById('webrtc-remote-placeholder');
     const placeholderText = placeholder?.querySelector('.webrtc-placeholder-text');
@@ -2210,6 +2285,7 @@ class LibertyApp {
     if (placeholder) placeholder.classList.add('webrtc-placeholder-connecting');
     const localV = document.getElementById('webrtc-local-video');
     if (localV) localV.srcObject = this._voiceCallState.stream;
+    if (this._voiceCallState.stream) this._webrtcRunLocalAudioLevel(this._voiceCallState.stream);
     const titleEl = document.getElementById('voice-call-channel-name');
     const other = (this.currentChannel?.recipients || []).find(r => r.id === targetId);
     if (titleEl) titleEl.textContent = other?.username ? `Chamada com ${other.username}` : 'Chamada';
@@ -2253,19 +2329,26 @@ class LibertyApp {
       this._voiceCallState.targetUserId = null;
       this._voiceCallState.pendingOffer = null;
       this._voiceCallState.callId = null;
-      if (voiceView) voiceView.classList.add('hidden');
+      if (voiceView) {
+        voiceView.classList.add('hidden');
+        voiceView.classList.add('call-neo--hidden');
+        voiceView.classList.remove('call-neo--visible');
+      }
+      this._webrtcStopLocalAudioLevel();
       this._webrtcClearRemote();
       const localV = document.getElementById('webrtc-local-video');
       if (localV) localV.srcObject = null;
       const screenshareBtn = document.getElementById('voice-call-screenshare');
       if (screenshareBtn) {
         screenshareBtn.classList.remove('active');
+        screenshareBtn.classList.remove('call-neo__ctrl--active');
         screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
         screenshareBtn.querySelector('i').className = 'fas fa-display';
       }
       const videoBtn = document.getElementById('voice-call-video');
       if (videoBtn) {
         videoBtn.classList.remove('off');
+        videoBtn.classList.remove('call-neo__ctrl--off');
         videoBtn.querySelector('i').className = 'fas fa-video';
         videoBtn.querySelector('span').textContent = 'Vídeo';
       }
@@ -2338,6 +2421,7 @@ class LibertyApp {
             );
           if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
           screenshareBtn.classList.remove('active');
+          screenshareBtn.classList.remove('call-neo__ctrl--active');
           screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
           screenshareBtn.querySelector('i').className = 'fas fa-display';
           return;
@@ -2370,6 +2454,10 @@ class LibertyApp {
           }
           if (this._voiceCallState.targetUserId && this.gateway)
             this.gateway.send('stream_started', { target_user_id: this._voiceCallState.targetUserId });
+          screenshareBtn.classList.add('active');
+          screenshareBtn.classList.add('call-neo__ctrl--active');
+          screenshareBtn.querySelector('span').textContent = 'Parar partilha';
+          screenshareBtn.querySelector('i').className = 'fas fa-display';
           this._playCallSound('screen_share');
           displayStream.getVideoTracks()[0].onended = () => {
             if (this._voiceCallState.displayStream === displayStream) {
@@ -2383,13 +2471,11 @@ class LibertyApp {
               if (this.gateway)
                 this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
               screenshareBtn.classList.remove('active');
+              screenshareBtn.classList.remove('call-neo__ctrl--active');
               screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
               screenshareBtn.querySelector('i').className = 'fas fa-display';
             }
           };
-          screenshareBtn.classList.add('active');
-          screenshareBtn.querySelector('span').textContent = 'Parar compartilhamento';
-          screenshareBtn.querySelector('i').className = 'fas fa-stop';
         } catch (err) {
           this.showToast(
             err.name === 'NotAllowedError'
@@ -2431,15 +2517,18 @@ class LibertyApp {
   _updateWebrtcControlButtons() {
     const muteBtn = document.getElementById('voice-call-mute');
     const videoBtn = document.getElementById('voice-call-video');
+    const screenshareBtn = document.getElementById('voice-call-screenshare');
     const stream = this._voiceCallState.stream;
     if (muteBtn) {
       if (stream) {
         const enabled = stream.getAudioTracks().some(t => t.enabled);
         muteBtn.classList.toggle('muted', !enabled);
+        muteBtn.classList.toggle('call-neo__ctrl--muted', !enabled);
         muteBtn.querySelector('i').className = enabled ? 'fas fa-microphone' : 'fas fa-microphone-slash';
         muteBtn.querySelector('span').textContent = enabled ? 'Mute' : 'Desmutar';
       } else {
         muteBtn.classList.remove('muted');
+        muteBtn.classList.remove('call-neo__ctrl--muted');
         muteBtn.querySelector('i').className = 'fas fa-microphone';
         muteBtn.querySelector('span').textContent = 'Ativar microfone';
       }
@@ -2448,13 +2537,20 @@ class LibertyApp {
       if (stream) {
         const on = this._voiceCallState.videoEnabled !== false;
         videoBtn.classList.toggle('off', !on);
+        videoBtn.classList.toggle('call-neo__ctrl--off', !on);
         videoBtn.querySelector('i').className = on ? 'fas fa-video' : 'fas fa-video-slash';
         videoBtn.querySelector('span').textContent = on ? 'Vídeo' : 'Ligar vídeo';
       } else {
         videoBtn.classList.remove('off');
+        videoBtn.classList.remove('call-neo__ctrl--off');
         videoBtn.querySelector('i').className = 'fas fa-video';
         videoBtn.querySelector('span').textContent = 'Ativar câmara';
       }
+    }
+    if (screenshareBtn) {
+      const active = !!this._voiceCallState.displayStream;
+      screenshareBtn.classList.toggle('active', active);
+      screenshareBtn.classList.toggle('call-neo__ctrl--active', active);
     }
   }
 
@@ -2885,6 +2981,7 @@ class LibertyApp {
           this._updateChannelUnread(dm.id, false);
         }
         if (this.currentChannel.id && this.gateway) this.gateway.subscribeChannel(this.currentChannel.id);
+        this._updateChannelHeaderForContext();
         this._renderDMChat(dm);
       }
     }
@@ -4095,7 +4192,11 @@ class LibertyApp {
     const messageInputContainer = document.querySelector('.message-input-container');
     const voiceConnectedBar = document.getElementById('voice-connected');
 
-    if (voiceView) voiceView.classList.add('hidden');
+    if (voiceView) {
+      voiceView.classList.add('hidden');
+      voiceView.classList.add('call-neo--hidden');
+      voiceView.classList.remove('call-neo--visible');
+    }
     if (messagesContainer) messagesContainer.style.display = '';
     if (messageInputContainer) messageInputContainer.style.display = '';
     if (voiceConnectedBar) voiceConnectedBar.classList.add('hidden');
@@ -4620,6 +4721,7 @@ class LibertyApp {
     container.appendChild(messageEl);
     this._injectYouTubeEmbeds(messageEl, message.content);
     this._injectSpotifyEmbeds(messageEl, message.content);
+    this._injectInviteEmbeds(messageEl);
     if (scroll) this.scrollToBottom();
   }
 
@@ -4660,8 +4762,9 @@ class LibertyApp {
     if (!msgEl) return;
     const textEl = msgEl.querySelector('.message-text');
     textEl.innerHTML = this._parseMessageContent(newContent);
-    this._injectYouTubeEmbeds(msgEl, newContent);
-    this._injectSpotifyEmbeds(msgEl, newContent);
+this._injectYouTubeEmbeds(msgEl, newContent);
+      this._injectSpotifyEmbeds(msgEl, newContent);
+      this._injectInviteEmbeds(msgEl);
     textEl.insertAdjacentHTML('beforeend', '<span class="message-edited">(edited)</span>');
     const stored = this.messages.get(messageId);
     if (stored) stored.content = newContent;
@@ -7743,7 +7846,14 @@ class LibertyApp {
         return `<span class="message-embed-placeholder" data-embed-type="youtube" data-embed-url="${safeHref}" data-video-id="${this.escapeHtml(ytId)}"></span>`;
       }
       if (this._isSpotifyUrl(trimmed)) {
-        return `<span class="message-embed-placeholder" data-embed-type="spotify" data-embed-url="${safeHref}"></span>`;
+        const spotifyCanonical = this._normalizeSpotifyUrl(trimmed);
+        const safeSpotifyUrl = this.escapeHtml(spotifyCanonical || trimmed);
+        return `<span class="message-embed-placeholder" data-embed-type="spotify" data-embed-url="${safeSpotifyUrl}"></span>`;
+      }
+      const inviteCode = this._extractInviteCode(trimmed);
+      if (inviteCode) {
+        const safeCode = this.escapeHtml(inviteCode);
+        return `<span class="message-embed-placeholder" data-embed-type="invite" data-embed-code="${safeCode}"></span>`;
       }
       return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="message-link">${this.escapeHtml(trimmed)}</a>`;
     });
@@ -7763,8 +7873,27 @@ class LibertyApp {
 
   _isSpotifyUrl(url) {
     if (!url || typeof url !== 'string') return false;
-    return /https?:\/\/(?:open\.)?spotify\.com\/(track|album|playlist|artist|episode|show)\/[a-zA-Z0-9]+/i.test(url.trim()) ||
-      /https?:\/\/spotify\.link\/[^\s]+/i.test(url.trim());
+    const u = url.trim();
+    return (
+      /https?:\/\/(?:open\.)?spotify\.com\/(?:intl-[a-z]{2}\/)?(track|album|playlist|artist|episode|show)\/[a-zA-Z0-9]+/i.test(u) ||
+      /https?:\/\/spotify\.link\/[^\s]+/i.test(u)
+    );
+  }
+
+  _normalizeSpotifyUrl(url) {
+    if (!url || !this._isSpotifyUrl(url)) return url;
+    const u = url.trim();
+    const m = u.match(
+      /https?:\/\/(?:open\.)?spotify\.com\/(?:intl-[a-z]{2}\/)?(track|album|playlist|artist|episode|show)\/([a-zA-Z0-9]+)/i
+    );
+    if (m) return `https://open.spotify.com/${m[1]}/${m[2]}`;
+    return u;
+  }
+
+  _extractInviteCode(url) {
+    if (!url || typeof url !== 'string') return null;
+    const m = url.trim().match(/https?:\/\/(?:[^/]+\.)?liberty\.app\/invite\/([A-Za-z0-9]+)/i);
+    return m ? m[1] : null;
   }
 
   _extractYouTubeUrls(content) {
@@ -7851,6 +7980,87 @@ class LibertyApp {
     });
   }
 
+  _injectInviteEmbeds(messageEl) {
+    const textEl = messageEl.querySelector('.message-text');
+    if (!textEl) return;
+    const placeholders = textEl.querySelectorAll('.message-embed-placeholder[data-embed-type="invite"]');
+    placeholders.forEach((ph) => {
+      const code = ph.getAttribute('data-embed-code');
+      if (!code) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'message-embed message-embed-invite-card';
+      wrap.innerHTML = `
+        <div class="message-embed-invite-loading"><i class="fas fa-spinner fa-spin"></i><span>A carregar convite…</span></div>
+      `;
+      ph.replaceWith(wrap);
+      this._fetchInviteAndRenderCard(code, wrap);
+    });
+  }
+
+  async _fetchInviteAndRenderCard(code, wrap) {
+    const app = this;
+    try {
+      const invite = await API.Invite.get(code);
+      const serverId = invite.server_id || invite.server?.id;
+      if (!serverId) {
+        wrap.innerHTML = '<div class="message-embed-invite-error">Convite inválido ou expirado.</div>';
+        return;
+      }
+      let server = invite.server;
+      if (!server || !server.name) {
+        try {
+          const s = await API.Server.get(serverId);
+          server = s.server || s;
+        } catch (_) {}
+      }
+      const name = server?.name || 'Servidor';
+      const iconUrl = server?.icon_url || server?.icon || null;
+      const bannerUrl = server?.banner_url || server?.banner || null;
+      const memberCount = server?.approximate_member_count ?? invite.approximate_member_count ?? 0;
+      const onlineCount = server?.approximate_presence_count ?? invite.approximate_presence_count ?? 0;
+      const createdAt = server?.created_at || invite.created_at;
+      const sinceStr =
+        createdAt &&
+        new Date(createdAt).toLocaleDateString('pt-PT', { month: 'short', year: 'numeric' });
+      const initial = name.charAt(0).toUpperCase();
+      const bannerStyle = bannerUrl
+        ? `style="background-image:url(${this.escapeHtml(bannerUrl)});background-size:cover;background-position:center"`
+        : '';
+      wrap.innerHTML = `
+        <div class="message-embed-invite-inner">
+          <div class="message-embed-invite-banner" ${bannerStyle}></div>
+          <div class="message-embed-invite-main">
+            <div class="message-embed-invite-icon">
+              ${iconUrl ? `<img src="${this.escapeHtml(iconUrl)}" alt="">` : `<span class="message-embed-invite-icon-letter">${this.escapeHtml(initial)}</span>`}
+            </div>
+            <div class="message-embed-invite-info">
+              <span class="message-embed-invite-name">${this.escapeHtml(name)}</span>
+              <span class="message-embed-invite-stats">• ${onlineCount} online • ${memberCount} membros</span>
+              ${sinceStr ? `<span class="message-embed-invite-since">Desde ${sinceStr}</span>` : ''}
+            </div>
+            <button type="button" class="message-embed-invite-join-btn">Entrar</button>
+          </div>
+        </div>
+      `;
+      const btn = wrap.querySelector('.message-embed-invite-join-btn');
+      if (btn) {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!app.gateway || !app.gateway.connected) {
+            app.showToast('Liga-te primeiro para entrar no servidor.', 'error');
+            return;
+          }
+          app._pendingInviteCode = code;
+          app.gateway.joinServer(code);
+          app.showToast('A entrar no servidor…', 'info');
+        });
+      }
+    } catch (_) {
+      wrap.innerHTML = '<div class="message-embed-invite-error">Convite inválido ou expirado.</div>';
+    }
+  }
+
   async _fetchYouTubeOEmbed(videoId, cardEl) {
     if (!cardEl || !videoId) return;
     const url = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
@@ -7873,7 +8083,8 @@ class LibertyApp {
 
   async _fetchSpotifyOEmbed(spotifyUrl, cardEl) {
     if (!cardEl || !spotifyUrl) return;
-    const encoded = encodeURIComponent(spotifyUrl);
+    const canonical = this._normalizeSpotifyUrl(spotifyUrl) || spotifyUrl;
+    const encoded = encodeURIComponent(canonical);
     const url = `https://open.spotify.com/oembed?url=${encoded}`;
     const titleEl = cardEl.querySelector('.message-embed-spotify-title');
     const artistEl = cardEl.querySelector('.message-embed-spotify-artist');

@@ -2989,3 +2989,105 @@ a:hover {
   background: #1ed760;
   transform: scale(1.05);
 }
+
+/* ── Invite embed card (liberty.app/invite/CODE) ── */
+.message-embed-invite-card {
+  max-width: 380px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(22, 22, 28, 0.95);
+  display: block;
+}
+.message-embed-invite-loading,
+.message-embed-invite-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 16px;
+  color: var(--text-muted, #8a8a8a);
+  font-size: 14px;
+}
+.message-embed-invite-error {
+  color: var(--text-secondary, #b0b0b0);
+}
+.message-embed-invite-inner {
+  display: flex;
+  flex-direction: column;
+}
+.message-embed-invite-banner {
+  height: 72px;
+  background: linear-gradient(135deg, #1a1a24 0%, #252535 100%);
+  background-size: cover;
+  background-position: center;
+}
+.message-embed-invite-main {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.message-embed-invite-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--bg-tertiary, #1a1a1a);
+  border: 2px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.message-embed-invite-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.message-embed-invite-icon-letter {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent, #eab308);
+}
+.message-embed-invite-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.message-embed-invite-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+.message-embed-invite-stats {
+  font-size: 13px;
+  color: var(--text-muted, #8a8a8a);
+}
+.message-embed-invite-since {
+  font-size: 12px;
+  color: var(--text-muted, #8a8a8a);
+}
+.message-embed-invite-join-btn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent, #eab308);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.05s ease;
+}
+.message-embed-invite-join-btn:hover {
+  filter: brightness(1.12);
+}
+.message-embed-invite-join-btn:active {
+  transform: scale(0.98);
+}

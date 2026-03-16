@@ -30,6 +30,7 @@
     <link rel="stylesheet" href="/css/main.css" />
     <link rel="stylesheet" href="/css/themes.css" />
     <link rel="stylesheet" href="/css/components.css" />
+    <link rel="stylesheet" href="/css/call-neo.css" />
     <link rel="stylesheet" href="/css/mobile.css" />
   </head>
   <body>
@@ -393,59 +394,48 @@
           </div>
         </section>
 
-        <!-- WebRTC Call View (video + voice + screen share) -->
-        <section id="voice-call-view" class="webrtc-call-view hidden" aria-label="Chamada de vídeo e voz">
-          <div class="webrtc-call-stage">
-            <div class="webrtc-remote-wrap">
-              <video id="webrtc-remote-video" class="webrtc-video hidden" autoplay playsinline></video>
-              <div id="webrtc-remote-screen-wrap" class="webrtc-screen-wrap hidden">
-                <video id="webrtc-remote-screen" class="webrtc-video" autoplay playsinline></video>
-              </div>
-              <span id="webrtc-screen-badge" class="webrtc-screen-badge hidden"
-                ><i class="fas fa-display"></i> Compartilhando tela</span
-              >
-              <div class="webrtc-remote-placeholder" id="webrtc-remote-placeholder">
-                <div class="webrtc-remote-avatar-wrap" id="webrtc-remote-avatar-wrap">
-                  <i class="fas fa-people-group webrtc-placeholder-icon" id="webrtc-placeholder-icon"></i>
-                  <img class="webrtc-remote-avatar hidden" id="webrtc-remote-avatar" alt="" />
-                </div>
-                <span class="webrtc-placeholder-text" id="webrtc-placeholder-text">Aguardando a outra pessoa...</span>
-              </div>
-              <button
-                type="button"
-                class="webrtc-mute-remote-btn hidden"
-                id="voice-call-mute-remote"
-                title="Desativar som dele"
-              >
-                <i class="fas fa-volume-xmark"></i><span>Silenciar</span>
-              </button>
-            </div>
-            <div class="webrtc-local-pip-wrap">
-              <video id="webrtc-local-video" class="webrtc-video" autoplay playsinline muted></video>
-              <span class="webrtc-pip-label">Você</span>
-            </div>
-            <div class="webrtc-call-header-bar">
-              <span class="webrtc-live-dot" aria-label="Em chamada"><i class="fas fa-circle" aria-hidden="true"></i> AO VIVO</span>
-              <h2 id="voice-call-channel-name" class="webrtc-call-title">Chamada</h2>
-            </div>
-            <div id="voice-call-participants-bar" class="webrtc-participants-bar" aria-label="Quem está na chamada"></div>
+        <!-- WebRTC Call View — Neo-Discord (glassmorphism, grid, áudio visual) -->
+        <section id="voice-call-view" class="call-neo webrtc-call-view hidden" aria-label="Chamada de vídeo e voz">
+          <div class="call-neo__header">
+            <span class="call-neo__live-dot" aria-label="Em chamada"><i class="fas fa-circle" aria-hidden="true"></i> AO VIVO</span>
+            <h2 id="voice-call-channel-name" class="call-neo__title">Chamada</h2>
+            <div id="voice-call-participants-bar" class="webrtc-participants-bar" aria-label="Quem está na chamada" style="margin-left:auto;display:flex;align-items:center;gap:8px;"></div>
           </div>
-          <div class="webrtc-call-controls">
-            <button type="button" class="webrtc-ctrl-btn" id="voice-call-mute" title="Mutar">
+          <div class="call-neo__stage">
+            <div id="call-neo-grid" class="call-neo__grid call-neo__grid--1">
+              <div class="call-neo__tile call-neo__tile--remote" id="webrtc-remote-wrap">
+                <video id="webrtc-remote-video" class="call-neo__tile-video webrtc-video hidden" autoplay playsinline></video>
+                <div id="webrtc-remote-screen-wrap" class="webrtc-screen-wrap hidden" style="position:absolute;inset:0;">
+                  <video id="webrtc-remote-screen" class="call-neo__tile-video webrtc-video" autoplay playsinline></video>
+                </div>
+                <span id="webrtc-screen-badge" class="call-neo__tile-badge call-neo__tile-badge--screen webrtc-screen-badge hidden"><i class="fas fa-display"></i> Compartilhando tela</span>
+                <div class="webrtc-remote-placeholder call-neo__tile-placeholder" id="webrtc-remote-placeholder">
+                  <div class="call-neo__avatar-ring webrtc-remote-avatar-wrap" id="webrtc-remote-avatar-wrap">
+                    <i class="fas fa-people-group webrtc-placeholder-icon" id="webrtc-placeholder-icon" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--call-text-muted);"></i>
+                    <img class="webrtc-remote-avatar hidden" id="webrtc-remote-avatar" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;" />
+                    <span class="call-neo__avatar-initial hidden" id="webrtc-remote-initial" aria-hidden="true"></span>
+                  </div>
+                  <span class="webrtc-placeholder-text call-neo__tile-name" id="webrtc-placeholder-text">Aguardando a outra pessoa...</span>
+                </div>
+                <button type="button" class="webrtc-mute-remote-btn hidden" id="voice-call-mute-remote" title="Desativar som dele" style="position:absolute;bottom:12px;right:12px;z-index:2;padding:8px 14px;border-radius:10px;border:1px solid var(--call-glass-border);background:rgba(0,0,0,0.6);color:var(--call-text);font-size:12px;cursor:pointer;"><i class="fas fa-volume-xmark"></i><span> Silenciar</span></button>
+              </div>
+            </div>
+            <div class="call-neo__pip webrtc-local-pip-wrap" id="webrtc-local-pip-wrap">
+              <video id="webrtc-local-video" class="webrtc-video" autoplay playsinline muted></video>
+              <span class="call-neo__pip-label webrtc-pip-label">Você</span>
+            </div>
+          </div>
+          <div class="call-neo__controls">
+            <button type="button" class="call-neo__ctrl" id="voice-call-mute" title="Mutar">
               <i class="fas fa-microphone"></i><span>Mute</span>
             </button>
-            <button type="button" class="webrtc-ctrl-btn" id="voice-call-video" title="Desligar câmara">
+            <button type="button" class="call-neo__ctrl" id="voice-call-video" title="Câmara">
               <i class="fas fa-video"></i><span>Vídeo</span>
             </button>
-            <button type="button" class="webrtc-ctrl-btn" id="voice-call-screenshare" title="Compartilhar tela">
+            <button type="button" class="call-neo__ctrl" id="voice-call-screenshare" title="Compartilhar tela">
               <i class="fas fa-display"></i><span>Compartilhar tela</span>
             </button>
-            <button
-              type="button"
-              class="webrtc-ctrl-btn webrtc-ctrl-disconnect"
-              id="voice-call-disconnect"
-              title="Desligar"
-            >
+            <button type="button" class="call-neo__ctrl call-neo__ctrl--disconnect" id="voice-call-disconnect" title="Desligar">
               <i class="fas fa-phone-slash"></i><span>Desligar</span>
             </button>
           </div>

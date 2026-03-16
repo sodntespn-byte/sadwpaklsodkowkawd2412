@@ -870,13 +870,50 @@ function route(res, method, p, url, body) {
   }
 
   // ── Invites ──────────────────────────────────────────────────
+  const inviteGetMatch = p.match(/^\/invites\/([A-Za-z0-9]+)$/);
+  if (inviteGetMatch && method === 'GET') {
+    const code = inviteGetMatch[1];
+    const srv = MOCK_SERVERS[0];
+    if (!srv) return notFound();
+    const chs = MOCK_CHANNELS[srv.id] || [];
+    const firstCh = chs.find(c => c.channel_type === 'text') || chs[0];
+    const members = MOCK_MEMBERS[srv.id] || [];
+    const onlineCount = members.filter(m => m.status === 'online' || !m.status).length;
+    return ok({
+      code,
+      server_id: srv.id,
+      channel_id: firstCh ? firstCh.id : null,
+      uses: 0,
+      max_uses: null,
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      server: {
+        id: srv.id,
+        name: srv.name,
+        icon_url: srv.icon_url || srv.icon || null,
+        banner_url: srv.banner_url || srv.banner || null,
+        approximate_member_count: members.length,
+        approximate_presence_count: onlineCount,
+      },
+    });
+  }
+
   const inviteCreateMatch = p.match(/^\/channels\/([\w-]+)\/invites$/);
   if (inviteCreateMatch && method === 'POST') {
-    const code = 'ABC' + crypto.randomBytes(4).toString('hex').toUpperCase();
+    const code = 'OT0E2ULD';
+    const channelId = inviteCreateMatch[1];
+    let serverId = null;
+    for (const sid of Object.keys(MOCK_CHANNELS)) {
+      if (MOCK_CHANNELS[sid].some(c => c.id === channelId)) {
+        serverId = sid;
+        break;
+      }
+    }
+    if (!serverId) serverId = 'srv-001';
     return ok(
       {
         code,
-        channel_id: inviteCreateMatch[1],
+        server_id: serverId,
+        channel_id: channelId,
         expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         max_uses: body.max_uses || 0,
         uses: 0,
