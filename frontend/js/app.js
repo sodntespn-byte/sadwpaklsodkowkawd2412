@@ -1689,8 +1689,12 @@ class LibertyApp {
     const g = this.gateway;
     g.on('message', msg => {
       const chId = msg.channel_id || msg.channelId || msg.chat_id;
+      const msgId = msg.id || msg.message_id;
+      if (!msgId) return;
       const normalized = {
         ...msg,
+        id: msgId,
+        message_id: msgId,
         author_username: msg.author_username || msg.author,
         created_at: msg.created_at || msg.timestamp,
       };
@@ -3265,13 +3269,17 @@ class LibertyApp {
         `;
 
     if (dm.id) {
+      this._loadingMessagesChannelId = dm.id;
       const cached = MessageCache.get(dm.id);
       if (cached.length > 0) {
+        if (this._loadingMessagesChannelId !== dm.id) return;
         container.innerHTML = '';
+        this.messages.clear();
         cached.forEach(m => this.addMessage(m, false));
       }
       try {
         const messages = await API.DM.getMessages(dm.id, { limit: 50 });
+        if (this._loadingMessagesChannelId !== dm.id || this.currentChannel?.id !== dm.id) return;
         const byId = new Map();
         [...(cached || []), ...(Array.isArray(messages) ? messages : [])].forEach(m => {
           const id = m.id || m.message_id;
@@ -3282,11 +3290,19 @@ class LibertyApp {
           const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
           return tA - tB;
         });
-        MessageCache.set(dm.id, merged);
+        const seen = new Set();
+        const unique = [];
+        for (const m of merged) {
+          const sig = [m.id || m.message_id || '', m.created_at || m.timestamp || '', m.content || ''].join('|');
+          if (seen.has(sig)) continue;
+          seen.add(sig);
+          unique.push(m);
+        }
+        MessageCache.set(dm.id, unique);
         container.innerHTML = '';
         this.messages.clear();
-        if (merged.length > 0) {
-          merged.forEach(m => this.addMessage(m, false));
+        if (unique.length > 0) {
+          unique.forEach(m => this.addMessage(m, false));
         } else {
           container.innerHTML = `
                         <div class="welcome-message">
@@ -3297,10 +3313,11 @@ class LibertyApp {
                     `;
         }
       } catch {
-        if (cached.length === 0) {
+        if (this.currentChannel?.id === dm.id && cached.length === 0) {
           /* mantém welcome */
         }
       }
+      this._loadingMessagesChannelId = null;
     }
 
     this.scrollToBottom();
@@ -4754,6 +4771,8 @@ class LibertyApp {
 
   async loadMessages(channelId) {
     const container = document.getElementById('messages-list');
+    if (!container) return;
+    this._loadingMessagesChannelId = channelId;
     this.messages.clear();
     container.innerHTML = `
             <div class="messages-loading">
@@ -4763,12 +4782,17 @@ class LibertyApp {
             </div>`;
     const cached = MessageCache.get(channelId);
     if (cached.length > 0) {
+      if (this._loadingMessagesChannelId !== channelId) return;
       container.innerHTML = '';
+      this.messages.clear();
       cached.forEach(msg => this.addMessage(msg, false));
       this.scrollToBottom();
     }
     try {
       const messages = await API.Message.list(channelId, { limit: 50 });
+      if (this._loadingMessagesChannelId !== channelId) return;
+      const cur = this.currentChannel?.id || this.currentChannel?.channelId;
+      if (cur && String(cur) !== String(channelId)) return;
       const byId = new Map();
       [...(cached || []), ...(Array.isArray(messages) ? messages : [])].forEach(m => {
         const id = m.id || m.message_id;
@@ -4793,6 +4817,8 @@ class LibertyApp {
         unique.push(m);
       }
       MessageCache.set(channelId, unique);
+      if (this._loadingMessagesChannelId !== channelId) return;
+      this._loadingMessagesChannelId = null;
       container.innerHTML = '';
       this.messages.clear();
       if (unique.length === 0) {
@@ -4808,6 +4834,8 @@ class LibertyApp {
       unique.forEach(msg => this.addMessage(msg, false));
       this.scrollToBottom();
     } catch {
+      this._loadingMessagesChannelId = null;
+      if (this.currentChannel?.id !== channelId && this.currentChannel?.channelId !== channelId) return;
       if (cached.length === 0) {
         container.innerHTML =
           '<div class="empty-state"><p class="empty-state-description">Failed to load messages.</p></div>';
@@ -4858,9 +4886,12 @@ class LibertyApp {
   }
 
   addMessage(message, scroll = true) {
-    if (this.messages.has(message.id)) return;
+    const msgId = String(message.id || message.message_id || '');
+    if (!msgId) return;
+    if (this.messages.has(msgId)) return;
     const container = document.getElementById('messages-list');
     if (!container) return;
+    if (container.querySelector(`[data-message="${msgId}"]`)) return;
     const welcomeEl = container.querySelector('.welcome-message');
     if (welcomeEl && !container.querySelector('.message-group')) welcomeEl.style.display = 'none';
 
@@ -4891,7 +4922,7 @@ class LibertyApp {
 
     const messageEl = document.createElement('div');
     messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
-    messageEl.dataset.message = message.id;
+    messageEl.dataset.message = msgId;
     messageEl.dataset.author = authorName;
     if (authorId) messageEl.dataset.authorId = String(authorId);
 
@@ -4928,11 +4959,11 @@ class LibertyApp {
         e.stopPropagation();
         const action = btn.dataset.action;
         if (action === 'react') {
-          this.showEmojiPicker(btn, emoji => this.addReaction(message.id, emoji));
+          this.showEmojiPicker(btn, emoji => this.addReaction(msgId, emoji));
         } else if (action === 'reply') {
-          this.startReply(message.id, authorName, message.content);
+          this.startReply(msgId, authorName, message.content);
         } else if (action === 'edit') {
-          this.startEditMessage(message.id, message.content);
+          this.startEditMessage(msgId, message.content);
         } else if (action === 'more') {
           this.showMessageContextMenu(messageEl, e);
         }
@@ -4963,14 +4994,15 @@ class LibertyApp {
       });
     }
 
-    // Store message data
-    this.messages.set(message.id, { ...message, authorName, isSelf });
+    // Store message data (usar msgId consistente para evitar duplicados)
+    const toStore = { ...message, id: msgId, message_id: msgId };
+    this.messages.set(msgId, { ...toStore, authorName, isSelf });
     const cid = this.currentChannel?.id || this.currentChannel?.channelId;
-    if (cid) MessageCache.add(cid, message);
+    if (cid) MessageCache.add(cid, toStore);
 
     // Init reactions
-    if (!this.reactions.has(message.id)) this.reactions.set(message.id, []);
-    this.renderReactions(messageEl, message.id);
+    if (!this.reactions.has(msgId)) this.reactions.set(msgId, []);
+    this.renderReactions(messageEl, msgId);
 
     container.appendChild(messageEl);
     this._injectYouTubeEmbeds(messageEl, message.content);
