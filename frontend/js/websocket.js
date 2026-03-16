@@ -204,14 +204,14 @@
           this.authenticated = true;
           this.sessionId = (d && d.session_id) || null;
           this._resolveConnect(d || {});
-          if (resolve) resolve(d);
+          if (typeof resolve === 'function') resolve(d);
           break;
         }
 
         case 'auth_failed': {
           this._clearHelloTimeout();
           this.emit('auth_failed', d || {});
-          if (reject) reject(new Error((d && d.reason) || 'Auth failed'));
+          if (typeof reject === 'function') reject(new Error((d && d.reason) || 'Auth failed'));
           break;
         }
 
