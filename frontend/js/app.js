@@ -4779,10 +4779,23 @@ class LibertyApp {
         const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
         return tA - tB;
       });
-      MessageCache.set(channelId, merged);
+      // Deduplicar por combinação de id+timestamp+conteúdo para evitar mensagens duplicadas
+      const seen = new Set();
+      const unique = [];
+      for (const m of merged) {
+        const sig = [
+          m.id || m.message_id || '',
+          m.created_at || m.timestamp || '',
+          m.content || '',
+        ].join('|');
+        if (seen.has(sig)) continue;
+        seen.add(sig);
+        unique.push(m);
+      }
+      MessageCache.set(channelId, unique);
       container.innerHTML = '';
       this.messages.clear();
-      if (merged.length === 0) {
+      if (unique.length === 0) {
         container.innerHTML = `
                     <div class="welcome-message">
                         <div class="welcome-icon"><i class="fas fa-message"></i></div>
@@ -4792,7 +4805,7 @@ class LibertyApp {
                 `;
         return;
       }
-      merged.forEach(msg => this.addMessage(msg, false));
+      unique.forEach(msg => this.addMessage(msg, false));
       this.scrollToBottom();
     } catch {
       if (cached.length === 0) {
