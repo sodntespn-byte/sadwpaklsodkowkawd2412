@@ -1748,8 +1748,9 @@ class LibertyApp {
       }
       if (this._pendingInviteCode && data.server?.id) {
         const serverId = data.server.id;
+        const channelId = data.channel_id || null;
         this._pendingInviteCode = null;
-        this.selectServer(serverId);
+        this.selectServer(serverId, channelId);
         this.showToast('Entraste no servidor.', 'success');
       }
     });
@@ -8228,8 +8229,17 @@ this._injectYouTubeEmbeds(msgEl, newContent);
         btn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
+          const hasAuth = typeof API !== 'undefined' && API.Token && API.Token.getAccessToken && API.Token.getAccessToken();
+          if (!hasAuth) {
+            app.showToast('Inicia sessão para entrar no servidor.', 'error');
+            if (typeof history !== 'undefined' && history.pushState) {
+              history.pushState({}, '', `/invite/${encodeURIComponent(code)}`);
+              app._applyRouteFromPath(window.location.pathname + (window.location.search || ''));
+            }
+            return;
+          }
           if (!app.gateway || !app.gateway.connected) {
-            app.showToast('Liga-te primeiro para entrar no servidor.', 'error');
+            app.showToast('A aguardar ligação… Tenta novamente.', 'error');
             return;
           }
           app._pendingInviteCode = code;

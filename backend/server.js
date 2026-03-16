@@ -765,8 +765,9 @@ const ws = {
                 );
                 await db.query(`UPDATE invites SET uses = uses + 1 WHERE code = $1`, [code]);
                 const server = { id: String(row.server_id), name: row.server_name, icon_url: row.server_icon || null };
+                const channelId = String(row.channel_id);
                 if (wsClient.readyState === WebSocket.OPEN) {
-                  wsClient.send(JSON.stringify({ type: 'server_created', server }));
+                  wsClient.send(JSON.stringify({ type: 'server_created', server, channel_id: channelId }));
                 }
               } catch (e) {
                 logger.warn('[WS] join_server:', e.message);

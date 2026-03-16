@@ -119,7 +119,7 @@ class LibertyGateway {
       return;
     }
     if (type === 'server_created' && message.server) {
-      this.emit('server_create', { server: message.server });
+      this.emit('server_create', { server: message.server, channel_id: message.channel_id || null });
       return;
     }
     if (type === 'invite_error') {
@@ -382,7 +382,9 @@ class LibertyGateway {
   }
 
   joinServer(inviteCode) {
-    this.send('join_server', { invite_code: inviteCode });
+    const code = (inviteCode || '').toString().trim().toUpperCase();
+    if (!code) return;
+    this.send('join_server', { invite_code: code });
   }
 
   leaveServer(serverId) {
