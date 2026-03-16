@@ -11,7 +11,7 @@ export const schemas = {
   register: Joi.object({
     username: Joi.string().min(2).max(MAX_USERNAME).trim().required(),
     email: Joi.string().email().max(255).trim().allow('', null).optional(),
-    password: Joi.string().min(0).max(256).allow('').optional(),
+    password: Joi.string().min(8).max(256).allow('').optional(),
   }),
   login: Joi.object({
     username: Joi.string().max(MAX_USERNAME).trim().required(),

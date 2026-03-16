@@ -1,10 +1,10 @@
 /* =========================================
-   LIBERTY — Themes (inspirado em Fermi)
-   Variáveis por tema para Dark/Light
-   Acento ouro preservado.
+   LIBERTY — Themes
+   Variáveis por tema. Cor de destaque pode ser
+   sobrescrita por --user-accent (Aparência).
    ========================================= */
 
-/* Acento global (usado em ambos os temas) */
+/* Acento global; --user-accent (definido por JS) tem prioridade sobre --accent-color do tema */
 :root {
   --accent-color: #ffd700;
   --accent-hover: #ffeb3b;
@@ -30,6 +30,7 @@ body:not([class*='-theme']) {
   --loading-text: #f5f0e8;
   --channel-text: 'Type a message…';
   --hint-text: 'Search';
+  --link: var(--user-accent, var(--accent-color, #ffd700));
 }
 
 /* Tema claro (estilo Fermi Light) com identidade LIBERTY */
@@ -51,6 +52,7 @@ body.Light-theme {
   --loading-text: #1a1814;
   --channel-text: 'Type a message…';
   --hint-text: 'Search';
+  --link: var(--user-accent, #b8860b);
   /* Mapear variáveis LIBERTY para o tema claro */
   --primary-black: #f5f2eb;
   --secondary-black: #e8e4dc;
@@ -65,7 +67,7 @@ body.Light-theme {
   --glass-border: rgba(184, 134, 11, 0.2);
 }
 
-/* Opcional: tema escuro com mais acento (Fermi Dark-Accent style) */
+/* Tema escuro com mais acento */
 body.Dark-Accent-theme {
   color-scheme: dark;
   --primary-bg: color-mix(in srgb, #1a1814 85%, var(--accent-color));
@@ -74,5 +76,43 @@ body.Dark-Accent-theme {
   --channels-bg: color-mix(in srgb, #181512 88%, var(--accent-color));
   --channel-selected: color-mix(in srgb, #3a3530 70%, var(--accent-color));
   --typebox-bg: color-mix(in srgb, #272320 75%, var(--accent-color));
-  --link: var(--accent-color);
+  --link: var(--user-accent, var(--accent-color));
+}
+
+/* ── Temas escuros com acentos de cor (só mudam botões/links; fundo e GIFs intactos) ── */
+body.Dark-Blue-theme {
+  color-scheme: dark;
+  --accent-color: #4fc3f7;
+  --accent-hover: #81d4fa;
+  --link: var(--user-accent, var(--accent-color));
+}
+body.Dark-Green-theme {
+  color-scheme: dark;
+  --accent-color: #66bb6a;
+  --accent-hover: #81c784;
+  --link: var(--user-accent, var(--accent-color));
+}
+body.Dark-Purple-theme {
+  color-scheme: dark;
+  --accent-color: #ab47bc;
+  --accent-hover: #ba68c8;
+  --link: var(--user-accent, var(--accent-color));
+}
+body.Dark-Red-theme {
+  color-scheme: dark;
+  --accent-color: #ef5350;
+  --accent-hover: #e57373;
+  --link: var(--user-accent, var(--accent-color));
+}
+body.Dark-Cyan-theme {
+  color-scheme: dark;
+  --accent-color: #26c6da;
+  --accent-hover: #4dd0e1;
+  --link: var(--user-accent, var(--accent-color));
+}
+body.Dark-Orange-theme {
+  color-scheme: dark;
+  --accent-color: #ff9800;
+  --accent-hover: #ffb74d;
+  --link: var(--user-accent, var(--accent-color));
 }

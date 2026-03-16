@@ -56,6 +56,7 @@ import {
   sanitizeDescription,
   sanitizeRole,
   sanitizeCallStatus,
+  sanitizeUrl,
   requireUuidParams,
 } from './src/lib/sanitize.js';
 
@@ -727,10 +728,11 @@ const limiterGeneral = rateLimit({
 });
 const limiterAuth = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { message: 'Muitas tentativas de login/registo. Tente em 15 minutos.' },
+  max: 8,
+  message: { message: 'Muitas tentativas de acesso. Tente novamente em 15 minutos.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
 });
 
 app.use(limiterGeneral);
@@ -754,13 +756,18 @@ app.use(
         imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
       },
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+    crossOriginEmbedderPolicy: false,
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
     xssFilter: true,
     noSniff: true,
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
     hidePoweredBy: true,
   })
 );
@@ -2084,6 +2091,74 @@ async function start() {
   app.get('/api/v1/users/me', auth.requireAuth, getMe);
   app.get('/api/v1/users/@me', auth.requireAuth, getMe);
 
+  // GET /api/v1/users/@me/export — exportar dados do utilizador (privacidade / RGPD)
+  app.get('/api/v1/users/@me/export', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const userId = req.userId;
+    try {
+      const u = await db.query(
+        'SELECT id, username, email, avatar_url, banner_url, description, created_at FROM users WHERE id = $1 LIMIT 1',
+        [userId]
+      );
+      const user = u.rows[0];
+      if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
+      const messages = await db.query(
+        'SELECT m.id, m.content, m.created_at, m.chat_id FROM messages m WHERE m.user_id = $1::uuid ORDER BY m.created_at ASC LIMIT 10000',
+        [userId]
+      );
+      const exportData = {
+        exported_at: new Date().toISOString(),
+        user: {
+          id: String(user.id),
+          username: user.username,
+          email: user.email || null,
+          description: user.description || null,
+          created_at: user.created_at,
+        },
+        messages: (messages.rows || []).map(m => ({
+          id: String(m.id),
+          content: m.content,
+          created_at: m.created_at,
+          chat_id: String(m.chat_id),
+        })),
+      };
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename="liberty-data-export.json"');
+      return res.status(200).send(JSON.stringify(exportData, null, 2));
+    } catch (err) {
+      logger.error('GET /users/@me/export', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao exportar dados') });
+    }
+  });
+
+  // DELETE /api/v1/users/@me — eliminar conta permanentemente (privacidade)
+  app.delete('/api/v1/users/@me', auth.requireAuth, async (req, res) => {
+    if (!db.isConfigured() || !db.isConnected()) {
+      return res.status(503).json({ message: 'Banco indisponível' });
+    }
+    const userId = req.userId;
+    const { password: confirmPassword } = req.body || {};
+    try {
+      const u = await db.query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [userId]);
+      const row = u.rows[0];
+      if (!row) return res.status(404).json({ message: 'Usuário não encontrado' });
+      if (row.password_hash) {
+        const pass = (confirmPassword != null ? String(confirmPassword) : '').trim();
+        if (!pass || !(await bcrypt.compare(pass, row.password_hash))) {
+          return res.status(401).json({ message: 'Confirme a sua senha para eliminar a conta.' });
+        }
+      }
+      await db.query('DELETE FROM users WHERE id = $1::uuid', [userId]);
+      res.clearCookie('liberty_token', { path: '/', httpOnly: true, secure: config.isProduction, sameSite: 'strict' });
+      return res.status(200).json({ success: true, message: 'Conta eliminada com sucesso.' });
+    } catch (err) {
+      logger.error('DELETE /users/@me', err);
+      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao eliminar conta') });
+    }
+  });
+
   // GET /api/v1/users/:userId — perfil público (nome, avatar, banner, descrição) para modal de perfil
   app.get('/api/v1/users/:userId', auth.requireAuth, requireUuidParams(['userId']), async (req, res) => {
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
@@ -2115,25 +2190,18 @@ async function start() {
       return res.status(503).json({ message: 'Banco indisponível' });
     }
     const { username, avatar_url, banner_url, description } = req.body || {};
-    const MAX_URL_LEN = 2048;
     let usernameVal = username !== undefined ? sanitizeUsername(username) : null;
-    let avatarVal = avatar_url != null ? String(avatar_url).trim() : null;
-    let bannerVal = banner_url != null ? String(banner_url).trim() : null;
+    const avatarVal = avatar_url != null ? sanitizeUrl(avatar_url) : null;
+    const bannerVal = banner_url != null ? sanitizeUrl(banner_url) : null;
     const descVal = description != null ? sanitizeDescription(description) : null;
     if (usernameVal !== null && (usernameVal.length < 1 || usernameVal.length > 32)) {
       return res.status(400).json({ message: 'username deve ter entre 1 e 32 caracteres' });
     }
-    if (avatarVal && avatarVal.length > 0) {
-      if (!/^https?:\/\//i.test(avatarVal) && !/^\//.test(avatarVal)) {
-        return res.status(400).json({ message: 'avatar_url deve ser uma URL (http/https) ou caminho (/uploads/...)' });
-      }
-      if (avatarVal.length > MAX_URL_LEN) avatarVal = avatarVal.slice(0, MAX_URL_LEN);
+    if (avatar_url != null && avatar_url !== '' && avatarVal === null) {
+      return res.status(400).json({ message: 'avatar_url inválido. Use apenas http(s) ou /uploads/' });
     }
-    if (bannerVal && bannerVal.length > 0) {
-      if (!/^https?:\/\//i.test(bannerVal) && !/^\//.test(bannerVal)) {
-        return res.status(400).json({ message: 'banner_url deve ser uma URL (http/https) ou caminho' });
-      }
-      if (bannerVal.length > MAX_URL_LEN) bannerVal = bannerVal.slice(0, MAX_URL_LEN);
+    if (banner_url != null && banner_url !== '' && bannerVal === null) {
+      return res.status(400).json({ message: 'banner_url inválido. Use apenas http(s) ou /uploads/' });
     }
     try {
       const cur = await db.query('SELECT username, avatar_url, banner_url, description FROM users WHERE id = $1 LIMIT 1', [
@@ -2198,7 +2266,7 @@ async function start() {
           return res.status(401).json({ message: 'Senha atual incorreta' });
         }
       }
-      const password_hash = await bcrypt.hash(newPass, 10);
+      const password_hash = await bcrypt.hash(newPass, 12);
       await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [password_hash, req.userId]);
       return res.status(200).json({ success: true, message: 'Senha atualizada' });
     } catch (err) {

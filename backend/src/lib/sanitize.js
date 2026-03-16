@@ -130,6 +130,18 @@ function sanitizeRole(str) {
   return String(str).toLowerCase();
 }
 
+/** URL segura para avatar/banner: apenas http(s) ou path /uploads/. Bloqueia javascript:, data:, etc. */
+function sanitizeUrl(str, maxLen = 2048) {
+  if (str == null) return null;
+  const s = String(str).trim();
+  if (!s) return null;
+  if (s.length > maxLen) return null;
+  const lower = s.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:') || lower.startsWith('file:')) return null;
+  if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('/uploads/') || lower.startsWith('/')) return s;
+  return null;
+}
+
 /**
  * Middleware: valida que os parâmetros indicados são UUIDs. Retorna 400 se algum for inválido.
  * Uso: requireUuidParams(['serverId', 'channelId'])(req, res, next)
@@ -157,6 +169,7 @@ export {
   sanitizeDescription,
   sanitizeCallStatus,
   sanitizeRole,
+  sanitizeUrl,
   requireUuidParams,
   LIMITS,
 };

@@ -63,7 +63,7 @@ async function apiRequest(endpoint, options = {}) {
     }
   }
 
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 403) {
     TokenManager.clearTokens();
     try {
       window.dispatchEvent(new CustomEvent('liberty:unauthorized'));
@@ -173,6 +173,30 @@ const UserAPI = {
     return apiRequest('/users/me/avatar', {
       method: 'POST',
       body: { image: imageDataUrl },
+    });
+  },
+
+  /** Exportar todos os dados da conta (privacidade). Retorna blob JSON. */
+  async exportData() {
+    const token = getStoredToken();
+    if (!token) throw new Error('Não autenticado');
+    const res = await fetch(`${API_BASE}/users/@me/export`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ message: 'Erro ao exportar' }));
+      throw new Error(err.message || 'Erro ao exportar dados');
+    }
+    return res.blob();
+  },
+
+  /** Eliminar conta permanentemente. Se o utilizador tiver senha, passá-la como confirmação. */
+  async deleteAccount(confirmPassword) {
+    return apiRequest('/users/@me', {
+      method: 'DELETE',
+      body: confirmPassword ? { password: confirmPassword } : {},
     });
   },
 };

@@ -29,7 +29,11 @@ export function registerAuthRoutes(router, deps) {
     try {
       await ensureLibertyServer();
       const emailVal = email && String(email).trim() ? String(email).trim().toLowerCase() : null;
-      const password_hash = password && String(password).trim() ? await bcrypt.hash(String(password).trim(), 10) : null;
+      const rawPassword = password && String(password).trim();
+      if (rawPassword && rawPassword.length < 8) {
+        return res.status(400).json({ message: 'A senha deve ter pelo menos 8 caracteres' });
+      }
+      const password_hash = rawPassword ? await bcrypt.hash(rawPassword, 12) : null;
       const r = await db.query(
         `INSERT INTO users (username, email, password_hash)
          VALUES ($1, $2, $3)
@@ -49,8 +53,8 @@ export function registerAuthRoutes(router, deps) {
       res.cookie('liberty_token', access_token, {
         path: '/',
         maxAge: 90 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
-        httpOnly: isProduction,
+        sameSite: 'strict',
+        httpOnly: true,
         secure: isProduction,
       });
 
@@ -100,8 +104,8 @@ export function registerAuthRoutes(router, deps) {
       res.cookie('liberty_token', access_token, {
         path: '/',
         maxAge: 90 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
-        httpOnly: isProduction,
+        sameSite: 'strict',
+        httpOnly: true,
         secure: isProduction,
       });
       return res.status(200).json({
@@ -154,8 +158,8 @@ export function registerAuthRoutes(router, deps) {
       res.cookie('liberty_token', access_token, {
         path: '/',
         maxAge: 90 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax',
-        httpOnly: isProduction,
+        sameSite: 'strict',
+        httpOnly: true,
         secure: isProduction,
       });
       return res.status(200).json({

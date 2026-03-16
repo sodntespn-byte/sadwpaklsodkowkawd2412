@@ -317,7 +317,8 @@
 .friends-list{flex:1;overflow-y:auto;padding:8px 16px}
 .friend-item{display:flex;align-items:center;gap:12px;padding:12px 10px;border-radius:var(--radius-md);border-top:1px solid rgba(255,255,255,.03);cursor:pointer;transition:background .15s;min-height:48px;box-sizing:border-box}
 .friend-item:hover{background:var(--dark-gray)}
-.friend-item-avatar{width:36px;height:36px;border-radius:50%;background:var(--medium-gray);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--text-secondary);position:relative;flex-shrink:0}
+.friend-item-avatar{width:36px;height:36px;border-radius:50%;background:var(--medium-gray);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--text-secondary);position:relative;flex-shrink:0;overflow:hidden}
+.friend-item-avatar img{width:100%;height:100%;object-fit:cover;display:block}
 .friend-item-avatar::after{content:'';position:absolute;bottom:-1px;right:-1px;width:10px;height:10px;border-radius:50%;border:2px solid var(--primary-black)}
 .friend-item-avatar.online::after{background:var(--status-online)}
 .friend-item-avatar.idle::after{background:var(--status-idle)}
@@ -804,10 +805,25 @@ class LibertyApp {
 
   applyTheme(themeClass) {
     const body = document.body;
-    body.classList.remove('Dark-theme', 'Light-theme', 'Dark-Accent-theme');
+    const themeClasses = [
+      'Dark-theme', 'Light-theme', 'Dark-Accent-theme',
+      'Dark-Blue-theme', 'Dark-Green-theme', 'Dark-Purple-theme',
+      'Dark-Red-theme', 'Dark-Cyan-theme', 'Dark-Orange-theme',
+    ];
+    themeClasses.forEach(c => body.classList.remove(c));
     body.classList.add(themeClass);
     localStorage.setItem('liberty-theme', themeClass);
     this.updateThemeButtons();
+  }
+
+  /** Aplica cor de destaque do site (botões, links). Não altera fundo nem GIFs. */
+  applyAccentColor(hex) {
+    const root = document.documentElement;
+    if (hex && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
+      root.style.setProperty('--user-accent', hex);
+    } else {
+      root.style.removeProperty('--user-accent');
+    }
   }
 
   updateThemeButtons() {
@@ -821,6 +837,8 @@ class LibertyApp {
   async init() {
     try {
       this.applyTheme(localStorage.getItem('liberty-theme') || 'Dark-theme');
+      this.applyAccentColor(localStorage.getItem('liberty_accent_color'));
+      document.body.classList.toggle('layout-compact', localStorage.getItem('liberty_layout_compact') === 'true');
       this.applyBackground();
       await this.simulateLoading();
       if (typeof API !== 'undefined' && API.Token && API.Token.isAuthenticated()) {
@@ -939,13 +957,16 @@ class LibertyApp {
   _refreshUIAfterConnect() {
     requestAnimationFrame(() => {
       this.updateUserPanel();
+      this._updateUserAvatarInUI();
       this.renderServers();
       if (this.isHomeView) {
         this._refreshDMListSidebar();
         this.renderFriendsView(this.currentFriendsTab || 'online').catch(() => {});
+        this._updateChannelHeaderForContext();
       }
       const channelList = document.getElementById('channel-list');
       if (channelList && this.currentServer) this.renderChannels();
+      this._updateMembersSidebarVisibility();
     });
   }
 
@@ -987,6 +1008,14 @@ class LibertyApp {
     } catch (_) {
       return null;
     }
+  }
+
+  /** Avatar URL para qualquer utilizador: avatar_url ou placeholder com inicial e cor. */
+  _getAvatarUrlForUser(userOrName) {
+    const name = typeof userOrName === 'string' ? userOrName : (userOrName?.username || userOrName?.display_name || 'U');
+    const url = userOrName && typeof userOrName === 'object' && (userOrName.avatar_url || userOrName.avatar);
+    if (url && typeof url === 'string' && url.trim()) return url.trim();
+    return this._getPlaceholderAvatarUrl(name);
   }
 
   _getAvatarUrl() {
@@ -1536,6 +1565,23 @@ class LibertyApp {
       }
       this._refreshDMListSidebar();
     });
+    const refreshCurrentUserAndUI = async () => {
+      try {
+        const me = await API.User.getCurrentUser();
+        const user = me && me.user ? me.user : me;
+        if (user) {
+          this.currentUser = user;
+          this.updateUserPanel();
+          this._updateUserAvatarInUI();
+          if (this.isHomeView) {
+            this._refreshDMListSidebar();
+            this.renderFriendsView(this.currentFriendsTab || 'online').catch(() => {});
+          }
+        }
+      } catch (_) {}
+    };
+    g.on('user_update', refreshCurrentUserAndUI);
+    g.on('user_updated', refreshCurrentUserAndUI);
     this._setupVoiceCallHandlers();
     this._setupVoiceCallButton();
   }
@@ -2562,20 +2608,19 @@ class LibertyApp {
       if (recipient.id) item.dataset.recipientId = recipient.id;
       const letter = displayName.charAt(0).toUpperCase();
       const bgColor = avatarColors[idx % avatarColors.length];
-      const avatarSrc = recipient.avatar_url || recipient.avatar || null;
+      const avatarSrc = this._getAvatarUrlForUser(recipient);
+      const avatarFallback = this._getPlaceholderAvatarUrl(displayName);
       const unreadCount =
         (dm.id && typeof LibertyDMUnreadStore !== 'undefined' && LibertyDMUnreadStore.getCount(dm.id)) ||
         (this.unreadChannels.has(dm.id) ? 1 : 0);
       const hasUnread = unreadCount > 0;
       if (hasUnread) item.classList.add('dm-list-item-unread');
-      const avatarHtml = avatarSrc
-        ? `<img src="${this.escapeHtml(avatarSrc)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none;color:#fff">${this.escapeHtml(letter)}</span>`
-        : `<span style="color:#fff">${this.escapeHtml(letter)}</span>`;
+      const avatarHtml = `<img src="${this.escapeHtml(avatarSrc)}" alt="" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }"><span style="display:none;color:#fff">${this.escapeHtml(letter)}</span>`;
       const badgeHtml = hasUnread
         ? `<span class="dm-unread-badge" aria-label="Mensagens não lidas">${unreadCount > 99 ? '99+' : String(unreadCount)}</span>`
         : '';
       item.innerHTML = `
-                <div class="dm-list-item-avatar ${recipient.status || 'offline'}" style="background:${avatarSrc ? 'var(--dark-gray)' : bgColor}">${avatarHtml}</div>
+                <div class="dm-list-item-avatar ${recipient.status || 'offline'}" style="background:var(--dark-gray)">${avatarHtml}</div>
                 <div class="dm-list-item-info">
                     <div class="dm-list-item-name">${this.escapeHtml(displayName)}</div>
                     <div class="dm-list-item-msg"></div>
@@ -2883,8 +2928,9 @@ class LibertyApp {
       pending.forEach(p => {
         const u = p.user || { username: 'Unknown' };
         const isIncoming = p.type === 3;
+        const avatarHtml = this._avatarImgHtml(u, (u.username || 'U').charAt(0));
         bodyHtml += `<div class="friend-item" data-user="${u.id}" data-rel-id="${p.id}">
-                    <div class="friend-item-avatar offline"><span>${this.escapeHtml((u.username || 'U').charAt(0))}</span></div>
+                    <div class="friend-item-avatar offline">${avatarHtml}</div>
                     <div class="friend-item-info">
                         <div class="friend-item-name">${this.escapeHtml(u.username)}</div>
                         <div class="friend-item-status">${isIncoming ? 'Convite recebido' : 'Pedido enviado'}</div>
@@ -2908,8 +2954,9 @@ class LibertyApp {
         bodyHtml += `<div style="${headerStyle}">Convites — ${incoming.length}</div>`;
         incoming.forEach(p => {
           const u = p.user || { username: 'Unknown' };
+          const avatarHtml = this._avatarImgHtml(u, (u.username || 'U').charAt(0));
           bodyHtml += `<div class="friend-item" data-user="${u.id}" data-rel-id="${p.id}">
-                        <div class="friend-item-avatar offline"><span>${this.escapeHtml((u.username || 'U').charAt(0))}</span></div>
+                        <div class="friend-item-avatar offline">${avatarHtml}</div>
                         <div class="friend-item-info">
                             <div class="friend-item-name">${this.escapeHtml(u.username)}</div>
                             <div class="friend-item-status">Convite recebido</div>
@@ -2925,8 +2972,9 @@ class LibertyApp {
       bodyHtml += `<div style="${headerStyle}">Blocked — ${blocked.length}</div>`;
       blocked.forEach(b => {
         const u = b.user || { username: 'Unknown' };
+        const avatarHtml = this._avatarImgHtml(u, (u.username || 'U').charAt(0));
         bodyHtml += `<div class="friend-item" data-user="${u.id}" data-rel-id="${b.id}">
-                    <div class="friend-item-avatar offline"><span>${u.username.charAt(0)}</span></div>
+                    <div class="friend-item-avatar offline">${avatarHtml}</div>
                     <div class="friend-item-info"><div class="friend-item-name">${this.escapeHtml(u.username)}</div><div class="friend-item-status">Blocked</div></div>
                     <div class="friend-item-actions"><button title="Unblock"><i class="fas fa-user-slash"></i></button></div>
                 </div>`;
@@ -3086,7 +3134,8 @@ class LibertyApp {
       const renderRankRow = (row, type) => {
         const name = (row.username || 'User').trim();
         const initial = (name.charAt(0) || 'U').toUpperCase();
-        const avatarUrl = (row.avatar_url || '').trim();
+        const avatarSrc = this._getAvatarUrlForUser(row);
+        const avatarFallback = this._getPlaceholderAvatarUrl(name);
         const progress =
           type === 'activity' ? this._rankingActivityProgress(row.minutes) : this._rankingXpProgress(row.xp);
         const pct = Math.max(8, Math.min(100, progress));
@@ -3096,9 +3145,7 @@ class LibertyApp {
             ? `${this._formatActivityTime(row.minutes || 0)} · Nível ${levelLabel}`
             : `${(row.xp || 0).toLocaleString()} XP · Nível ${levelLabel}`;
         const rankClass = row.rank === 1 ? 'rank-1' : row.rank === 2 ? 'rank-2' : row.rank === 3 ? 'rank-3' : '';
-        const avatarHtml = avatarUrl
-          ? `<img src="${this.escapeHtml(avatarUrl)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><span style="display:none">${this.escapeHtml(initial)}</span>`
-          : `<span>${this.escapeHtml(initial)}</span>`;
+        const avatarHtml = `<img src="${this.escapeHtml(avatarSrc)}" alt="" loading="lazy" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }"><span style="display:none">${this.escapeHtml(initial)}</span>`;
         return `<div class="ranking-row ${rankClass}" data-user-id="${this.escapeHtml(row.id)}" data-rank="${row.rank}">
                     <div class="ranking-row-rank">${row.rank}</div>
                     <div class="ranking-row-avatar" aria-hidden="true">${avatarHtml}</div>
@@ -3154,12 +3201,22 @@ class LibertyApp {
     }
   }
 
+  _avatarImgHtml(user, letter) {
+    const name = typeof user === 'string' ? user : (user?.username || user?.display_name || 'U');
+    const L = letter != null ? letter : name.charAt(0).toUpperCase();
+    const src = this._getAvatarUrlForUser(typeof user === 'string' ? name : user);
+    const fallback = this._getPlaceholderAvatarUrl(name);
+    return `<img src="${this.escapeHtml(src)}" alt="" data-fallback-avatar="${fallback ? this.escapeHtml(fallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }"><span style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:14px;font-weight:700;color:var(--text-secondary)">${this.escapeHtml(L)}</span>`;
+  }
+
   _friendItemHtml(rel) {
     const u = rel.user || { id: rel.target_id, username: 'Unknown', status: 'offline' };
+    const uname = u.username || 'U';
+    const avatarHtml = this._avatarImgHtml(u, uname.charAt(0));
     return `<div class="friend-item" data-user="${u.id}" data-rel-id="${rel.id}">
-            <div class="friend-item-avatar ${u.status || 'offline'}"><span>${u.username.charAt(0)}</span></div>
+            <div class="friend-item-avatar ${u.status || 'offline'}">${avatarHtml}</div>
             <div class="friend-item-info">
-                <div class="friend-item-name">${this.escapeHtml(u.username)}</div>
+                <div class="friend-item-name">${this.escapeHtml(uname)}</div>
                 <div class="friend-item-status">${this._statusLabel(u.status || 'offline')}</div>
             </div>
             <div class="friend-item-actions">
@@ -3179,6 +3236,7 @@ class LibertyApp {
   }
 
   _updateChannelHeaderForContext() {
+    this._updateMembersSidebarVisibility();
     const header = document.querySelector('.channel-header');
     if (!header) return;
     const info = header.querySelector('.channel-info');
@@ -3205,10 +3263,11 @@ class LibertyApp {
       const recipient = (this.currentChannel?.recipients || [])[0] || {};
       const name = recipient.username || this.currentChannel?.name || 'DM';
       const status = recipient.status || 'offline';
-      const avatar = recipient.avatar_url || recipient.avatar || null;
+      const avatarSrc = this._getAvatarUrlForUser(recipient);
+      const avatarFallback = this._getPlaceholderAvatarUrl(name);
       const initial = name.charAt(0).toUpperCase();
       info.innerHTML = `
-                <div class="dm-header-avatar ${status}" aria-hidden="true">${avatar ? `<img src="${this.escapeHtml(avatar)}" alt="">` : `<span>${this.escapeHtml(initial)}</span>`}</div>
+                <div class="dm-header-avatar ${status}" aria-hidden="true"><img src="${this.escapeHtml(avatarSrc)}" alt="" data-fallback-avatar="${avatarFallback ? this.escapeHtml(avatarFallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }"><span style="display:none">${this.escapeHtml(initial)}</span></div>
                 <h3 id="channel-name">${this.escapeHtml(name)}</h3>
                 <div class="channel-header-divider" aria-hidden="true"></div>
                 <span class="channel-topic dm-status" id="channel-topic">${this._statusLabel(status)}</span>
@@ -3321,10 +3380,23 @@ class LibertyApp {
         `;
   }
 
+  _updateMembersSidebarVisibility() {
+    const el = document.getElementById('members-sidebar');
+    if (!el) return;
+    const inServer = !this.isHomeView;
+    const inDmOrGroup =
+      this.currentChannel &&
+      (this.currentChannel.type === 'dm' || this.currentChannel.type === 'group_dm');
+    const show = inServer || inDmOrGroup;
+    el.classList.toggle('members-sidebar--hidden', !show);
+  }
+
   renderActiveNow() {
     const membersSidebar = document.getElementById('members-sidebar');
     const membersList = document.getElementById('members-list');
     if (!membersSidebar) return;
+
+    this._updateMembersSidebarVisibility();
 
     if (this.isHomeView) {
       membersSidebar.classList.remove('collapsed');
@@ -4208,8 +4280,9 @@ class LibertyApp {
     const headerTimeStr = isToday ? timeStr : `${dateStr} ${timeStr}`;
     const authorName =
       message.author?.username || message.author_username || message.username || this.currentUser?.username || 'User';
-    const authorAvatar =
-      message.avatar_url || message.author?.avatar || message.author?.avatar_url || message.avatar || null;
+    const authorForAvatar = { username: authorName, avatar_url: message.avatar_url || message.author?.avatar || message.author?.avatar_url || message.avatar };
+    const authorAvatarUrl = this._getAvatarUrlForUser(authorForAvatar);
+    const authorAvatarFallback = this._getPlaceholderAvatarUrl(authorName);
     const avatarLetter = authorName.charAt(0).toUpperCase();
     const isSelf =
       this.currentUser && (message.author?.id === this.currentUser.id || message.author_id === this.currentUser.id);
@@ -4233,7 +4306,8 @@ class LibertyApp {
 
     messageEl.innerHTML = `
             <div class="message-avatar">
-                ${authorAvatar ? `<img src="${this.escapeHtml(authorAvatar)}" alt="${this.escapeHtml(authorName)}">` : `<span>${avatarLetter}</span>`}
+                <img src="${this.escapeHtml(authorAvatarUrl)}" alt="${this.escapeHtml(authorName)}" data-fallback-avatar="${authorAvatarFallback ? this.escapeHtml(authorAvatarFallback) : ''}" onerror="if(this.dataset.fallbackAvatar){ this.onerror=null; this.src=this.dataset.fallbackAvatar; } else { this.style.display='none'; var s=this.nextElementSibling; if(s) s.style.display='flex'; }">
+                <span class="message-avatar-fallback" style="display:none;align-items:center;justify-content:center;width:100%;height:100%;font-size:16px;font-weight:600;color:rgba(255,255,255,.9)">${this.escapeHtml(avatarLetter)}</span>
             </div>
             <div class="message-content${isMentioned ? ' message-mentioned' : ''}">
                 ${message.replyTo ? `<div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;display:flex;align-items:center;gap:4px"><i class="fas fa-arrow-turn-up" style="font-size:10px"></i> Replying to <strong style="color:var(--primary-yellow)">${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
@@ -5978,6 +6052,7 @@ class LibertyApp {
       appearance: () => {
         const current = localStorage.getItem('liberty-theme') || 'Dark-theme';
         const border = t => (t === current ? 'var(--primary-yellow)' : 'transparent');
+        const accentColor = localStorage.getItem('liberty_accent_color') || '#FFD700';
         const bgType = localStorage.getItem('liberty-bg-type') || 'default';
         const bgSolid = localStorage.getItem('liberty-bg-solid') || '#000000';
         let bgGrad = { color1: '#0d0b09', color2: '#1a1814', angle: 135 };
@@ -5988,10 +6063,25 @@ class LibertyApp {
         const bgImage = localStorage.getItem('liberty-bg-image') || '';
         let html = `<h2>Aparência</h2>
                 <div class="settings-card"><h3 style="margin-top:0">Tema</h3>
-                <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
-                    <div class="theme-option" data-theme="Dark-theme" style="width:80px;height:60px;background:var(--primary-black);border:2px solid ${border('Dark-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-primary);font-weight:600" onclick="app.applyTheme('Dark-theme')">Dark</div>
-                    <div class="theme-option" data-theme="Light-theme" style="width:80px;height:60px;background:#f5f2eb;border:2px solid ${border('Light-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;color:#1a1814;font-weight:600" onclick="app.applyTheme('Light-theme')">Light</div>
-                    <div class="theme-option" data-theme="Dark-Accent-theme" style="width:80px;height:60px;background:linear-gradient(135deg,#1a1814,#2a2520);border:2px solid ${border('Dark-Accent-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-primary);font-weight:600;text-align:center;padding:4px" onclick="app.applyTheme('Dark-Accent-theme')">Dark<br>Accent</div>
+                <p class="settings-row-desc" style="margin-bottom:12px">Base escura ou clara. O fundo (incluindo GIFs) é configurado abaixo e não é alterado pelo tema.</p>
+                <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+                    <div class="theme-option" data-theme="Dark-theme" style="width:72px;height:52px;background:var(--primary-black);border:2px solid ${border('Dark-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-primary);font-weight:600" onclick="app.applyTheme('Dark-theme')">Dark</div>
+                    <div class="theme-option" data-theme="Light-theme" style="width:72px;height:52px;background:#f5f2eb;border:2px solid ${border('Light-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#1a1814;font-weight:600" onclick="app.applyTheme('Light-theme')">Light</div>
+                    <div class="theme-option" data-theme="Dark-Accent-theme" style="width:72px;height:52px;background:linear-gradient(135deg,#1a1814,#2a2520);border:2px solid ${border('Dark-Accent-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text-primary);font-weight:600;text-align:center;padding:2px" onclick="app.applyTheme('Dark-Accent-theme')">Accent</div>
+                    <div class="theme-option" data-theme="Dark-Blue-theme" style="width:72px;height:52px;background:#0d1117;border:2px solid ${border('Dark-Blue-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#4fc3f7;font-weight:600" onclick="app.applyTheme('Dark-Blue-theme')">Blue</div>
+                    <div class="theme-option" data-theme="Dark-Green-theme" style="width:72px;height:52px;background:#0d130d;border:2px solid ${border('Dark-Green-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#66bb6a;font-weight:600" onclick="app.applyTheme('Dark-Green-theme')">Green</div>
+                    <div class="theme-option" data-theme="Dark-Purple-theme" style="width:72px;height:52px;background:#120d14;border:2px solid ${border('Dark-Purple-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#ab47bc;font-weight:600" onclick="app.applyTheme('Dark-Purple-theme')">Purple</div>
+                    <div class="theme-option" data-theme="Dark-Red-theme" style="width:72px;height:52px;background:#140d0d;border:2px solid ${border('Dark-Red-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#ef5350;font-weight:600" onclick="app.applyTheme('Dark-Red-theme')">Red</div>
+                    <div class="theme-option" data-theme="Dark-Cyan-theme" style="width:72px;height:52px;background:#0d1214;border:2px solid ${border('Dark-Cyan-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#26c6da;font-weight:600" onclick="app.applyTheme('Dark-Cyan-theme')">Cyan</div>
+                    <div class="theme-option" data-theme="Dark-Orange-theme" style="width:72px;height:52px;background:#14100d;border:2px solid ${border('Dark-Orange-theme')};border-radius:var(--radius-md);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;color:#ff9800;font-weight:600" onclick="app.applyTheme('Dark-Orange-theme')">Orange</div>
+                </div></div>
+                <div class="settings-card" style="margin-top:16px"><h3 style="margin-top:0">Cor de destaque do site</h3>
+                <p class="settings-row-desc" style="margin-bottom:12px">Altera botões, links e destaques da interface. <strong>Não altera o fundo</strong> — imagens e GIFs mantêm-se iguais.</p>
+                <div class="input-row" style="align-items:center;gap:12px;flex-wrap:wrap">
+                    <input type="color" id="settings-accent-color" value="${accentColor}" style="width:48px;height:40px;padding:2px;border:none;border-radius:var(--radius-sm);cursor:pointer;background:transparent" />
+                    <input type="text" id="settings-accent-hex" value="${accentColor}" placeholder="#FFD700" maxlength="7" style="width:100px;padding:10px 12px;background:var(--dark-gray);border:1px solid rgba(255,255,255,.06);border-radius:var(--radius-md);color:var(--text-primary);font-size:14px;font-family:inherit" />
+                    <button type="button" class="btn btn-primary btn-sm" id="settings-accent-apply">Aplicar cor</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="settings-accent-reset">Restaurar (ouro)</button>
                 </div></div>
                 <div class="settings-card settings-bg-card"><h3 style="margin-top:0">Fundo do site</h3>
                 <p class="settings-row-desc" style="margin-bottom:12px">Escolha cor sólida, gradiente ou imagem/GIF como fundo da aplicação.</p>
@@ -6038,6 +6128,12 @@ class LibertyApp {
                     <button type="button" class="btn btn-secondary btn-sm" id="settings-bg-reset">Restaurar preto</button>
                 </div>
                 </div>`;
+        const layoutCompact = localStorage.getItem('liberty_layout_compact') === 'true';
+        html += `<div class="settings-card" style="margin-top:16px"><h3 style="margin-top:0">Layout</h3>
+                <div class="settings-row" style="align-items:center;gap:12px">
+                <div><div class="settings-row-label">Modo compacto</div><div class="settings-row-desc">Menos espaço entre elementos e barras mais estreitas</div></div>
+                <div class="toggle-switch ${layoutCompact ? 'active' : ''}" id="settings-layout-compact" role="button" tabindex="0"></div>
+                </div></div>`;
         html += `<div class="settings-card"><h3 style="margin-top:0">Message Display</h3>
                 <div class="settings-row"><div><div class="settings-row-label">Chat Font Scaling</div><div class="settings-row-desc">14px</div></div><input type="range" min="12" max="20" value="14" style="width:150px"></div>
                 </div>`;
@@ -6179,16 +6275,22 @@ class LibertyApp {
                 </div>`,
       bans: () => `<h2>Bans</h2><div class="settings-card"><p>View and manage banned users.</p>
                 <div style="color:var(--text-muted);font-size:13px;padding:20px 0;text-align:center"><i class="fas fa-gavel" style="font-size:32px;margin-bottom:8px;display:block;opacity:.5"></i>No banned users</div></div>`,
-      privacy: () => `<h2>Content & Social</h2><div class="settings-card">
-                <div class="settings-row"><div><div class="settings-row-label">Allow direct messages from server members</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
-                <div class="settings-row"><div><div class="settings-row-label">Allow message requests from server members</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
-                <div class="settings-row"><div><div class="settings-row-label">Filter all direct messages</div><div class="settings-row-desc">Automatically scan and delete DMs that contain explicit content</div></div><div class="toggle-switch" onclick="this.classList.toggle('active')"></div></div>
+      privacy: () => `<h2>Privacidade</h2>
+                <div class="settings-card">
+                <h3 style="margin-top:0"><i class="fas fa-shield-halved" style="color:var(--primary-yellow);margin-right:8px"></i>Os seus dados</h3>
+                <p class="settings-row-desc" style="margin-bottom:16px">O LIBERTY guarda apenas o necessário para o serviço: nome de utilizador, email (opcional), perfil (avatar, descrição), mensagens que envia e relações (amigos, servidores). Não vendemos dados a terceiros. As suas comunicações são suas.</p>
+                <div class="settings-section-block" style="margin-top:20px">
+                <div class="settings-row-label" style="margin-bottom:6px">Exportar os meus dados</div>
+                <p class="settings-row-desc" style="margin-bottom:10px">Descarregue uma cópia de todos os seus dados (perfil e mensagens) em formato JSON.</p>
+                <button type="button" class="btn btn-primary btn-sm" id="settings-privacy-export-btn"><i class="fas fa-download" style="margin-right:6px"></i>Exportar dados</button>
+                </div>
+                <div class="settings-section-block" style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,.08)">
+                <div class="settings-row-label" style="margin-bottom:6px;color:var(--error)">Zona de perigo</div>
+                <p class="settings-row-desc" style="margin-bottom:10px">Eliminar a conta remove permanentemente o seu perfil e dados. Esta ação não pode ser desfeita.</p>
+                <button type="button" class="btn btn-secondary btn-sm" style="border-color:rgba(229,57,53,.4);color:#ff6b6b" id="settings-privacy-delete-btn"><i class="fas fa-trash" style="margin-right:6px"></i>Eliminar conta</button>
+                </div>
                 </div>`,
-      'data-privacy': () => `<h2>Data & Privacy</h2><div class="settings-card"><p>Control how your data is used.</p>
-                <div class="settings-row"><div><div class="settings-row-label">Use data to improve LIBERTY</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
-                <div class="settings-row"><div><div class="settings-row-label">Use data to customize experience</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
-                <button class="btn btn-secondary btn-sm" style="margin-top:12px" onclick="app.showToast('Data request coming soon!','info')">Request all of my Data</button>
-                </div>`,
+      'data-privacy': () => `<h2>Data & Privacy</h2><div class="settings-card"><p>Utilize a secção <strong>Privacidade</strong> no menu para exportar os seus dados ou eliminar a conta.</p></div>`,
       chat: () => `<h2>Chat</h2><div class="settings-card">
                 <div class="settings-row"><div><div class="settings-row-label">Show embeds and preview links</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
                 <div class="settings-row"><div><div class="settings-row-label">Show emoji reactions</div></div><div class="toggle-switch active" onclick="this.classList.toggle('active')"></div></div>
@@ -6826,6 +6928,64 @@ class LibertyApp {
         });
       }
     }
+    if (section === 'privacy' && type === 'user') {
+      const exportBtn = content.querySelector('#settings-privacy-export-btn');
+      const deleteBtn = content.querySelector('#settings-privacy-delete-btn');
+      if (exportBtn) {
+        exportBtn.addEventListener('click', async () => {
+          exportBtn.disabled = true;
+          try {
+            const blob = await API.User.exportData();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'liberty-data-export.json';
+            a.click();
+            URL.revokeObjectURL(a.href);
+            this.showToast('Dados exportados com sucesso.', 'success');
+          } catch (e) {
+            this.showToast(e.message || 'Erro ao exportar dados.', 'error');
+          } finally {
+            exportBtn.disabled = false;
+          }
+        });
+      }
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+          const hasPassword = this.currentUser && this.currentUser.has_password === true;
+          const msg = hasPassword
+            ? 'Para eliminar a conta, confirme a sua senha abaixo. Esta ação é irreversível.'
+            : 'Tem a certeza que deseja eliminar a sua conta? Todos os dados serão removidos permanentemente.';
+          const confirmPassword = hasPassword
+            ? (window.prompt(msg + '\n\nIntroduza a sua senha:') ?? '')
+            : (window.confirm(msg) ? '' : null);
+          if (hasPassword && (confirmPassword === null || confirmPassword === '')) {
+            this.showToast('Cancelado.', 'info');
+            return;
+          }
+          if (hasPassword && confirmPassword) {
+            try {
+              await API.User.deleteAccount(confirmPassword);
+              API.Token.clearTokens();
+              this.showToast('Conta eliminada. Até à próxima.', 'success');
+              this.hideSettingsPanel();
+              setTimeout(() => window.location.reload(), 800);
+            } catch (e) {
+              this.showToast(e.message || 'Erro ao eliminar conta.', 'error');
+            }
+          } else if (!hasPassword && confirmPassword !== null) {
+            try {
+              await API.User.deleteAccount();
+              API.Token.clearTokens();
+              this.showToast('Conta eliminada. Até à próxima.', 'success');
+              this.hideSettingsPanel();
+              setTimeout(() => window.location.reload(), 800);
+            } catch (e) {
+              this.showToast(e.message || 'Erro ao eliminar conta.', 'error');
+            }
+          }
+        });
+      }
+    }
     if (section === 'appearance' && type === 'user') {
       const bgTypeOpts = content.querySelectorAll('.settings-bg-type-opt');
       const solidWrap = content.querySelector('#settings-bg-solid-wrap');
@@ -6955,6 +7115,52 @@ class LibertyApp {
           if (pw) pw.style.display = 'none';
           if (pb) pb.innerHTML = '';
           this.showToast('Fundo preto restaurado.', 'success');
+        });
+      }
+      const accentColorEl = content.querySelector('#settings-accent-color');
+      const accentHexEl = content.querySelector('#settings-accent-hex');
+      const accentApplyBtn = content.querySelector('#settings-accent-apply');
+      const accentResetBtn = content.querySelector('#settings-accent-reset');
+      if (accentColorEl && accentHexEl) {
+        accentColorEl.addEventListener('input', () => { accentHexEl.value = accentColorEl.value; });
+        accentHexEl.addEventListener('input', () => {
+          const v = accentHexEl.value.trim();
+          if (/^#[0-9A-Fa-f]{6}$/.test(v)) accentColorEl.value = v;
+        });
+      }
+      if (accentApplyBtn && accentHexEl) {
+        accentApplyBtn.addEventListener('click', () => {
+          const hex = (accentHexEl.value || accentColorEl?.value || '').trim();
+          if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+            this.showToast('Cor inválida. Use #RRGGBB.', 'error');
+            return;
+          }
+          try { localStorage.setItem('liberty_accent_color', hex); } catch (_) {}
+          this.applyAccentColor(hex);
+          if (accentColorEl) accentColorEl.value = hex;
+          this.updateThemeButtons();
+          this.showToast('Cor de destaque aplicada.', 'success');
+        });
+      }
+      if (accentResetBtn) {
+        accentResetBtn.addEventListener('click', () => {
+          try { localStorage.removeItem('liberty_accent_color'); } catch (_) {}
+          this.applyAccentColor(null);
+          const def = '#FFD700';
+          if (accentHexEl) accentHexEl.value = def;
+          if (accentColorEl) accentColorEl.value = def;
+          this.updateThemeButtons();
+          this.showToast('Cor de destaque restaurada (ouro).', 'success');
+        });
+      }
+      const layoutCompactToggle = content.querySelector('#settings-layout-compact');
+      if (layoutCompactToggle) {
+        layoutCompactToggle.addEventListener('click', () => {
+          layoutCompactToggle.classList.toggle('active');
+          const isCompact = layoutCompactToggle.classList.contains('active');
+          try { localStorage.setItem('liberty_layout_compact', isCompact ? 'true' : 'false'); } catch (_) {}
+          document.body.classList.toggle('layout-compact', isCompact);
+          this.showToast(isCompact ? 'Modo compacto ativado.' : 'Modo compacto desativado.', 'success');
         });
       }
     }
