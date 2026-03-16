@@ -1055,17 +1055,32 @@ async function start() {
     });
   });
 
-  // Garantir servidor 'Liberty' ownerless (owner_id NULL) e canal padrão
+  // Garantir servidor 'Liberty' ownerless (owner_id NULL) e canal padrão #general
   async function ensureLibertyServer() {
     if (!db.isConnected()) return null;
     const existing = await db.query(`SELECT id FROM servers WHERE name = $1 LIMIT 1`, ['Liberty']);
-    if (existing.rows[0]?.id) return String(existing.rows[0].id);
+    const serverId = existing.rows[0]?.id;
+    if (serverId) {
+      const ch = await db.query(
+        `SELECT id FROM chats WHERE server_id = $1::uuid AND type = 'channel' LIMIT 1`,
+        [serverId]
+      );
+      if (!ch.rows[0]?.id) {
+        await db.query(
+          `INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`,
+          [serverId]
+        );
+        logger.info('[LIBERTY] Canal #general criado no servidor Liberty existente.');
+      }
+      return String(serverId);
+    }
     const ins = await db.query(`INSERT INTO servers (name, owner_id) VALUES ($1, NULL) RETURNING id`, ['Liberty']);
-    const serverId = ins.rows[0].id;
+    const newServerId = ins.rows[0].id;
     await db.query(`INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`, [
-      serverId,
+      newServerId,
     ]);
-    return String(serverId);
+    logger.info('[LIBERTY] Servidor Liberty e canal #general criados.');
+    return String(newServerId);
   }
 
   async function ensureUserInLibertyServer(userId) {
@@ -1630,6 +1645,43 @@ async function start() {
         return res.status(404).json({ message: 'Servidor não encontrado' });
       }
       const row = r.rows[0];
+      await ensureLibertyServer();
+      const [chRes, mRes] = await Promise.all([
+        db.query(
+          `SELECT id, name, type, server_id, parent_id, channel_type, created_at
+           FROM chats WHERE server_id = $1::uuid AND type IN ('channel', 'category')
+           ORDER BY type ASC, created_at ASC`,
+          [serverId]
+        ),
+        db.query(
+          `SELECT DISTINCT u.id, u.username, u.avatar_url, COALESCE(sm.role, 'member') AS role
+           FROM users u
+           INNER JOIN chat_members cm ON cm.user_id = u.id
+           INNER JOIN chats c ON c.id = cm.chat_id AND c.server_id = $1::uuid
+           LEFT JOIN server_bans sb ON sb.server_id = c.server_id AND sb.user_id = u.id
+           LEFT JOIN server_members sm ON sm.server_id = c.server_id AND sm.user_id = u.id
+           WHERE sb.id IS NULL ORDER BY u.username ASC`,
+          [serverId]
+        ),
+      ]);
+      const channels = chRes.rows.map(c => ({
+        id: String(c.id),
+        name: c.name,
+        type: c.type,
+        server_id: c.server_id ? String(c.server_id) : null,
+        parent_id: c.parent_id ? String(c.parent_id) : null,
+        channel_type: c.channel_type || 'text',
+        created_at: c.created_at,
+      }));
+      const members = mRes.rows.map(m => ({
+        user_id: String(m.id),
+        id: String(m.id),
+        username: m.username,
+        avatar_url: m.avatar_url || null,
+        avatar: m.avatar_url || null,
+        status: 'online',
+        role: (m.role || 'member').toLowerCase(),
+      }));
       return res.status(200).json({
         id: String(row.id),
         name: row.name,
@@ -1637,6 +1689,8 @@ async function start() {
         created_at: row.created_at,
         icon: row.icon_url || null,
         icon_url: row.icon_url || null,
+        channels,
+        members,
       });
     } catch (err) {
       if (err.code === '22P02') return res.status(404).json({ message: 'Servidor não encontrado' });
@@ -1862,13 +1916,25 @@ async function start() {
     }
     const serverId = req.params.serverId;
     try {
-      const r = await db.query(
+      let r = await db.query(
         `SELECT id, name, type, server_id, parent_id, channel_type, created_at
          FROM chats
          WHERE server_id = $1::uuid AND type IN ('channel', 'category')
          ORDER BY type ASC, created_at ASC`,
         [serverId]
       );
+      if (r.rows.length === 0) {
+        const libertyId = await ensureLibertyServer();
+        if (libertyId && String(libertyId) === String(serverId)) {
+          r = await db.query(
+            `SELECT id, name, type, server_id, parent_id, channel_type, created_at
+             FROM chats
+             WHERE server_id = $1::uuid AND type IN ('channel', 'category')
+             ORDER BY type ASC, created_at ASC`,
+            [serverId]
+          );
+        }
+      }
       const list = r.rows.map(row => ({
         id: String(row.id),
         name: row.name,
