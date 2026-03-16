@@ -8049,8 +8049,19 @@ this._injectYouTubeEmbeds(msgEl, newContent);
 
   _extractInviteCode(url) {
     if (!url || typeof url !== 'string') return null;
-    const m = url.trim().match(/https?:\/\/(?:[^/]+\.)?liberty\.app\/invite\/([A-Za-z0-9]+)/i);
-    return m ? m[1] : null;
+    const u = url.trim();
+    // liberty.app (com ou sem subdomínio: www., etc.)
+    let m = u.match(/https?:\/\/(?:[^/]+\.)*liberty\.app\/invite\/([A-Za-z0-9]+)/i);
+    if (m) return m[1];
+    // mesmo origin (localhost, etc.): /invite/CODE ou full URL
+    if (typeof window !== 'undefined' && window.location) {
+      const origin = window.location.origin;
+      const pathRegex = new RegExp('^' + origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\/invite\\/([A-Za-z0-9]+)', 'i');
+      m = u.match(pathRegex);
+      if (m) return m[1];
+      if (/^\/invite\/([A-Za-z0-9]+)/i.test(u)) return u.match(/^\/invite\/([A-Za-z0-9]+)/i)[1];
+    }
+    return null;
   }
 
   _extractYouTubeUrls(content) {
