@@ -1722,7 +1722,12 @@ class LibertyApp {
             const pending = [...this.messages.entries()].find(
               ([id, m]) => id.startsWith('pending-') && (m.content === normalized.content || m.content === msg.content)
             );
-            if (pending) this.removeMessage(pending[0]);
+            if (pending) {
+              this.replacePendingWithMessage(pending[0], normalized);
+              this.scrollToBottom();
+              return;
+            }
+            if (this.messages.has(String(msgId)) || document.getElementById('messages-list')?.querySelector(`[data-message="${msgId}"]`)) return;
           }
           this.addMessage(normalized, true);
           this.scrollToBottom();
@@ -4984,17 +4989,19 @@ class LibertyApp {
             </div>
         `;
 
-    // Message action button handlers
+    // Message action button handlers (read id from element so replacePendingWithMessage keeps actions correct)
     messageEl.querySelectorAll('.message-actions .btn-icon').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation();
         const action = btn.dataset.action;
+        const mid = messageEl.dataset.message;
+        const stored = this.messages.get(mid);
         if (action === 'react') {
-          this.showEmojiPicker(btn, emoji => this.addReaction(msgId, emoji));
+          this.showEmojiPicker(btn, emoji => this.addReaction(mid, emoji));
         } else if (action === 'reply') {
-          this.startReply(msgId, authorName, message.content);
+          this.startReply(mid, (stored && stored.authorName) || authorName, (stored && stored.content) || message.content);
         } else if (action === 'edit') {
-          this.startEditMessage(msgId, message.content);
+          this.startEditMessage(mid, (stored && stored.content) || message.content);
         } else if (action === 'more') {
           this.showMessageContextMenu(messageEl, e);
         }
@@ -5346,12 +5353,8 @@ this._injectYouTubeEmbeds(msgEl, newContent);
           avatar_url: msg.avatar_url || null,
           attachments: msg.attachments || undefined,
         };
-        this.removeMessage(tempId);
-        this.addMessage(normalized, true);
+        this.replacePendingWithMessage(tempId, normalized);
         this.scrollToBottom();
-      } else {
-        /* Não chamar loadMessages aqui: provoca flash tipo F5. Manter mensagem optimista;
-         * se o WebSocket enviar message_created, o handler substitui por conteúdo real. */
       }
     } catch (err) {
       console.error('Erro ao enviar mensagem no front-end:', err);
@@ -7922,6 +7925,51 @@ this._injectYouTubeEmbeds(msgEl, newContent);
     const cid = this.currentChannel?.id || this.currentChannel?.channelId;
     if (cid) {
       const list = MessageCache.get(cid).filter(m => (m.id || m.message_id) !== messageId);
+      MessageCache.set(cid, list);
+    }
+  }
+
+  replacePendingWithMessage(pendingId, realMessage) {
+    const realId = String(realMessage.id || realMessage.message_id || '');
+    if (!realId) return;
+    const el = document.getElementById('messages-list')?.querySelector(`[data-message="${pendingId}"]`);
+    if (!el) return;
+    el.dataset.message = realId;
+    const authorId = realMessage.author_id || realMessage.author?.id || '';
+    if (authorId) el.dataset.authorId = String(authorId);
+    const time = new Date(realMessage.created_at || realMessage.timestamp || Date.now());
+    const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = this._formatDate(time);
+    const isToday = time.toDateString() === new Date().toDateString();
+    const headerTimeStr = isToday ? timeStr : `${dateStr} ${timeStr}`;
+    const tsEl = el.querySelector('.message-timestamp');
+    if (tsEl) {
+      tsEl.textContent = headerTimeStr;
+      tsEl.title = time.toLocaleString();
+    }
+    const textEl = el.querySelector('.message-text');
+    if (textEl && realMessage.content != null) textEl.innerHTML = this._parseMessageContent(realMessage.content || '');
+    const attachmentsWrap = el.querySelector('.message-attachments');
+    const newAttachments = this._renderMessageAttachmentsHtml(realMessage.attachments);
+    if (newAttachments) {
+      if (attachmentsWrap) attachmentsWrap.outerHTML = newAttachments;
+      else {
+        const contentEl = el.querySelector('.message-content');
+        const before = contentEl?.querySelector('.reactions-container');
+        if (before) before.insertAdjacentHTML('beforebegin', newAttachments);
+      }
+    } else if (attachmentsWrap) attachmentsWrap.remove();
+    this._injectYouTubeEmbeds(el, realMessage.content);
+    this._injectSpotifyEmbeds(el, realMessage.content);
+    this._injectInviteEmbeds(el);
+    this.messages.delete(pendingId);
+    const authorName = realMessage.author?.username || realMessage.author_username || realMessage.username || this.currentUser?.username || 'User';
+    const isSelf = this.currentUser && (realMessage.author_id === this.currentUser.id || realMessage.author?.id === this.currentUser.id);
+    this.messages.set(realId, { ...realMessage, id: realId, message_id: realId, authorName, isSelf });
+    const cid = this.currentChannel?.id || this.currentChannel?.channelId;
+    if (cid) {
+      const list = MessageCache.get(cid).filter(m => (m.id || m.message_id) !== pendingId);
+      list.push({ ...realMessage, id: realId, message_id: realId });
       MessageCache.set(cid, list);
     }
   }
