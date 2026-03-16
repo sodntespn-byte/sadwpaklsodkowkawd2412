@@ -39,6 +39,7 @@
     }
 
     _resolveConnect(data) {
+      if (typeof this._connectResolve !== 'function') return;
       const resolveFn = this._connectResolve;
       const rejectFn = this._connectReject;
       this._connectResolve = null;
@@ -49,7 +50,7 @@
       this._hasConnectedOnce = true;
       this._resubscribeAll();
       this._flushQueue();
-      if (typeof resolveFn === 'function') resolveFn({ ...(data || {}), reconnected: wasReconnected });
+      resolveFn({ ...(data || {}), reconnected: wasReconnected });
       this.emit('ready', { ...(data || {}), reconnected: wasReconnected });
     }
 
@@ -456,4 +457,5 @@
 
   if (typeof window !== 'undefined') window.Gateway = new LibertyGateway();
 })();
+
 
