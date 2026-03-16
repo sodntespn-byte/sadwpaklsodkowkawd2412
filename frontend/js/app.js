@@ -1322,8 +1322,15 @@ class LibertyApp {
     if (channelSidebarBackdrop) {
       channelSidebarBackdrop.addEventListener('click', closeMobileChannelDrawer);
     }
+    const membersSidebarBackdrop = document.getElementById('members-sidebar-backdrop');
+    if (membersSidebarBackdrop) {
+      membersSidebarBackdrop.addEventListener('click', () => {
+        if (this.membersSidebarVisible && window.matchMedia('(max-width: 48rem)').matches) this.toggleMembers();
+      });
+    }
     // Em mobile, iniciar com drawer fechado
     const mq = window.matchMedia('(max-width: 768px)');
+    const mqMembers = window.matchMedia('(max-width: 48rem)');
     const applyMobileDrawerState = () => {
       if (!channelSidebar || !channelSidebarBackdrop) return;
       if (mq.matches) {
@@ -1333,9 +1340,11 @@ class LibertyApp {
         channelSidebar.classList.remove('mobile-hidden');
         channelSidebarBackdrop.classList.remove('is-open');
       }
+      if (!mqMembers.matches) document.body.classList.remove('members-drawer-open');
     };
     applyMobileDrawerState();
     mq.addEventListener('change', applyMobileDrawerState);
+    mqMembers.addEventListener('change', applyMobileDrawerState);
 
     // User panel buttons
     const muteBtn = document.querySelector('[data-tooltip="Mute"]');
@@ -4620,8 +4629,13 @@ class LibertyApp {
 
   toggleMembers() {
     this.membersSidebarVisible = !this.membersSidebarVisible;
-    document.getElementById('members-sidebar')?.classList?.toggle('collapsed', !this.membersSidebarVisible);
+    const sidebar = document.getElementById('members-sidebar');
+    sidebar?.classList?.toggle('collapsed', !this.membersSidebarVisible);
     document.getElementById('toggle-members-btn')?.classList?.toggle('active', this.membersSidebarVisible);
+    if (window.matchMedia('(max-width: 48rem)').matches) {
+      if (this.membersSidebarVisible) document.body.classList.add('members-drawer-open');
+      else document.body.classList.remove('members-drawer-open');
+    }
   }
 
   toggleSearchPanel() {
@@ -6033,10 +6047,18 @@ this._injectYouTubeEmbeds(msgEl, newContent);
       })
       .join('');
 
-    const maxX = window.innerWidth - 200;
-    const maxY = window.innerHeight - items.length * 36;
-    menu.style.left = Math.min(x, maxX) + 'px';
-    menu.style.top = Math.min(y, maxY) + 'px';
+    document.body.appendChild(menu);
+    menu.classList.add('active');
+    const rect = menu.getBoundingClientRect();
+    const pad = 12;
+    let left = x;
+    let top = y;
+    if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+    if (left < pad) left = pad;
+    if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+    if (top < pad) top = pad;
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
 
     let focusIdx = -1;
     const actionItems = items.filter(i => !i.divider);

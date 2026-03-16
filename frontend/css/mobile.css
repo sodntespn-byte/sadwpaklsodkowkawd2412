@@ -428,3 +428,444 @@ body {
     margin-bottom: max(12px, env(safe-area-inset-bottom));
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   MEMBERS SIDEBAR — drawer à direita em mobile
+   ═══════════════════════════════════════════════════════════════ */
+.members-sidebar-backdrop {
+  display: none;
+  pointer-events: none;
+}
+
+@media (max-width: 48rem) {
+  .members-sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 140;
+    background: rgba(0, 0, 0, 0.5);
+    transition: opacity 0.2s ease;
+  }
+
+  body.members-drawer-open .members-sidebar-backdrop {
+    display: block;
+    pointer-events: auto;
+  }
+
+  .members-sidebar:not(.members-sidebar--hidden) {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(18rem, calc(100vw - 3rem));
+    max-width: 100%;
+    z-index: 150;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  body.members-drawer-open .members-sidebar:not(.members-sidebar--hidden) {
+    transform: translateX(0);
+  }
+
+  body.members-drawer-open .members-sidebar:not(.members-sidebar--hidden).collapsed {
+    transform: translateX(100%);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DROPDOWNS — viewport + touch em todos os breakpoints
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 48rem) {
+  .server-dropdown,
+  .dropdown-menu {
+    max-height: min(70vh, 400px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    min-width: 200px;
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+  }
+  .dropdown-item {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 30rem) {
+  .server-dropdown,
+  .dropdown-menu {
+    min-width: 180px;
+    max-width: calc(100vw - 24px);
+  }
+}
+
+/* Context menu: manter dentro do viewport + touch */
+.context-menu {
+  max-height: min(80vh, 360px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.context-menu .dropdown-item,
+.context-menu .ctx-item {
+  min-height: 44px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+@media (max-width: 30rem) {
+  .context-menu {
+    min-width: 160px;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+/* User panel compacto em mobile */
+@media (max-width: 48rem) {
+  .user-panel {
+    padding: 6px 8px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    min-height: 52px;
+  }
+  .user-details {
+    min-width: 0;
+  }
+  .user-details .user-name {
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100px;
+  }
+  .user-details .user-status {
+    font-size: 11px;
+  }
+  .user-controls .btn-icon {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 30rem) {
+  .user-details .user-name {
+    max-width: 72px;
+  }
+}
+
+/* Server header dropdown: não sair do viewport (está dentro do channel drawer no mobile) */
+@media (max-width: 48rem) {
+  .server-header {
+    position: relative;
+  }
+  .server-dropdown {
+    width: 100%;
+    max-width: 260px;
+    box-sizing: border-box;
+  }
+}
+
+/* Settings nav (dentro do modal full): itens tocáveis e scroll vertical se necessário */
+@media (max-width: 600px) {
+  .modal.modal-full .settings-nav {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px;
+    max-height: none;
+    overflow-y: visible;
+  }
+  .modal.modal-full .settings-nav a,
+  .modal.modal-full .settings-nav button {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+}
+
+/* Add modal tabs (criar servidor, etc.): scroll horizontal em mobile */
+@media (max-width: 30rem) {
+  .add-modal-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding-bottom: 4px;
+  }
+  .add-modal-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .add-modal-tabs .add-modal-tab {
+    flex-shrink: 0;
+    min-height: 44px;
+  }
+}
+
+/* Profile card e status picker: não sair do ecrã */
+@media (max-width: 30rem) {
+  .profile-card,
+  .status-picker {
+    max-width: calc(100vw - 24px);
+    left: 50% !important;
+    transform: translateX(-50%);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TODOS OS MENUS RESPONSIVOS — viewport, touch, scroll
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Context menu: sempre dentro do viewport, itens tocáveis */
+.context-menu {
+  max-width: min(320px, calc(100vw - 24px));
+  max-height: min(70vh, 70dvh, 400px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.context-menu .dropdown-item,
+.context-menu .ctx-item {
+  min-height: 44px;
+  padding: 12px 14px;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.context-menu .dropdown-divider {
+  margin: 6px 0;
+}
+
+@media (max-width: 30rem) {
+  .context-menu {
+    max-width: calc(100vw - 32px);
+    min-width: 160px;
+  }
+  .context-menu .dropdown-item,
+  .context-menu .ctx-item {
+    min-height: 48px;
+    padding: 14px 16px;
+  }
+}
+
+/* Dropdown genérico (qualquer .dropdown-menu) */
+.dropdown-menu {
+  max-width: min(280px, calc(100vw - 24px));
+  max-height: min(70vh, 70dvh, 400px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.dropdown-item {
+  min-height: 44px;
+  padding: 12px 14px;
+  font-size: 15px;
+}
+
+@media (max-width: 30rem) {
+  .dropdown-menu {
+    max-width: calc(100vw - 32px);
+    min-width: 160px;
+  }
+  .dropdown-item {
+    min-height: 48px;
+    padding: 14px 16px;
+  }
+}
+
+/* Server dropdown (dentro do channel sidebar ou header) */
+.server-dropdown {
+  max-width: min(260px, calc(100vw - 24px));
+  max-height: min(70vh, 70dvh, 400px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.server-dropdown .dropdown-item {
+  min-height: 44px;
+  padding: 12px 14px;
+}
+
+@media (max-width: 30rem) {
+  .server-dropdown {
+    max-width: calc(100vw - 32px);
+    min-width: 180px;
+  }
+}
+
+/* Emoji picker: responsivo e tocável */
+.emoji-picker {
+  max-width: min(320px, calc(100vw - 24px));
+  width: 100%;
+  max-height: min(65vh, 65dvh, 380px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  margin-left: 0;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.emoji-picker input {
+  flex-shrink: 0;
+  padding: 12px 14px;
+  font-size: 16px;
+  min-height: 48px;
+}
+.emoji-tabs {
+  flex-shrink: 0;
+}
+.emoji-tab {
+  min-height: 44px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+.emoji-picker .emoji-grid {
+  max-height: min(220px, 45vh);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+.emoji-picker .emoji {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  font-size: 22px;
+}
+
+@media (max-width: 30rem) {
+  .emoji-picker {
+    max-width: calc(100vw - 16px);
+    bottom: 12px;
+    left: 8px;
+    right: 8px;
+    transform: none;
+    max-height: min(60vh, 60dvh, 340px);
+  }
+  .emoji-picker .emoji-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+  .emoji-picker .emoji {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* Modais: todos com scroll interno e safe area */
+.modal-overlay {
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.modal-overlay .modal {
+  max-width: min(560px, calc(100vw - 24px));
+  max-height: min(90vh, 90dvh);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.modal-overlay .modal .modal-body,
+.modal-overlay .modal .modal-content,
+.modal-overlay .modal [class*="modal-"]:not(.modal-close-btn) {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: 100%;
+}
+
+@media (max-width: 48rem) {
+  .modal-overlay .modal {
+    max-width: calc(100vw - 16px);
+    max-height: min(88vh, 88dvh);
+  }
+}
+
+@media (max-width: 30rem) {
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+  .modal-overlay .modal {
+    max-width: 100%;
+    width: 100%;
+    max-height: 85vh;
+    max-height: 85dvh;
+    border-radius: 16px 16px 0 0;
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+  .modal-overlay .modal .modal-header {
+    flex-shrink: 0;
+    padding: 14px 16px;
+  }
+  .modal-overlay .modal .modal-body,
+  .modal-overlay .modal .modal-content {
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+}
+
+/* Invite modal e Create server: mesmo tratamento */
+#invite-modal.modal,
+#create-server-modal.modal,
+[id$="-modal"].modal {
+  max-width: min(480px, calc(100vw - 24px));
+}
+@media (max-width: 30rem) {
+  #invite-modal.modal,
+  #create-server-modal.modal,
+  [id$="-modal"].modal {
+    max-width: 100%;
+  }
+}
+
+/* Settings full modal: nav horizontal scroll em mobile */
+.modal.modal-full .settings-nav {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  flex-wrap: nowrap;
+  padding-bottom: 4px;
+}
+.modal.modal-full .settings-nav::-webkit-scrollbar {
+  display: none;
+}
+.modal.modal-full .settings-nav a,
+.modal.modal-full .settings-nav button {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+
+/* Touch: todos os itens clicáveis de menus com área mínima */
+@media (hover: none) and (pointer: coarse) {
+  .context-menu .dropdown-item,
+  .context-menu .ctx-item,
+  .dropdown-item,
+  .server-dropdown .dropdown-item,
+  .emoji-tab,
+  .emoji-picker .emoji,
+  .modal.modal-full .settings-nav a,
+  .modal.modal-full .settings-nav button {
+    min-height: 44px;
+  }
+  .emoji-picker .emoji {
+    min-width: 44px;
+  }
+}
