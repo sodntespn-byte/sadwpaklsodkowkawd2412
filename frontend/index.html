@@ -529,7 +529,10 @@
 
       <!-- ─── Members Sidebar (240px) ─── -->
       <aside class="members-sidebar" id="members-sidebar" aria-label="Membros do servidor">
-        <div class="members-sidebar-header" id="members-sidebar-header">MEMBROS — 0</div>
+        <div class="members-sidebar-header" id="members-sidebar-header">
+          <span>MEMBROS — 0</span>
+          <button type="button" class="members-close-btn mobile-only" aria-label="Fechar lista de membros" id="members-sidebar-close-btn" style="display: none"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </div>
         <div class="members-list-wrapper">
           <div class="members-section-title" id="members-online-title">ONLINE — 0</div>
           <div class="members-list" id="members-list" role="list">

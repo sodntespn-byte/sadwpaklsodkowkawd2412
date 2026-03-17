@@ -1391,6 +1391,8 @@ class LibertyApp {
 
     const toggleMembersBtn = document.getElementById('toggle-members-btn');
     if (toggleMembersBtn) toggleMembersBtn.addEventListener('click', () => this.toggleMembers());
+    const membersSidebarCloseBtn = document.getElementById('members-sidebar-close-btn');
+    if (membersSidebarCloseBtn) membersSidebarCloseBtn.addEventListener('click', () => { if (this.membersSidebarVisible) this.toggleMembers(); });
 
     // Threads, Notifications, Inbox, Help
     const threadsBtn = document.querySelector('.channel-actions [data-tooltip="Threads"]');
@@ -3490,6 +3492,8 @@ class LibertyApp {
   async renderFriendsView(tab) {
     this.currentFriendsTab = tab || 'online';
     tab = this.currentFriendsTab;
+
+    if (window.matchMedia('(max-width: 48rem)').matches && this._closeMobileChannelDrawer) this._closeMobileChannelDrawer();
 
     const friendsView = document.getElementById('friends-view');
     const messagesContainer = document.getElementById('messages-container');
