@@ -903,7 +903,6 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: [
           "'self'",
-          "'unsafe-inline'",
           "'unsafe-hashes'",
           "'sha256-iNdzJueCLgGX4W5su4mORbOameseXUZO+P+Hm0wFzX0='",
           "'sha256-DAqailpa1WZfK8FBkO57bktgKaoLGRNFwJevNF71Hgc='",

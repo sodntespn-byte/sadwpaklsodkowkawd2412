@@ -175,13 +175,14 @@
       this._connectRejectRef = null;
       this._connectIntent = false;
       this._clearHelloTimeout();
-      if (!ref || typeof ref.current !== 'function') return;
+      var doneFn = ref && ref.current;
+      if (typeof doneFn !== 'function') return;
       var wasReconnected = this._hasConnectedOnce;
       this._hasConnectedOnce = true;
       if (typeof this._resubscribeAll === 'function') this._resubscribeAll();
       if (typeof this._flushQueue === 'function') this._flushQueue();
       var payload = Object.assign({}, data && typeof data === 'object' ? data : {}, { reconnected: wasReconnected });
-      try { ref.current(payload); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] resolveConnect callback error:', e); }
+      try { doneFn(payload); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] resolveConnect callback error:', e); }
       if (typeof this.emit === 'function') this.emit('ready', payload);
     }
 
@@ -271,8 +272,9 @@
       this._connectRejectRef = null;
       this._connectIntent = false;
       this._clearHelloTimeout();
-      if (!ref || typeof ref.current !== 'function') return;
-      try { ref.current(err instanceof Error ? err : new Error(err && (err.message || String(err)) || 'Connection failed')); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] rejectConnect callback error:', e); }
+      var failFn = ref && ref.current;
+      if (typeof failFn !== 'function') return;
+      try { failFn(err instanceof Error ? err : new Error(err && (err.message || String(err)) || 'Connection failed')); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] rejectConnect callback error:', e); }
     }
 
     _clearReconnect() {

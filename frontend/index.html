@@ -414,14 +414,17 @@
           </div>
         </section>
 
-        <!-- WebRTC Call View — Neo-Discord: dois avatares circulares centrais + barra em vidro -->
-        <section id="voice-call-view" class="call-neo webrtc-call-view hidden" aria-label="Chamada de vídeo e voz">
+        <!-- Chamada de voz (só áudio) -->
+        <section id="voice-call-view" class="call-neo call-neo--voice-only webrtc-call-view hidden" aria-label="Chamada de voz">
           <div class="call-neo__header">
-            <span class="call-neo__live-dot" aria-label="Em chamada"><i class="fas fa-circle" aria-hidden="true"></i> AO VIVO</span>
-            <h2 id="voice-call-channel-name" class="call-neo__title">Chamada</h2>
+            <span class="call-neo__live-dot" aria-label="A falar"><i class="fas fa-circle" aria-hidden="true"></i> A FALAR</span>
+            <h2 id="voice-call-channel-name" class="call-neo__title">Chamada de voz</h2>
             <div id="voice-call-participants-bar" class="webrtc-participants-bar" aria-label="Quem está na chamada"></div>
           </div>
-          <div class="call-neo__stage" id="call-neo-stage">
+          <div class="call-neo__voice-only-stage" id="call-neo-voice-stage">
+            <div class="call-neo__voice-only-message"><i class="fas fa-microphone" aria-hidden="true"></i> A falar...</div>
+          </div>
+          <div class="call-neo__stage call-neo__stage--hidden" id="call-neo-stage">
             <div class="call-neo__players" id="call-neo-players">
               <div class="call-neo__player call-neo__player--local" id="call-neo-player-local">
                 <div class="call-neo__player-circle call-neo__avatar-ring" id="webrtc-local-avatar-wrap">
@@ -452,14 +455,8 @@
             <div class="call-neo__resize-handle" id="call-neo-resize-handle" title="Arrastar para redimensionar" aria-label="Redimensionar área da chamada"></div>
           </div>
           <div class="call-neo__controls">
-            <button type="button" class="call-neo__ctrl" id="voice-call-mute" title="Mutar">
-              <i class="fas fa-microphone"></i><span>Mute</span>
-            </button>
-            <button type="button" class="call-neo__ctrl" id="voice-call-video" title="Câmara">
-              <i class="fas fa-video"></i><span>Vídeo</span>
-            </button>
-            <button type="button" class="call-neo__ctrl" id="voice-call-screenshare" title="Compartilhar tela">
-              <i class="fas fa-display"></i><span>Compartilhar tela</span>
+            <button type="button" class="call-neo__ctrl" id="voice-call-mute" title="Mutar microfone">
+              <i class="fas fa-microphone"></i><span>Mutar</span>
             </button>
             <button type="button" class="call-neo__ctrl call-neo__ctrl--disconnect" id="voice-call-disconnect" title="Desligar">
               <i class="fas fa-phone-slash"></i><span>Desligar</span>

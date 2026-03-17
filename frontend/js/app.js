@@ -2367,7 +2367,7 @@ class LibertyApp {
     this._voiceCallState.videoEnabled = true;
     this._voiceCallState.stream = null;
     try {
-      this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     } catch (_) {
       this._voiceCallState.stream = null;
     }
@@ -2464,20 +2464,16 @@ class LibertyApp {
     const voiceView = document.getElementById('voice-call-view');
     this._voiceCallState.stream = null;
     try {
-      this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
-    } catch (e1) {
-      try {
-        this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      } catch (_) {
-        this._voiceCallState.stream = null;
-      }
+      this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (_) {
+      this._voiceCallState.stream = null;
     }
     if (!this._voiceCallState.stream) {
       this.showToast('É necessário permitir o microfone para ligar.', 'error');
       return;
     }
     this._voiceCallState.targetUserId = targetId;
-    this._voiceCallState.videoEnabled = !!this._voiceCallState.stream.getVideoTracks().length;
+    this._voiceCallState.videoEnabled = false;
     this._voiceCallState.pendingIceCandidates = [];
     const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     if (this._voiceCallState.stream)

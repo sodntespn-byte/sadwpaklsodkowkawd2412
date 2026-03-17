@@ -38,6 +38,33 @@
   display: none !important;
 }
 
+.call-neo--voice-only .call-neo__stage,
+.call-neo__stage--hidden {
+  display: none !important;
+}
+
+.call-neo__voice-only-stage {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.call-neo__voice-only-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--call-text-muted);
+}
+
+.call-neo__voice-only-message i {
+  font-size: 28px;
+  color: var(--call-accent);
+}
+
 @keyframes call-neo-fade-in {
   from {
     opacity: 0;
