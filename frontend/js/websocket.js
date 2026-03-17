@@ -22,8 +22,6 @@
       this.maxReconnectAttempts = 50;
       this.reconnectDelay = 1000;
       this.reconnectMaxDelay = 30000;
-      this._connectFulfillRef = null;
-      this._connectRejectRef = null;
       this._reconnectTimeout = null;
       this._connectIntent = false;
       this._disconnectRequested = false;
@@ -163,27 +161,39 @@
       this._clearReconnect();
       this._clearHelloTimeout();
       return new Promise(function (fulfill, reject) {
-        self._connectFulfillRef = { current: fulfill };
-        self._connectRejectRef = { current: reject };
+        function cleanup() {
+          self.off('ready', onReady);
+          self.off('auth_failed', onAuthFail);
+          self.off('connect_failed', onConnectFail);
+        }
+        function onReady(payload) {
+          cleanup();
+          fulfill(payload);
+        }
+        function onAuthFail(data) {
+          cleanup();
+          reject(new Error((data && data.reason != null) ? String(data.reason) : 'Auth failed'));
+        }
+        function onConnectFail(err) {
+          cleanup();
+          reject(err instanceof Error ? err : new Error(err && (err.message || String(err)) || 'Connection failed'));
+        }
+        self.on('ready', onReady);
+        self.on('auth_failed', onAuthFail);
+        self.on('connect_failed', onConnectFail);
         self._doConnect();
       });
     }
 
-    _resolveConnect(data) {
-      var ref = this._connectFulfillRef;
-      this._connectFulfillRef = null;
-      this._connectRejectRef = null;
+    _applyAuthenticated(data) {
       this._connectIntent = false;
       this._clearHelloTimeout();
-      var doneFn = ref && ref.current;
-      if (typeof doneFn !== 'function') return;
       var wasReconnected = this._hasConnectedOnce;
       this._hasConnectedOnce = true;
       if (typeof this._resubscribeAll === 'function') this._resubscribeAll();
       if (typeof this._flushQueue === 'function') this._flushQueue();
       var payload = Object.assign({}, data && typeof data === 'object' ? data : {}, { reconnected: wasReconnected });
-      try { doneFn(payload); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] resolveConnect callback error:', e); }
-      if (typeof this.emit === 'function') this.emit('ready', payload);
+      this.emit('ready', payload);
     }
 
     _clearHelloTimeout() {
@@ -226,13 +236,13 @@
       var host = (typeof window !== 'undefined' && window.location && window.location.host) ? window.location.host : '';
       var wsUrl = host ? (token ? protocol + '//' + host + '/ws?token=' + encodeURIComponent(token) : protocol + '//' + host + '/ws') : '';
       if (!wsUrl) {
-        if (this._connectIntent && typeof this._rejectConnect === 'function') this._rejectConnect(new Error('Invalid WebSocket URL'));
+        if (this._connectIntent) this.emit('connect_failed', new Error('Invalid WebSocket URL'));
         return;
       }
       try {
         this.ws = new WebSocket(wsUrl);
       } catch (e) {
-        if (this._connectIntent && typeof this._rejectConnect === 'function') this._rejectConnect(new Error('WebSocket failed'));
+        if (this._connectIntent) this.emit('connect_failed', new Error('WebSocket failed'));
         if (typeof this._scheduleReconnect === 'function') this._scheduleReconnect();
         return;
       }
@@ -257,24 +267,13 @@
         this.authenticated = false;
         this.stopHeartbeat();
         this._clearHelloTimeout();
-        if (this._connectFulfillRef && this._connectIntent) this._rejectConnect(new Error('Conexão fechada'));
+        if (this._connectIntent) this.emit('connect_failed', new Error('Conexão fechada'));
         this._scheduleReconnect();
       };
       this.ws.onerror = () => {
         this._clearHelloTimeout();
-        if (this._connectFulfillRef && this._connectIntent) this._rejectConnect(new Error('Erro de conexão'));
+        if (this._connectIntent) this.emit('connect_failed', new Error('Erro de conexão'));
       };
-    }
-
-    _rejectConnect(err) {
-      var ref = this._connectRejectRef;
-      this._connectFulfillRef = null;
-      this._connectRejectRef = null;
-      this._connectIntent = false;
-      this._clearHelloTimeout();
-      var failFn = ref && ref.current;
-      if (typeof failFn !== 'function') return;
-      try { failFn(err instanceof Error ? err : new Error(err && (err.message || String(err)) || 'Connection failed')); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] rejectConnect callback error:', e); }
     }
 
     _clearReconnect() {
@@ -398,19 +397,13 @@
           this._clearHelloTimeout();
           this.authenticated = true;
           this.sessionId = (d && d.session_id != null) ? d.session_id : null;
-          if (this._connectFulfillRef != null) this._resolveConnect(d && typeof d === 'object' ? d : {});
+          this._applyAuthenticated(d && typeof d === 'object' ? d : {});
           break;
         }
         case 'auth_failed': {
           this._clearHelloTimeout();
-          this.emit('auth_failed', d && typeof d === 'object' ? d : {});
-          var refAuth = this._connectRejectRef;
-          this._connectFulfillRef = null;
-          this._connectRejectRef = null;
           this._connectIntent = false;
-          if (refAuth && typeof refAuth.current === 'function') {
-            try { refAuth.current(new Error((d && d.reason != null) ? String(d.reason) : 'Auth failed')); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] auth_failed callback error:', e); }
-          }
+          this.emit('auth_failed', d && typeof d === 'object' ? d : {});
           break;
         }
 
@@ -632,8 +625,6 @@
       }
       this.connected = false;
       this.authenticated = false;
-      this._connectFulfillRef = null;
-      this._connectRejectRef = null;
     }
   }
 
