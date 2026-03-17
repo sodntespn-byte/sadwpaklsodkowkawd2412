@@ -40,20 +40,19 @@
 
     _resolveConnect(data) {
       if (typeof this._connectResolve !== 'function') return;
-      const resolveFn = this._connectResolve;
-      const rejectFn = this._connectReject;
+      var resolveFn = this._connectResolve;
+      var rejectFn = this._connectReject;
       this._connectResolve = null;
       this._connectReject = null;
       this._connectIntent = false;
       this._clearHelloTimeout();
-      const wasReconnected = this._hasConnectedOnce;
+      var wasReconnected = this._hasConnectedOnce;
       this._hasConnectedOnce = true;
       this._resubscribeAll();
       this._flushQueue();
-      const payload = { ...(data || {}), reconnected: wasReconnected };
-      try {
-        resolveFn(payload);
-      } catch (_) {}
+      if (typeof resolveFn !== 'function') return;
+      var payload = { ...(data || {}), reconnected: wasReconnected };
+      try { resolveFn(payload); } catch (_) {}
       this.emit('ready', payload);
     }
 
@@ -453,6 +452,7 @@
 
   if (typeof window !== 'undefined') window.Gateway = new LibertyGateway();
 })();
+
 
 
 
