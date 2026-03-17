@@ -39,11 +39,12 @@
     _createPeer(targetId) {
       var self = this;
       var pc = new RTCPeerConnection(this._getIceConfig());
-      var entry = { pc: pc, localStream: null };
+      var entry = { pc: pc, localStream: null, iceQueue: [] };
       this.peers.set(targetId, entry);
       pc.onicecandidate = function (e) {
-        if (!e.candidate) return;
-        if (self.send) self.send('webrtc_ice', { target_user_id: targetId, payload: e.candidate });
+        if (!e.candidate || !self.send) return;
+        var pl = e.candidate.toJSON ? e.candidate.toJSON() : { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex };
+        self.send('webrtc_ice', { target_user_id: targetId, payload: pl });
       };
       pc.ontrack = function (e) {
         var stream = e.streams && e.streams[0] ? e.streams[0] : e.stream;
@@ -85,7 +86,7 @@
       }).then(function () {
         var pc = self._getOrCreatePeer(targetId);
         if (!pc || !pc.localDescription) return;
-        self.send('webrtc_offer', { target_user_id: targetId, payload: pc.localDescription });
+        self.send('webrtc_offer', { target_user_id: targetId, payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
         if (self.emit) self.emit('webrtc_call_initiated', { targetId: targetId });
       }).catch(function (err) {
         self.endCall(targetId);
@@ -104,15 +105,20 @@
         return Promise.reject(err);
       }
       var opts = { audio: true, video: true };
+      var offerDesc = pending && typeof pending === 'object' ? { type: pending.type || 'offer', sdp: pending.sdp || '' } : { type: 'offer', sdp: '' };
       return navigator.mediaDevices.getUserMedia(opts).then(function (stream) {
         var pc = self._createPeer(targetId);
         var entry = self.peers.get(targetId);
         if (entry) entry.localStream = stream;
         stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
-        return pc.setRemoteDescription(new RTCSessionDescription(pending));
+        return pc.setRemoteDescription(new RTCSessionDescription(offerDesc));
       }).then(function () {
         var pc = self._getOrCreatePeer(targetId);
-        if (!pc) return Promise.reject(new Error('Peer lost'));
+        var entry = self.peers.get(targetId);
+        if (!pc || !entry) return Promise.reject(new Error('Peer lost'));
+        var q = entry.iceQueue || [];
+        entry.iceQueue = [];
+        for (var i = 0; i < q.length; i++) pc.addIceCandidate(new RTCIceCandidate(q[i])).catch(function () {});
         return pc.createAnswer();
       }).then(function (answer) {
         var pc = self._getOrCreatePeer(targetId);
@@ -122,7 +128,7 @@
         var pc = self._getOrCreatePeer(targetId);
         if (!pc || !pc.localDescription) return;
         self.pendingOffers.delete(targetId);
-        self.send('webrtc_answer', { target_user_id: targetId, payload: pc.localDescription });
+        self.send('webrtc_answer', { target_user_id: targetId, payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
         if (self.emit) self.emit('webrtc_call_accepted', { targetId: targetId });
       }).catch(function (err) {
         self.endCall(targetId);
@@ -343,7 +349,13 @@
         if (type === 'webrtc_answer' && fromId) {
           var peerEntry = this.peers.get(fromId);
           if (peerEntry && peerEntry.pc) {
-            peerEntry.pc.setRemoteDescription(new RTCSessionDescription(payload)).catch(function (err) {
+            var p = payload && typeof payload === 'object' ? payload : {};
+            var desc = new RTCSessionDescription({ type: p.type || 'answer', sdp: p.sdp || '' });
+            peerEntry.pc.setRemoteDescription(desc).then(function () {
+              var q = peerEntry.iceQueue || [];
+              peerEntry.iceQueue = [];
+              for (var j = 0; j < q.length; j++) peerEntry.pc.addIceCandidate(new RTCIceCandidate(q[j])).catch(function () {});
+            }).catch(function (err) {
               if (typeof console !== 'undefined' && console.error) console.error('[Gateway] setRemoteDescription(answer) error:', err);
             });
           }
@@ -353,9 +365,13 @@
         if (type === 'webrtc_ice' && fromId && payload) {
           var peerEntryIce = this.peers.get(fromId);
           if (peerEntryIce && peerEntryIce.pc) {
-            peerEntryIce.pc.addIceCandidate(new RTCIceCandidate(payload)).catch(function (err) {
-              if (typeof console !== 'undefined' && console.error) console.error('[Gateway] addIceCandidate error:', err);
-            });
+            var cand = payload && typeof payload === 'object' ? payload : {};
+            if (!peerEntryIce.pc.remoteDescription || !peerEntryIce.pc.remoteDescription.type) {
+              if (!peerEntryIce.iceQueue) peerEntryIce.iceQueue = [];
+              peerEntryIce.iceQueue.push(cand);
+            } else {
+              peerEntryIce.pc.addIceCandidate(new RTCIceCandidate(cand)).catch(function () {});
+            }
           }
           this.emit(type, { from_user_id: fromId, payload: payload });
           return;

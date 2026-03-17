@@ -2222,14 +2222,15 @@ class LibertyApp {
       const pc = this._voiceCallState.pc;
       const isOffer = payload && payload.type === 'offer';
       if (pc && pc.signalingState !== 'closed' && this._voiceCallState.targetUserId === from && isOffer) {
-        pc.setRemoteDescription(new RTCSessionDescription(payload))
+        const offerDesc = payload && typeof payload === 'object' ? { type: payload.type || 'offer', sdp: payload.sdp || '' } : { type: 'offer', sdp: '' };
+        pc.setRemoteDescription(new RTCSessionDescription(offerDesc))
           .then(() => { if (pc.signalingState !== 'have-remote-offer') return; return pc.createAnswer(); })
           .then(answer => { if (!answer) return; return pc.setLocalDescription(answer); })
           .then(() => {
             if (this.gateway && pc.localDescription)
-              this.gateway.send('webrtc_answer', { target_user_id: from, payload: pc.localDescription });
+              this.gateway.send('webrtc_answer', { target_user_id: from, payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
           })
-          .catch(err => console.error('WebRTC renegotiation error', err));
+          .catch(() => {});
         return;
       }
       if (pc) return;
@@ -2239,23 +2240,27 @@ class LibertyApp {
     });
     g.on('webrtc_answer', d => {
       if (!this._voiceCallState.pc || !d.payload) return;
+      const p = d.payload && typeof d.payload === 'object' ? d.payload : {};
+      const desc = new RTCSessionDescription({ type: p.type || 'answer', sdp: p.sdp || '' });
       this._voiceCallState.pc
-        .setRemoteDescription(new RTCSessionDescription(d.payload))
+        .setRemoteDescription(desc)
         .then(() => this._callDrainPendingIceCandidates())
         .catch(() => {});
     });
     g.on('webrtc_ice', d => {
       if (!this._voiceCallState.pc || !d.payload) return;
       const pc = this._voiceCallState.pc;
-      if (pc.signalingState === 'have-local-offer') {
-        this._voiceCallState.pendingIceCandidates.push(d.payload);
+      const cand = d.payload && typeof d.payload === 'object' ? d.payload : {};
+      if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        this._voiceCallState.pendingIceCandidates.push(cand);
         return;
       }
-      pc.addIceCandidate(new RTCIceCandidate(d.payload)).catch(() => {});
+      pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
     });
     g.on('webrtc_reject', () => {
       this._voiceCallState.pendingOffer = null;
       this._voiceCallState.incomingFromUserId = null;
+      this._voiceCallState.pendingIceCandidates = [];
       this._hideIncomingCallAlert();
       if (this._voiceCallState.pc) {
         this._voiceCallState.pc.close();
@@ -2292,6 +2297,7 @@ class LibertyApp {
       }
       this._voiceCallState.targetUserId = null;
       this._voiceCallState.pendingOffer = null;
+      this._voiceCallState.pendingIceCandidates = [];
       this._voiceCallState.callId = null;
       this._webrtcStopLocalAudioLevel();
       this._webrtcClearRemote();
@@ -2360,12 +2366,19 @@ class LibertyApp {
     const { pendingOffer } = this._voiceCallState;
     this._hideIncomingCallAlert();
     if (!pendingOffer) return;
+    if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      this.showToast('Seu navegador não suporta chamadas de voz.', 'error');
+      if (this.gateway) this.gateway.send('webrtc_reject', { target_user_id: pendingOffer.from });
+      this._voiceCallState.pendingOffer = null;
+      return;
+    }
     const from = pendingOffer.from;
     const payload = pendingOffer.payload;
     this._voiceCallState.pendingOffer = null;
     this._voiceCallState.targetUserId = from;
     this._voiceCallState.videoEnabled = true;
     this._voiceCallState.stream = null;
+    this._voiceCallState.pendingIceCandidates = [];
     try {
       this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     } catch (_) {
@@ -2377,7 +2390,9 @@ class LibertyApp {
       this._voiceCallState.stream.getTracks().forEach(track => pc.addTrack(track, this._voiceCallState.stream));
     pc.ontrack = e => this._attachRemoteTrack(e);
     pc.onicecandidate = e => {
-      if (e.candidate && this.gateway) this.gateway.send('webrtc_ice', { target_user_id: from, payload: e.candidate });
+      if (!e.candidate || !this.gateway) return;
+      const pl = e.candidate.toJSON ? e.candidate.toJSON() : { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex };
+      this.gateway.send('webrtc_ice', { target_user_id: from, payload: pl });
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
@@ -2388,7 +2403,8 @@ class LibertyApp {
         if (localV) localV.srcObject = null;
       }
     };
-    pc.setRemoteDescription(new RTCSessionDescription(payload))
+    const offerDesc = payload && typeof payload === 'object' ? { type: payload.type || 'offer', sdp: payload.sdp || '' } : { type: 'offer', sdp: '' };
+    pc.setRemoteDescription(new RTCSessionDescription(offerDesc))
       .then(() => {
         if (pc.signalingState !== 'have-remote-offer') return Promise.reject(new Error('Wrong signaling state'));
         return pc.createAnswer();
@@ -2398,9 +2414,10 @@ class LibertyApp {
         return pc.setLocalDescription(answer);
       })
       .then(() => {
-        if (this.gateway && pc.localDescription) this.gateway.send('webrtc_answer', { target_user_id: from, payload: pc.localDescription });
+        this._callDrainPendingIceCandidates();
+        if (this.gateway && pc.localDescription) this.gateway.send('webrtc_answer', { target_user_id: from, payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
       })
-      .catch(err => console.error('Voice answer error', err));
+      .catch(() => {});
     const voiceView = document.getElementById('voice-call-view');
     if (voiceView) {
       voiceView.classList.remove('hidden');
@@ -2417,7 +2434,9 @@ class LibertyApp {
       localV.muted = true;
       localV.playsInline = true;
       localV.autoplay = true;
-      const hasVideo = this._voiceCallState.stream && this._voiceCallState.stream.getVideoTracks().length > 0;
+      const str = this._voiceCallState.stream;
+      const vT = str && (str.getVideoTracks ? str.getVideoTracks() : str.getTracks().filter(t => t.kind === 'video'));
+      const hasVideo = vT && vT.length > 0;
       localV.classList.toggle('hidden', !hasVideo);
       if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
     } else if (localFallback) localFallback.classList.remove('hidden');
@@ -2447,6 +2466,10 @@ class LibertyApp {
   async _startVoiceCallIfDM() {
     if (!this.currentUser?.id) {
       this.showToast('Faça login para iniciar uma chamada.', 'error');
+      return;
+    }
+    if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      this.showToast('Seu navegador não suporta chamadas de voz.', 'error');
       return;
     }
     if (!this.gateway) {
@@ -2480,8 +2503,9 @@ class LibertyApp {
       this._voiceCallState.stream.getTracks().forEach(track => pc.addTrack(track, this._voiceCallState.stream));
     pc.ontrack = e => this._attachRemoteTrack(e);
     pc.onicecandidate = e => {
-      if (e.candidate && this.gateway)
-        this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: e.candidate });
+      if (!e.candidate || !this.gateway) return;
+      const pl = e.candidate.toJSON ? e.candidate.toJSON() : { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex };
+      this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: pl });
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
@@ -2501,13 +2525,13 @@ class LibertyApp {
     pc.createOffer()
       .then(offer => pc.setLocalDescription(offer))
       .then(() => {
-        if (this.gateway)
+        if (this.gateway && pc.localDescription)
           this.gateway.send('webrtc_offer', {
             target_user_id: this._voiceCallState.targetUserId,
-            payload: pc.localDescription,
+            payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
           });
       })
-      .catch(err => console.error('Voice offer error', err));
+      .catch(() => {});
     if (voiceView) {
       voiceView.classList.remove('hidden');
       voiceView.classList.add('call-neo--visible');
@@ -2525,7 +2549,9 @@ class LibertyApp {
       localV.muted = true;
       localV.playsInline = true;
       localV.autoplay = true;
-      const hasVideo = this._voiceCallState.stream && this._voiceCallState.stream.getVideoTracks().length > 0;
+      const str = this._voiceCallState.stream;
+      const vT = str && (str.getVideoTracks ? str.getVideoTracks() : str.getTracks().filter(t => t.kind === 'video'));
+      const hasVideo = vT && vT.length > 0;
       localV.classList.toggle('hidden', !hasVideo);
       if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
     } else if (localFallback) localFallback.classList.remove('hidden');
@@ -2607,6 +2633,7 @@ class LibertyApp {
       }
       this._voiceCallState.targetUserId = null;
       this._voiceCallState.pendingOffer = null;
+      this._voiceCallState.pendingIceCandidates = [];
       this._voiceCallState.callId = null;
       if (voiceView) {
         voiceView.classList.add('hidden');
@@ -2645,10 +2672,10 @@ class LibertyApp {
           await this._requestCallMedia();
           return;
         }
-        const enabled = this._voiceCallState.stream.getAudioTracks().some(t => t.enabled);
-        this._voiceCallState.stream.getAudioTracks().forEach(t => {
-          t.enabled = !t.enabled;
-        });
+        const st = this._voiceCallState.stream;
+        const tracks = st.getAudioTracks ? st.getAudioTracks() : st.getTracks().filter(t => t.kind === 'audio');
+        const enabled = tracks.some(t => t.enabled);
+        tracks.forEach(t => { t.enabled = !t.enabled; });
         this._playCallSound(enabled ? 'mute' : 'unmute');
         this._updateWebrtcControlButtons();
       });
@@ -2660,21 +2687,23 @@ class LibertyApp {
           return;
         }
         if (!this._voiceCallState.pc) return;
-        const videoTracks = this._voiceCallState.stream.getVideoTracks();
+        const stream = this._voiceCallState.stream;
+        const videoTracks = stream.getVideoTracks ? stream.getVideoTracks() : stream.getTracks().filter(t => t.kind === 'video');
         if (videoTracks.length === 0) {
           try {
             const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            const videoTrack = videoStream.getVideoTracks()[0];
+            const vTracks = videoStream.getVideoTracks ? videoStream.getVideoTracks() : videoStream.getTracks().filter(t => t.kind === 'video');
+            const videoTrack = vTracks[0];
             if (!videoTrack) return;
             this._voiceCallState.stream.addTrack(videoTrack);
             this._voiceCallState.pc.addTrack(videoTrack, this._voiceCallState.stream);
             this._voiceCallState.videoEnabled = true;
             const offer = await this._voiceCallState.pc.createOffer();
             await this._voiceCallState.pc.setLocalDescription(offer);
-            if (this.gateway)
+            if (this.gateway && this._voiceCallState.pc.localDescription)
               this.gateway.send('webrtc_offer', {
                 target_user_id: this._voiceCallState.targetUserId,
-                payload: this._voiceCallState.pc.localDescription,
+                payload: { type: this._voiceCallState.pc.localDescription.type, sdp: this._voiceCallState.pc.localDescription.sdp },
               });
             const localV = document.getElementById('webrtc-local-video');
             if (localV) {
@@ -2731,17 +2760,16 @@ class LibertyApp {
           const senders = pc.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
           if (videoSender) {
-            const newTrack =
-              this._voiceCallState.videoEnabled && this._voiceCallState.stream
-                ? this._voiceCallState.stream.getVideoTracks()[0] || null
-                : null;
+            const s = this._voiceCallState.stream;
+            const vt = s && (s.getVideoTracks ? s.getVideoTracks()[0] : s.getTracks().filter(t => t.kind === 'video')[0]) || null;
+            const newTrack = this._voiceCallState.videoEnabled && s ? vt : null;
             videoSender.replaceTrack(newTrack).then(async () => {
               const offer = await pc.createOffer();
               await pc.setLocalDescription(offer);
-              if (this.gateway)
+              if (this.gateway && pc.localDescription)
                 this.gateway.send('webrtc_offer', {
                   target_user_id: this._voiceCallState.targetUserId,
-                  payload: pc.localDescription,
+                  payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
                 });
             }).catch(() => {});
           }
@@ -2755,7 +2783,8 @@ class LibertyApp {
         try {
           const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
           this._voiceCallState.displayStream = displayStream;
-          const videoTrack = displayStream.getVideoTracks()[0];
+          const vTracks = displayStream.getVideoTracks ? displayStream.getVideoTracks() : displayStream.getTracks().filter(t => t.kind === 'video');
+          const videoTrack = vTracks[0];
           if (!videoTrack) return;
           const senders = pc.getSenders();
           const videoSender = senders.find(s => s.track && s.track.kind === 'video');
@@ -2763,19 +2792,19 @@ class LibertyApp {
             await videoSender.replaceTrack(videoTrack);
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            if (this._voiceCallState.targetUserId && this.gateway)
+            if (this._voiceCallState.targetUserId && this.gateway && pc.localDescription)
               this.gateway.send('webrtc_offer', {
                 target_user_id: this._voiceCallState.targetUserId,
-                payload: pc.localDescription,
+                payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
               });
           } else {
             pc.addTrack(videoTrack, displayStream);
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            if (this._voiceCallState.targetUserId && this.gateway)
+            if (this._voiceCallState.targetUserId && this.gateway && pc.localDescription)
               this.gateway.send('webrtc_offer', {
                 target_user_id: this._voiceCallState.targetUserId,
-                payload: pc.localDescription,
+                payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
               });
           }
           if (this._voiceCallState.targetUserId && this.gateway)
@@ -2785,20 +2814,21 @@ class LibertyApp {
           screenshareBtn.querySelector('span').textContent = 'Parar partilha';
           screenshareBtn.querySelector('i').className = 'fas fa-display';
           this._playCallSound('screen_share');
-          displayStream.getVideoTracks()[0].onended = () => {
+          videoTrack.onended = () => {
             if (this._voiceCallState.displayStream === displayStream) {
               this._voiceCallState.displayStream = null;
               const senders = pc.getSenders();
               const vs = senders.find(s => s.track && s.track.kind === 'video');
               if (vs) {
-                const newTrack = this._voiceCallState.stream ? this._voiceCallState.stream.getVideoTracks()[0] || null : null;
-                vs.replaceTrack(newTrack).then(async () => {
+                const str = this._voiceCallState.stream;
+                const nt = str ? (str.getVideoTracks ? str.getVideoTracks()[0] : str.getTracks().filter(t => t.kind === 'video')[0]) || null : null;
+                vs.replaceTrack(nt).then(async () => {
                   const offer = await pc.createOffer();
                   await pc.setLocalDescription(offer);
-                  if (this.gateway)
+                  if (this.gateway && pc.localDescription)
                     this.gateway.send('webrtc_offer', {
                       target_user_id: this._voiceCallState.targetUserId,
-                      payload: pc.localDescription,
+                      payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
                     });
                 }).catch(() => {});
               }
@@ -2834,10 +2864,11 @@ class LibertyApp {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       if (this.gateway)
-        this.gateway.send('webrtc_offer', {
-          target_user_id: this._voiceCallState.targetUserId,
-          payload: pc.localDescription,
-        });
+        if (pc.localDescription)
+          this.gateway.send('webrtc_offer', {
+            target_user_id: this._voiceCallState.targetUserId,
+            payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
+          });
       const localV = document.getElementById('webrtc-local-video');
       if (localV) localV.srcObject = stream;
       this._updateWebrtcControlButtons();
