@@ -1,27 +1,25 @@
 /**
- * LIBERTY — Call UI Neo-Discord
- * Painéis flutuantes, glassmorphism, paleta #0B0E11 + acento turquesa/roxo.
- * Grid inteligente, anel de áudio no avatar, transições suaves.
+ * LIBERTY — Call UI
+ * Tema Liberty: fundo escuro, acento amarelo/dourado, glassmorphism.
  */
 
-/* ─── Variáveis da chamada ─── */
 .call-neo {
-  --call-bg: #0B0E11;
-  --call-surface: rgba(18, 22, 28, 0.85);
+  --call-bg: #0a0a0a;
+  --call-surface: rgba(12, 12, 12, 0.95);
   --call-glass: rgba(255, 255, 255, 0.04);
-  --call-glass-border: rgba(255, 255, 255, 0.06);
-  --call-accent: #00D4AA;
-  --call-accent-hover: #00f5c4;
-  --call-accent-muted: rgba(0, 212, 170, 0.25);
-  --call-speak: #10B981;
-  --call-danger: #EF4444;
-  --call-danger-hover: #F87171;
-  --call-text: #F1F5F9;
-  --call-text-muted: #94A3B8;
+  --call-glass-border: rgba(255, 215, 0, 0.12);
+  --call-accent: var(--primary-yellow, #ffd700);
+  --call-accent-hover: var(--light-yellow, #ffeb3b);
+  --call-accent-muted: rgba(255, 215, 0, 0.2);
+  --call-speak: #43a047;
+  --call-danger: #e53935;
+  --call-danger-hover: #ef5350;
+  --call-text: #f5f0e8;
+  --call-text-muted: #a8a4a0;
   --call-radius: 16px;
   --call-radius-sm: 12px;
   --call-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  --call-transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --call-transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ─── Container principal (full-screen overlay) ─── */
@@ -535,14 +533,16 @@
   background: rgba(239, 68, 68, 0.25);
 }
 
-.call-neo__ctrl--active {
+.call-neo__ctrl--active,
+.call-neo__ctrl.call-neo__ctrl--active {
   background: var(--call-accent-muted);
-  border-color: rgba(0, 212, 170, 0.4);
+  border-color: rgba(255, 215, 0, 0.4);
   color: var(--call-accent);
 }
 
-.call-neo__ctrl--active:hover {
-  background: rgba(0, 212, 170, 0.35);
+.call-neo__ctrl--active:hover,
+.call-neo__ctrl.call-neo__ctrl--active:hover {
+  background: rgba(255, 215, 0, 0.28);
   color: var(--call-accent-hover);
 }
 

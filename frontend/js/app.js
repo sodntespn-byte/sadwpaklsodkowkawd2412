@@ -2185,6 +2185,8 @@ class LibertyApp {
         const vid = document.getElementById('webrtc-remote-video');
         if (vid) {
           vid.srcObject = stream;
+          vid.playsInline = true;
+          vid.autoplay = true;
           vid.classList.remove('hidden');
         }
         this._playCallSound('camera_on');
@@ -2218,12 +2220,13 @@ class LibertyApp {
       const payload = d.payload;
       if (!payload || !from) return;
       const pc = this._voiceCallState.pc;
-      if (pc && pc.signalingState !== 'closed' && this._voiceCallState.targetUserId === from) {
+      const isOffer = payload && payload.type === 'offer';
+      if (pc && pc.signalingState !== 'closed' && this._voiceCallState.targetUserId === from && isOffer) {
         pc.setRemoteDescription(new RTCSessionDescription(payload))
-          .then(() => pc.createAnswer())
-          .then(answer => pc.setLocalDescription(answer))
+          .then(() => { if (pc.signalingState !== 'have-remote-offer') return; return pc.createAnswer(); })
+          .then(answer => { if (!answer) return; return pc.setLocalDescription(answer); })
           .then(() => {
-            if (this.gateway)
+            if (this.gateway && pc.localDescription)
               this.gateway.send('webrtc_answer', { target_user_id: from, payload: pc.localDescription });
           })
           .catch(err => console.error('WebRTC renegotiation error', err));
@@ -2386,10 +2389,16 @@ class LibertyApp {
       }
     };
     pc.setRemoteDescription(new RTCSessionDescription(payload))
-      .then(() => pc.createAnswer())
-      .then(answer => pc.setLocalDescription(answer))
       .then(() => {
-        if (this.gateway) this.gateway.send('webrtc_answer', { target_user_id: from, payload: pc.localDescription });
+        if (pc.signalingState !== 'have-remote-offer') return Promise.reject(new Error('Wrong signaling state'));
+        return pc.createAnswer();
+      })
+      .then(answer => {
+        if (!answer) return;
+        return pc.setLocalDescription(answer);
+      })
+      .then(() => {
+        if (this.gateway && pc.localDescription) this.gateway.send('webrtc_answer', { target_user_id: from, payload: pc.localDescription });
       })
       .catch(err => console.error('Voice answer error', err));
     const voiceView = document.getElementById('voice-call-view');
@@ -2405,6 +2414,9 @@ class LibertyApp {
     const localFallback = document.getElementById('webrtc-local-fallback-icon');
     if (localV) {
       localV.srcObject = this._voiceCallState.stream;
+      localV.muted = true;
+      localV.playsInline = true;
+      localV.autoplay = true;
       const hasVideo = this._voiceCallState.stream && this._voiceCallState.stream.getVideoTracks().length > 0;
       localV.classList.toggle('hidden', !hasVideo);
       if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
@@ -2514,6 +2526,9 @@ class LibertyApp {
     const localFallback = document.getElementById('webrtc-local-fallback-icon');
     if (localV) {
       localV.srcObject = this._voiceCallState.stream;
+      localV.muted = true;
+      localV.playsInline = true;
+      localV.autoplay = true;
       const hasVideo = this._voiceCallState.stream && this._voiceCallState.stream.getVideoTracks().length > 0;
       localV.classList.toggle('hidden', !hasVideo);
       if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
