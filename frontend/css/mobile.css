@@ -13,6 +13,13 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Loading screen: safe area em dispositivos com notch */
+@media (max-width: 48rem) {
+  .loading-screen {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+}
+
 /* Safe area (notch/gestos) sem quebrar layout */
 .app {
   padding-left: env(safe-area-inset-left);
@@ -182,15 +189,45 @@ body {
     width: min(17.5rem, calc(100vw - var(--server-sidebar-width) - 1rem));
     max-width: 100%;
     padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
     overflow: hidden;
     display: flex;
     flex-direction: column;
     background: #0c0c0c;
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    transform: translateX(0);
+    transition: transform 0.25s ease-out;
   }
 
   .channel-sidebar.mobile-hidden {
     transform: translateX(-100%);
+  }
+
+  .auth-screen {
+    padding: 1rem;
+    padding-top: max(1rem, env(safe-area-inset-top));
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+  .auth-container {
+    max-width: 100%;
+    padding: 1.25rem;
+    margin: auto 0;
+  }
+  .auth-choice-btn {
+    min-height: 48px;
+    padding: 12px 1rem;
+    font-size: 15px;
+  }
+  .input-wrapper input,
+  .form-group select {
+    min-height: 48px;
+    font-size: 16px;
+  }
+  .toast-container {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: max(1rem, env(safe-area-inset-bottom));
   }
 }
 
@@ -270,7 +307,7 @@ body {
   }
 
   .message-input-wrapper textarea {
-    min-height: 42px;
+    min-height: 44px;
     font-size: 16px;
   }
 
