@@ -1,371 +1,656 @@
 (function () {
-    'use strict';
+  'use strict';
 
-    var getToken = function () {
-        if (typeof API !== 'undefined' && API.Token && API.Token.getAccessToken) return API.Token.getAccessToken();
-        return localStorage.getItem('token') || localStorage.getItem('access_token') || localStorage.getItem('liberty_token') || '';
-    };
+  var WEBRTC_STUN_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' }
+  ];
 
-    function LibertyGateway() {
-        this.ws = null;
-        this.connected = false;
-        this.authenticated = false;
-        this.sessionId = null;
-        this.seq = 0;
-        this.heartbeatInterval = null;
-        this.eventHandlers = new Map();
-        this.messageQueue = [];
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 0;
-        this.reconnectDelay = 1000;
-        this.reconnectMaxDelay = 30000;
-        this._intentionalClose = false;
-        this._connectResolve = null;
-        this._connectReject = null;
+  class LibertyGateway {
+    constructor() {
+      this.ws = null;
+      this.socket = null;
+      this.connected = false;
+      this.authenticated = false;
+      this.sessionId = null;
+      this.seq = 0;
+      this.heartbeatInterval = null;
+      this.eventHandlers = new Map();
+      this.messageQueue = [];
+      this.reconnectAttempts = 0;
+      this.maxReconnectAttempts = 50;
+      this.reconnectDelay = 1000;
+      this.reconnectMaxDelay = 30000;
+      this._connectResolve = null;
+      this._connectReject = null;
+      this._reconnectTimeout = null;
+      this._connectIntent = false;
+      this._disconnectRequested = false;
+      this._subscribedChannels = new Set();
+      this._hasConnectedOnce = false;
+      this._helloTimeout = null;
+      this.peers = new Map();
+      this.pendingOffers = new Map();
     }
 
-    LibertyGateway.prototype.connect = function () {
-        var self = this;
-        this._intentionalClose = false;
-        return new Promise(function (resolve, reject) {
-            self._connectResolve = resolve;
-            self._connectReject = typeof reject === 'function' ? reject : function () {};
-            self._doConnect();
-        });
-    };
+    _getIceConfig() {
+      return { iceServers: WEBRTC_STUN_SERVERS };
+    }
 
-    LibertyGateway.prototype._resolveConnect = function (data) {
-        var fulfill = this._connectResolve;
-        this._connectResolve = null;
-        this._connectReject = null;
-        if (typeof fulfill !== 'function') return;
-        var payload = data != null && typeof data === 'object' ? data : {};
-        try { fulfill(payload); } catch (_) {}
-    };
-
-    LibertyGateway.prototype._rejectConnect = function (err) {
-        var reject = this._connectReject;
-        this._connectResolve = null;
-        this._connectReject = null;
-        if (typeof reject !== 'function') return;
-        try { reject(err instanceof Error ? err : new Error(String(err))); } catch (_) {}
-    };
-
-    LibertyGateway.prototype._doConnect = function () {
-        var self = this;
-        var protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        var token = getToken();
-        var wsUrl = token ? protocol + '//' + window.location.host + '/ws?token=' + encodeURIComponent(token) : protocol + '//' + window.location.host + '/ws';
-
-        try {
-            this.ws = new WebSocket(wsUrl);
-        } catch (e) {
-            this._scheduleReconnect();
-            return;
+    _createPeer(targetId) {
+      var self = this;
+      var pc = new RTCPeerConnection(this._getIceConfig());
+      var entry = { pc: pc, localStream: null };
+      this.peers.set(targetId, entry);
+      pc.onicecandidate = function (e) {
+        if (!e.candidate) return;
+        if (self.send) self.send('webrtc_ice', { target_user_id: targetId, payload: e.candidate });
+      };
+      pc.ontrack = function (e) {
+        var stream = e.streams && e.streams[0] ? e.streams[0] : e.stream;
+        if (stream && self.emit) self.emit('webrtc_remote_stream', { targetId: targetId, stream: stream });
+      };
+      pc.oniceconnectionstatechange = function () {
+        if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'closed') {
+          if (self.emit) self.emit('webrtc_connection_state', { targetId: targetId, state: pc.iceConnectionState });
         }
+      };
+      return pc;
+    }
 
-        this.ws.onopen = function () {
-            self.connected = true;
-            self.reconnectAttempts = 0;
-            self._flushQueue();
+    _getOrCreatePeer(targetId) {
+      var entry = this.peers.get(targetId);
+      return entry ? entry.pc : null;
+    }
+
+    initiateCall(targetId, options) {
+      var self = this;
+      targetId = String(targetId);
+      if (this.peers.has(targetId)) {
+        if (this.emit) this.emit('webrtc_error', { code: 'already_in_call', targetId: targetId });
+        return Promise.reject(new Error('Already in call with this user'));
+      }
+      var opts = options && typeof options === 'object' ? options : {};
+      var audio = opts.audio !== false;
+      var video = opts.video !== false;
+      return navigator.mediaDevices.getUserMedia({ audio: audio, video: video }).then(function (stream) {
+        var pc = self._createPeer(targetId);
+        var entry = self.peers.get(targetId);
+        if (entry) entry.localStream = stream;
+        stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+        return pc.createOffer();
+      }).then(function (offer) {
+        var pc = self._getOrCreatePeer(targetId);
+        if (!pc) return Promise.reject(new Error('Peer lost'));
+        return pc.setLocalDescription(offer);
+      }).then(function () {
+        var pc = self._getOrCreatePeer(targetId);
+        if (!pc || !pc.localDescription) return;
+        self.send('webrtc_offer', { target_user_id: targetId, payload: pc.localDescription });
+        if (self.emit) self.emit('webrtc_call_initiated', { targetId: targetId });
+      }).catch(function (err) {
+        self.endCall(targetId);
+        if (self.emit) self.emit('webrtc_error', { error: err, targetId: targetId });
+        throw err;
+      });
+    }
+
+    acceptCall(targetId) {
+      var self = this;
+      targetId = String(targetId);
+      var pending = this.pendingOffers.get(targetId);
+      if (!pending) {
+        var err = new Error('No pending offer from this user');
+        if (this.emit) this.emit('webrtc_error', { error: err, targetId: targetId });
+        return Promise.reject(err);
+      }
+      var opts = { audio: true, video: true };
+      return navigator.mediaDevices.getUserMedia(opts).then(function (stream) {
+        var pc = self._createPeer(targetId);
+        var entry = self.peers.get(targetId);
+        if (entry) entry.localStream = stream;
+        stream.getTracks().forEach(function (t) { pc.addTrack(t, stream); });
+        return pc.setRemoteDescription(new RTCSessionDescription(pending));
+      }).then(function () {
+        var pc = self._getOrCreatePeer(targetId);
+        if (!pc) return Promise.reject(new Error('Peer lost'));
+        return pc.createAnswer();
+      }).then(function (answer) {
+        var pc = self._getOrCreatePeer(targetId);
+        if (!pc) return Promise.reject(new Error('Peer lost'));
+        return pc.setLocalDescription(answer);
+      }).then(function () {
+        var pc = self._getOrCreatePeer(targetId);
+        if (!pc || !pc.localDescription) return;
+        self.pendingOffers.delete(targetId);
+        self.send('webrtc_answer', { target_user_id: targetId, payload: pc.localDescription });
+        if (self.emit) self.emit('webrtc_call_accepted', { targetId: targetId });
+      }).catch(function (err) {
+        self.endCall(targetId);
+        self.pendingOffers.delete(targetId);
+        if (self.emit) self.emit('webrtc_error', { error: err, targetId: targetId });
+        throw err;
+      });
+    }
+
+    endCall(targetId) {
+      targetId = String(targetId);
+      var entry = this.peers.get(targetId);
+      if (!entry) return;
+      if (entry.localStream && typeof entry.localStream.getTracks === 'function') {
+        entry.localStream.getTracks().forEach(function (t) { t.stop(); });
+      }
+      if (entry.pc) {
+        try { entry.pc.close(); } catch (_) {}
+      }
+      this.peers.delete(targetId);
+      this.send('webrtc_hangup', { target_user_id: targetId });
+      if (this.emit) this.emit('webrtc_call_ended', { targetId: targetId });
+    }
+
+    rejectCall(targetId) {
+      targetId = String(targetId);
+      this.pendingOffers.delete(targetId);
+      this.send('webrtc_reject', { target_user_id: targetId });
+      if (this.emit) this.emit('webrtc_call_rejected', { targetId: targetId });
+    }
+
+    connect() {
+      this._connectIntent = true;
+      this._disconnectRequested = false;
+      this._clearReconnect();
+      this._clearHelloTimeout();
+      return new Promise((resolve, reject) => {
+        this._connectResolve = resolve;
+        this._connectReject = reject;
+        this._doConnect();
+      });
+    }
+
+    _resolveConnect(data) {
+      if (typeof this._connectResolve !== 'function') return;
+      var resolveFn = this._connectResolve;
+      var rejectFn = this._connectReject;
+      this._connectResolve = null;
+      this._connectReject = null;
+      this._connectIntent = false;
+      this._clearHelloTimeout();
+      var wasReconnected = this._hasConnectedOnce;
+      this._hasConnectedOnce = true;
+      if (typeof this._resubscribeAll === 'function') this._resubscribeAll();
+      if (typeof this._flushQueue === 'function') this._flushQueue();
+      if (typeof resolveFn !== 'function') return;
+      var payload = Object.assign({}, data && typeof data === 'object' ? data : {}, { reconnected: wasReconnected });
+      try { resolveFn(payload); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] resolveConnect callback error:', e); }
+      if (typeof this.emit === 'function') this.emit('ready', payload);
+    }
+
+    _clearHelloTimeout() {
+      if (this._helloTimeout != null) {
+        try { clearTimeout(this._helloTimeout); } catch (_) {}
+        this._helloTimeout = null;
+      }
+    }
+
+    _resubscribeAll() {
+      if (!this._subscribedChannels || typeof this._subscribedChannels.forEach !== 'function') return;
+      try {
+        this._subscribedChannels.forEach(function (channelId) {
+          if (!channelId) return;
+          var id = String(channelId);
+          if (this.socket && typeof this.socket.connected === 'boolean' && this.socket.connected && typeof this.socket.emit === 'function') {
+            this.socket.emit('subscribe', { chat_id: id, chatId: id });
+          } else if (this.ws && this.ws.readyState === 1 && typeof this.ws.send === 'function') {
+            this.ws.send(JSON.stringify({ type: 'subscribe', chat_id: id }));
+          }
+        }.bind(this));
+      } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] resubscribe error:', e); }
+    }
+
+    _flushQueue() {
+      if (!this.messageQueue || !Array.isArray(this.messageQueue)) return;
+      while (this.messageQueue.length > 0) {
+        var item = this.messageQueue.shift();
+        if (item && item.op != null && typeof this.send === 'function') this.send(item.op, item.data);
+      }
+    }
+
+    _doConnect() {
+      var token = '';
+      try {
+        token = typeof API !== 'undefined' && API && API.Token && typeof API.Token.getAccessToken === 'function' ? API.Token.getAccessToken() : (typeof localStorage !== 'undefined' && localStorage.getItem ? (localStorage.getItem('access_token') || localStorage.getItem('token') || '') : '');
+      } catch (_) {}
+      this.socket = null;
+      var protocol = (typeof window !== 'undefined' && window.location && window.location.protocol === 'https:') ? 'wss:' : 'ws:';
+      var host = (typeof window !== 'undefined' && window.location && window.location.host) ? window.location.host : '';
+      var wsUrl = host ? (token ? protocol + '//' + host + '/ws?token=' + encodeURIComponent(token) : protocol + '//' + host + '/ws') : '';
+      if (!wsUrl) {
+        if (this._connectIntent && typeof this._rejectConnect === 'function') this._rejectConnect(new Error('Invalid WebSocket URL'));
+        return;
+      }
+      try {
+        this.ws = new WebSocket(wsUrl);
+      } catch (e) {
+        if (this._connectIntent && typeof this._rejectConnect === 'function') this._rejectConnect(new Error('WebSocket failed'));
+        if (typeof this._scheduleReconnect === 'function') this._scheduleReconnect();
+        return;
+      }
+      this.ws.onopen = () => {
+        this.connected = true;
+        this._clearHelloTimeout();
+      };
+      this.ws.onmessage = (function (self) {
+        return function (event) {
+          if (!event || event.data == null) return;
+          try {
+            var raw = typeof event.data === 'string' ? event.data : String(event.data);
+            var message = JSON.parse(raw);
+            if (message && typeof message === 'object' && typeof self.handleMessage === 'function') self.handleMessage(message);
+          } catch (err) {
+            if (typeof console !== 'undefined' && console.error) console.error('[Gateway] Parse error:', err);
+          }
         };
-
-        this.ws.onmessage = function (event) {
-            try {
-                var raw = event.data;
-                if (typeof raw !== 'string') return;
-                var message = JSON.parse(raw);
-                self.handleMessage(message);
-            } catch (_) {}
-        };
-
-        this.ws.onclose = function () {
-            self.connected = false;
-            self.authenticated = false;
-            self.stopHeartbeat();
-            self.ws = null;
-            if (!self._intentionalClose) {
-                self.emit('disconnected', null);
-                self._scheduleReconnect();
-            }
-        };
-
-        this.ws.onerror = function () {};
-    };
-
-    LibertyGateway.prototype._flushQueue = function () {
-        var q = this.messageQueue;
-        this.messageQueue = [];
-        for (var i = 0; i < q.length; i++) {
-            var item = q[i];
-            this.send(item.op, item.d);
-        }
-    };
-
-    LibertyGateway.prototype._scheduleReconnect = function () {
-        if (this._intentionalClose || this.maxReconnectAttempts > 0 && this.reconnectAttempts >= this.maxReconnectAttempts) return;
-        if (this.reconnectAttempts === 0) this.reconnectAttempts = 1;
-        var delay = Math.min(this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1), this.reconnectMaxDelay);
-        this.reconnectAttempts++;
-        var self = this;
-        setTimeout(function () { self._doConnect(); }, delay);
-    };
-
-    LibertyGateway.prototype.handleMessage = function (message) {
-        var op = message.op;
-        var d = message.d != null && typeof message.d === 'object' ? message.d : {};
-        if (message.s !== undefined) this.seq = message.s;
-
-        switch (op) {
-            case 'hello':
-                this.startHeartbeat(d.heartbeat_interval || 45000);
-                if (getToken()) this.send('authenticate', { token: getToken() });
-                break;
-            case 'authenticated':
-                this.authenticated = true;
-                this.sessionId = d.session_id || null;
-                this.emit('ready', d);
-                this._resolveConnect(d);
-                this._flushQueue();
-                break;
-            case 'auth_failed':
-                this.emit('auth_failed', d);
-                this._rejectConnect(new Error(d.reason || 'Auth failed'));
-                break;
-            case 'heartbeat_ack':
-                if (d.seq !== undefined) this.seq = d.seq;
-                this.emit('heartbeat_ack', d);
-                break;
-            case 'message_created':
-                this.emit('message', d.message != null ? d.message : d);
-                break;
-            case 'message_updated':
-                this.emit('message_update', d);
-                break;
-            case 'message_deleted':
-                this.emit('message_delete', d);
-                break;
-            case 'messages_list':
-                this.emit('messages_list', d);
-                break;
-            case 'typing_started':
-                this.emit('typing', d);
-                break;
-            case 'presence_update':
-                this.emit('presence', d);
-                break;
-            case 'server_list':
-                this.emit('server_list', d);
-                break;
-            case 'server_info':
-                this.emit('server_info', d);
-                break;
-            case 'server_created':
-                this.emit('server_create', d);
-                break;
-            case 'server_updated':
-                this.emit('server_update', d);
-                break;
-            case 'server_deleted':
-                this.emit('server_delete', d);
-                break;
-            case 'channel_created':
-                this.emit('channel_create', d);
-                break;
-            case 'channel_updated':
-                this.emit('channel_update', d);
-                break;
-            case 'channel_deleted':
-                this.emit('channel_delete', d);
-                break;
-            case 'member_joined':
-                this.emit('member_join', d);
-                break;
-            case 'member_left':
-                this.emit('member_leave', d);
-                break;
-            case 'member_updated':
-                this.emit('member_update', d);
-                break;
-            case 'member_banned':
-                this.emit('member_banned', d);
-                break;
-            case 'role_created':
-                this.emit('role_create', d);
-                break;
-            case 'role_updated':
-                this.emit('role_update', d);
-                break;
-            case 'role_deleted':
-                this.emit('role_delete', d);
-                break;
-            case 'reaction_added':
-                this.emit('reaction_add', d);
-                break;
-            case 'reaction_removed':
-                this.emit('reaction_remove', d);
-                break;
-            case 'user_info':
-                this.emit('user_info', d);
-                break;
-            case 'user_updated':
-                this.emit('user_update', d);
-                break;
-            case 'invite_created':
-                this.emit('invite_created', d);
-                break;
-            case 'error':
-                this.emit('error', d);
-                break;
-            default:
-                if (message.t) this.emit(String(message.t).toLowerCase(), d);
-        }
-    };
-
-    LibertyGateway.prototype.send = function (op, data) {
-        if (!this.connected) {
-            this.messageQueue.push({ op: op, d: data != null ? data : {} });
-            return;
-        }
-        var payload = typeof op === 'string' ? { op: op, d: data != null ? data : {} } : op;
-        try {
-            this.ws.send(JSON.stringify(payload));
-        } catch (_) {
-            this.messageQueue.push({ op: payload.op, d: payload.d || {} });
-        }
-    };
-
-    LibertyGateway.prototype.startHeartbeat = function (intervalMs) {
-        this.stopHeartbeat();
-        var self = this;
-        this.heartbeatInterval = setInterval(function () {
-            if (self.connected) self.send('heartbeat', { seq: self.seq });
-        }, intervalMs);
-    };
-
-    LibertyGateway.prototype.stopHeartbeat = function () {
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-            this.heartbeatInterval = null;
-        }
-    };
-
-    LibertyGateway.prototype.on = function (event, handler) {
-        if (!this.eventHandlers.has(event)) this.eventHandlers.set(event, []);
-        this.eventHandlers.get(event).push(handler);
-    };
-
-    LibertyGateway.prototype.off = function (event, handler) {
-        if (!this.eventHandlers.has(event)) return;
-        var list = this.eventHandlers.get(event);
-        var i = list.indexOf(handler);
-        if (i > -1) list.splice(i, 1);
-    };
-
-    LibertyGateway.prototype.emit = function (event, data) {
-        if (!this.eventHandlers.has(event)) return;
-        var list = this.eventHandlers.get(event);
-        for (var i = 0; i < list.length; i++) {
-            try { list[i](data); } catch (_) {}
-        }
-    };
-
-    LibertyGateway.prototype.updatePresence = function (status, customStatus) {
-        var s = status === 'dnd' ? 'do_not_disturb' : (status === 'invisible' ? 'offline' : (status || 'online'));
-        this.send('update_presence', { status: s, custom_status: customStatus || null });
-    };
-
-    LibertyGateway.prototype.startTyping = function (channelId) {
-        this.send('start_typing', { channel_id: channelId });
-    };
-
-    LibertyGateway.prototype.sendMessage = function (channelId, content, tts, embeds) {
-        this.send('send_message', { channel_id: channelId, content: content || '', tts: !!tts, embeds: Array.isArray(embeds) ? embeds : [] });
-    };
-
-    LibertyGateway.prototype.editMessage = function (channelId, messageId, content) {
-        this.send('edit_message', { channel_id: channelId, message_id: messageId, content: content || '' });
-    };
-
-    LibertyGateway.prototype.deleteMessage = function (channelId, messageId) {
-        this.send('delete_message', { channel_id: channelId, message_id: messageId });
-    };
-
-    LibertyGateway.prototype.requestServers = function () {
-        this.send('request_servers', {});
-    };
-
-    LibertyGateway.prototype.requestServer = function (serverId) {
-        this.send('request_server', { server_id: serverId });
-    };
-
-    LibertyGateway.prototype.requestMessages = function (channelId, before, limit) {
-        this.send('request_messages', { channel_id: channelId, before: before || null, after: null, limit: limit != null ? limit : 50 });
-    };
-
-    LibertyGateway.prototype.createServer = function (name, region, icon) {
-        this.send('create_server', { name: name || '', region: region || null, icon: icon || null });
-    };
-
-    LibertyGateway.prototype.createChannel = function (serverId, name, type, parentId, topic) {
-        var ct = type || 'text';
-        this.send('create_channel', { server_id: serverId, name: name || '', channel_type: ct, parent_id: parentId || null, topic: topic || null });
-    };
-
-    LibertyGateway.prototype.updateChannel = function (channelId, name, topic, position) {
-        this.send('update_channel', { channel_id: channelId, name: name || null, topic: topic || null, position: position != null ? position : null });
-    };
-
-    LibertyGateway.prototype.deleteChannel = function (channelId) {
-        this.send('delete_channel', { channel_id: channelId });
-    };
-
-    LibertyGateway.prototype.createInvite = function (channelId, maxUses, maxAge, temporary) {
-        this.send('create_invite', { channel_id: channelId, max_uses: maxUses != null ? maxUses : null, max_age: maxAge != null ? maxAge : null, temporary: !!temporary });
-    };
-
-    LibertyGateway.prototype.joinServer = function (inviteCode) {
-        this.send('join_server', { invite_code: String(inviteCode) });
-    };
-
-    LibertyGateway.prototype.leaveServer = function (serverId) {
-        this.send('leave_server', { server_id: serverId });
-    };
-
-    LibertyGateway.prototype.addReaction = function (channelId, messageId, emojiName) {
-        this.send('add_reaction', { channel_id: channelId, message_id: messageId, emoji: { id: null, name: String(emojiName || ''), animated: false } });
-    };
-
-    LibertyGateway.prototype.removeReaction = function (channelId, messageId, emojiName) {
-        this.send('remove_reaction', { channel_id: channelId, message_id: messageId, emoji: { id: null, name: String(emojiName || ''), animated: false } });
-    };
-
-    LibertyGateway.prototype.kickMember = function (serverId, userId, reason) {
-        this.send('kick_member', { server_id: serverId, user_id: userId, reason: reason || null });
-    };
-
-    LibertyGateway.prototype.banMember = function (serverId, userId, reason, deleteMessageDays) {
-        this.send('ban_member', { server_id: serverId, user_id: userId, reason: reason || null, delete_message_days: deleteMessageDays != null ? deleteMessageDays : null });
-    };
-
-    LibertyGateway.prototype.requestUser = function (userId) {
-        this.send('request_user', { user_id: userId });
-    };
-
-    LibertyGateway.prototype.subscribeChannel = function () {};
-    LibertyGateway.prototype.unsubscribeChannel = function () {};
-
-    LibertyGateway.prototype.disconnect = function () {
-        this._intentionalClose = true;
-        this.stopHeartbeat();
-        if (this.ws) {
-            try { this.ws.close(1000, 'Client disconnect'); } catch (_) {}
-            this.ws = null;
-        }
+      })(this);
+      this.ws.onclose = () => {
         this.connected = false;
         this.authenticated = false;
-    };
+        this.stopHeartbeat();
+        this._clearHelloTimeout();
+        if (this._connectResolve && this._connectIntent) this._rejectConnect(new Error('Conexão fechada'));
+        this._scheduleReconnect();
+      };
+      this.ws.onerror = () => {
+        this._clearHelloTimeout();
+        if (this._connectResolve && this._connectIntent) this._rejectConnect(new Error('Erro de conexão'));
+      };
+    }
 
-    window.Gateway = new LibertyGateway();
+    _rejectConnect(err) {
+      if (typeof this._connectReject !== 'function') {
+        this._connectResolve = null;
+        this._connectReject = null;
+        this._connectIntent = false;
+        this._clearHelloTimeout();
+        return;
+      }
+      var rejectFn = this._connectReject;
+      this._connectResolve = null;
+      this._connectReject = null;
+      this._connectIntent = false;
+      this._clearHelloTimeout();
+      try { rejectFn(err instanceof Error ? err : new Error(err && (err.message || String(err)) || 'Connection failed')); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] rejectConnect callback error:', e); }
+    }
+
+    _clearReconnect() {
+      if (this._reconnectTimeout != null) {
+        try { clearTimeout(this._reconnectTimeout); } catch (_) {}
+        this._reconnectTimeout = null;
+      }
+    }
+
+    _scheduleReconnect() {
+      if (this._disconnectRequested) return;
+      if (this.reconnectAttempts === 0) this.reconnectAttempts = 1;
+      var base = Math.min(
+        this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
+        this.reconnectMaxDelay
+      );
+      var jitter = (typeof Math.random === 'function') ? Math.random() * 1000 : 0;
+      var delay = Math.min(base + jitter, this.reconnectMaxDelay);
+      this.reconnectAttempts++;
+      if (this.maxReconnectAttempts > 0 && this.reconnectAttempts > this.maxReconnectAttempts) return;
+      var self = this;
+      try {
+        this._reconnectTimeout = setTimeout(function () {
+          self._reconnectTimeout = null;
+          if (typeof self._doConnect === 'function') self._doConnect();
+        }, delay);
+      } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] scheduleReconnect error:', e); }
+    }
+
+    handleMessage(message) {
+      if (!message || typeof message !== 'object') return;
+      var op = message.op;
+      var type = message.type;
+      var d = message.d;
+      var t = message.t;
+      var data = message.data;
+      var s = message.s;
+      if (type === 'message' && data) {
+        this.emit('message', data);
+        return;
+      }
+      if (type === 'server_created' && message.server) {
+        this.emit('server_create', { server: message.server, channel_id: message.channel_id || null });
+        return;
+      }
+      if (type === 'invite_error') {
+        this.emit('invite_error', { message: message.message || 'Convite inválido ou expirado' });
+        return;
+      }
+      if (type === 'stream_started' && message.from_user_id) {
+        this.emit('stream_started', { from_user_id: message.from_user_id, stream_type: message.stream_type });
+        return;
+      }
+      if (type === 'stream_stopped' && message.from_user_id) {
+        this.emit('stream_stopped', { from_user_id: message.from_user_id });
+        return;
+      }
+      if (type && ['webrtc_offer', 'webrtc_answer', 'webrtc_ice', 'webrtc_reject', 'webrtc_hangup'].includes(type)) {
+        var fromId = message.from_user_id != null ? String(message.from_user_id) : null;
+        var payload = message.payload;
+        if (type === 'webrtc_offer' && fromId) {
+          this.pendingOffers.set(fromId, payload);
+          this.emit(type, { from_user_id: fromId, payload: payload });
+          this.emit('webrtc_incoming_call', { from_user_id: fromId, payload: payload });
+          return;
+        }
+        if (type === 'webrtc_answer' && fromId) {
+          var peerEntry = this.peers.get(fromId);
+          if (peerEntry && peerEntry.pc) {
+            peerEntry.pc.setRemoteDescription(new RTCSessionDescription(payload)).catch(function (err) {
+              if (typeof console !== 'undefined' && console.error) console.error('[Gateway] setRemoteDescription(answer) error:', err);
+            });
+          }
+          this.emit(type, { from_user_id: fromId, payload: payload });
+          return;
+        }
+        if (type === 'webrtc_ice' && fromId && payload) {
+          var peerEntryIce = this.peers.get(fromId);
+          if (peerEntryIce && peerEntryIce.pc) {
+            peerEntryIce.pc.addIceCandidate(new RTCIceCandidate(payload)).catch(function (err) {
+              if (typeof console !== 'undefined' && console.error) console.error('[Gateway] addIceCandidate error:', err);
+            });
+          }
+          this.emit(type, { from_user_id: fromId, payload: payload });
+          return;
+        }
+        if (type === 'webrtc_reject' && fromId) {
+          this.pendingOffers.delete(fromId);
+          this.emit(type, { from_user_id: fromId });
+          this.emit('webrtc_call_rejected', { from_user_id: fromId });
+          return;
+        }
+        if (type === 'webrtc_hangup' && fromId) {
+          var entry = this.peers.get(fromId);
+          if (entry) {
+            if (entry.localStream && typeof entry.localStream.getTracks === 'function') entry.localStream.getTracks().forEach(function (t) { t.stop(); });
+            if (entry.pc) try { entry.pc.close(); } catch (_) {}
+            this.peers.delete(fromId);
+          }
+          this.emit(type, { from_user_id: fromId });
+          this.emit('webrtc_call_ended', { from_user_id: fromId });
+          return;
+        }
+        this.emit(type, { from_user_id: message.from_user_id, payload: message.payload });
+        return;
+      }
+
+      if (s !== undefined && typeof s === 'number') this.seq = s;
+      var safeD = d != null && typeof d === 'object' ? d : {};
+      try {
+      switch (op) {
+        case 'hello': {
+          this._clearHelloTimeout();
+          var hiInterval = (d && typeof d.heartbeat_interval === 'number' && d.heartbeat_interval >= 5000) ? d.heartbeat_interval : 45000;
+          if (typeof this.startHeartbeat === 'function') this.startHeartbeat(hiInterval);
+          var tok = typeof API !== 'undefined' && API && typeof API.Token !== 'undefined' && API.Token && typeof API.Token.getAccessToken === 'function' ? API.Token.getAccessToken() : (typeof localStorage !== 'undefined' && localStorage.getItem ? (localStorage.getItem('access_token') || localStorage.getItem('token') || '') : '');
+          if (tok && typeof this.send === 'function') this.send('authenticate', { token: tok });
+          break;
+        }
+        case 'authenticated': {
+          this._clearHelloTimeout();
+          this.authenticated = true;
+          this.sessionId = (d && d.session_id != null) ? d.session_id : null;
+          if (typeof this._resolveConnect === 'function') this._resolveConnect(d && typeof d === 'object' ? d : {});
+          break;
+        }
+        case 'auth_failed': {
+          this._clearHelloTimeout();
+          this.emit('auth_failed', d && typeof d === 'object' ? d : {});
+          if (typeof this._connectReject !== 'function') {
+            this._connectResolve = null;
+            this._connectReject = null;
+            this._connectIntent = false;
+            break;
+          }
+          var rejectFnAuth = this._connectReject;
+          this._connectResolve = null;
+          this._connectReject = null;
+          this._connectIntent = false;
+          try { rejectFnAuth(new Error((d && d.reason != null) ? String(d.reason) : 'Auth failed')); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] auth_failed callback error:', e); }
+          break;
+        }
+
+        case 'heartbeat_ack':
+          this.emit('heartbeat_ack', safeD);
+          break;
+        case 'message_created':
+          this.emit('message', (d && d.message != null) ? d.message : safeD);
+          break;
+        case 'message_updated':
+          this.emit('message_update', safeD);
+          break;
+        case 'message_deleted':
+          this.emit('message_delete', safeD);
+          break;
+        case 'typing_started':
+          this.emit('typing', safeD);
+          break;
+        case 'presence_update':
+          this.emit('presence', safeD);
+          break;
+        case 'server_created':
+          this.emit('server_create', safeD);
+          break;
+        case 'server_updated':
+          this.emit('server_update', safeD);
+          break;
+        case 'server_deleted':
+          this.emit('server_delete', safeD);
+          break;
+        case 'channel_created':
+          this.emit('channel_create', safeD);
+          break;
+        case 'channel_updated':
+          this.emit('channel_update', safeD);
+          break;
+        case 'channel_deleted':
+          this.emit('channel_delete', safeD);
+          break;
+        case 'member_joined':
+          this.emit('member_join', safeD);
+          break;
+        case 'member_left':
+          this.emit('member_leave', safeD);
+          break;
+        case 'member_updated':
+          this.emit('member_update', safeD);
+          break;
+        case 'role_created':
+          this.emit('role_create', safeD);
+          break;
+        case 'role_updated':
+          this.emit('role_update', safeD);
+          break;
+        case 'role_deleted':
+          this.emit('role_delete', safeD);
+          break;
+        case 'reaction_added':
+          this.emit('reaction_add', safeD);
+          break;
+        case 'reaction_removed':
+          this.emit('reaction_remove', safeD);
+          break;
+        case 'error':
+          if (typeof console !== 'undefined' && console.error) console.error('[Gateway] Server error:', safeD);
+          this.emit('error', safeD);
+          break;
+        default:
+          if (t != null && typeof t === 'string' && typeof this.emit === 'function') this.emit(t.toLowerCase(), safeD);
+      }
+      } catch (handleErr) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] handleMessage error:', handleErr); }
+    }
+
+    send(op, data) {
+      if (op == null) return;
+      var isStringOp = typeof op === 'string';
+      var message = isStringOp ? { op: op, d: data != null && typeof data === 'object' ? data : {} } : (op && typeof op === 'object' ? op : { op: 'unknown', d: {} });
+      var opName = isStringOp ? op : (message.op != null ? message.op : 'unknown');
+      var opData = isStringOp ? (data != null ? data : {}) : (message.d != null ? message.d : {});
+      if (this.socket && typeof this.socket.connected === 'boolean' && this.socket.connected && typeof this.socket.emit === 'function') {
+        try { this.socket.emit(opName, opData); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] socket.emit error:', e); }
+        return;
+      }
+      if (this.ws && this.ws.readyState === 1 && typeof this.ws.send === 'function') {
+        try { this.ws.send(JSON.stringify(message)); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] ws.send error:', e); }
+        return;
+      }
+      if (Array.isArray(this.messageQueue)) this.messageQueue.push({ op: opName, data: opData });
+    }
+
+    startHeartbeat(interval) {
+      if (typeof this.stopHeartbeat === 'function') this.stopHeartbeat();
+      var ms = (typeof interval === 'number' && interval >= 5000) ? interval : 45000;
+      var self = this;
+      this.heartbeatInterval = setInterval(function () {
+        if (self.connected && typeof self.send === 'function') self.send('heartbeat', { seq: self.seq });
+      }, ms);
+    }
+
+    stopHeartbeat() {
+      if (this.heartbeatInterval != null) {
+        try { clearInterval(this.heartbeatInterval); } catch (_) {}
+        this.heartbeatInterval = null;
+      }
+    }
+
+    on(event, handler) {
+      if (event == null || typeof handler !== 'function') return;
+      if (!this.eventHandlers || !(this.eventHandlers instanceof Map)) return;
+      if (!this.eventHandlers.has(event)) this.eventHandlers.set(event, []);
+      var list = this.eventHandlers.get(event);
+      if (Array.isArray(list)) list.push(handler);
+    }
+
+    off(event, handler) {
+      if (event == null || !this.eventHandlers || !this.eventHandlers.has(event)) return;
+      var list = this.eventHandlers.get(event);
+      if (!Array.isArray(list)) return;
+      var i = list.indexOf(handler);
+      if (i > -1) list.splice(i, 1);
+    }
+
+    emit(event, data) {
+      if (event == null || !this.eventHandlers || !this.eventHandlers.has(event)) return;
+      var list = this.eventHandlers.get(event);
+      if (!Array.isArray(list) || list.length === 0) return;
+      var self = this;
+      list.forEach(function (fn) {
+        if (typeof fn !== 'function') return;
+        try { fn(data); } catch (err) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] Handler error:', err); }
+      });
+    }
+
+    updatePresence(status, customStatus) {
+      this.send('update_presence', { status, custom_status: customStatus });
+    }
+
+    startTyping(channelId) {
+      this.send('start_typing', { channel_id: channelId });
+    }
+
+    sendMessage(channelId, content, tts, embeds) {
+      this.send('send_message', { channel_id: channelId, content, tts: !!tts, embeds: embeds || [] });
+    }
+
+    editMessage(channelId, messageId, content) {
+      this.send('edit_message', { channel_id: channelId, message_id: messageId, content });
+    }
+
+    deleteMessage(channelId, messageId) {
+      this.send('delete_message', { channel_id: channelId, message_id: messageId });
+    }
+
+    createServer(name, region, icon) {
+      this.send('create_server', { name, region, icon });
+    }
+
+    createChannel(serverId, name, type, parentId, topic) {
+      this.send('create_channel', {
+        server_id: serverId,
+        name,
+        channel_type: type,
+        parent_id: parentId || null,
+        topic: topic || null,
+      });
+    }
+
+    createInvite(channelId, maxUses, maxAge, temporary) {
+      this.send('create_invite', { channel_id: channelId, max_uses: maxUses, max_age: maxAge, temporary: !!temporary });
+    }
+
+    joinServer(inviteCode) {
+      const code = String(inviteCode || '').trim().toUpperCase();
+      if (!code) return;
+      this.send('join_server', { invite_code: code });
+    }
+
+    leaveServer(serverId) {
+      this.send('leave_server', { server_id: serverId });
+    }
+
+    subscribeChannel(channelId) {
+      if (!channelId) return;
+      this._subscribedChannels.add(String(channelId));
+      if (this.socket && this.socket.connected) {
+        this.socket.emit('subscribe', { chat_id: channelId, chatId: channelId });
+        return;
+      }
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'subscribe', chat_id: channelId }));
+      }
+    }
+
+    unsubscribeChannel(channelId) {
+      if (!channelId) return;
+      this._subscribedChannels.delete(String(channelId));
+      if (this.socket && this.socket.connected) {
+        this.socket.emit('unsubscribe', { chat_id: channelId, chatId: channelId });
+        return;
+      }
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'unsubscribe', chat_id: channelId }));
+      }
+    }
+
+    disconnect() {
+      this._connectIntent = false;
+      this._disconnectRequested = true;
+      if (typeof this._clearReconnect === 'function') this._clearReconnect();
+      if (typeof this._clearHelloTimeout === 'function') this._clearHelloTimeout();
+      if (typeof this.stopHeartbeat === 'function') this.stopHeartbeat();
+      if (this.socket && typeof this.socket.disconnect === 'function') {
+        try { this.socket.disconnect(); } catch (_) {}
+        this.socket = null;
+      }
+      if (this.ws) {
+        try { this.ws.close(1000, 'Client disconnect'); } catch (_) {}
+        this.ws = null;
+      }
+      this.connected = false;
+      this.authenticated = false;
+      this._connectResolve = null;
+      this._connectReject = null;
+    }
+  }
+
+  if (typeof window !== 'undefined') window.Gateway = new LibertyGateway();
 })();
+
+
+
+
+
 
