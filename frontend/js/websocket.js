@@ -169,18 +169,17 @@
     }
 
     _resolveConnect(data) {
-      if (typeof this._connectResolve !== 'function') return;
       var resolveFn = this._connectResolve;
       var rejectFn = this._connectReject;
       this._connectResolve = null;
       this._connectReject = null;
       this._connectIntent = false;
       this._clearHelloTimeout();
+      if (typeof resolveFn !== 'function') return;
       var wasReconnected = this._hasConnectedOnce;
       this._hasConnectedOnce = true;
       if (typeof this._resubscribeAll === 'function') this._resubscribeAll();
       if (typeof this._flushQueue === 'function') this._flushQueue();
-      if (typeof resolveFn !== 'function') return;
       var payload = Object.assign({}, data && typeof data === 'object' ? data : {}, { reconnected: wasReconnected });
       try { resolveFn(payload); } catch (e) { if (typeof console !== 'undefined' && console.error) console.error('[Gateway] resolveConnect callback error:', e); }
       if (typeof this.emit === 'function') this.emit('ready', payload);
@@ -403,7 +402,7 @@
           this._clearHelloTimeout();
           this.authenticated = true;
           this.sessionId = (d && d.session_id != null) ? d.session_id : null;
-          if (typeof this._resolveConnect === 'function') this._resolveConnect(d && typeof d === 'object' ? d : {});
+          if (this._connectResolve != null || this._connectReject != null) this._resolveConnect(d && typeof d === 'object' ? d : {});
           break;
         }
         case 'auth_failed': {
