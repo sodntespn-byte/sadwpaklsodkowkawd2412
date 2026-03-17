@@ -50,12 +50,11 @@
       this._hasConnectedOnce = true;
       this._resubscribeAll();
       this._flushQueue();
-      if (typeof resolveFn === 'function') {
-        try {
-          resolveFn({ ...(data || {}), reconnected: wasReconnected });
-        } catch (_) {}
-      }
-      this.emit('ready', { ...(data || {}), reconnected: wasReconnected });
+      const payload = { ...(data || {}), reconnected: wasReconnected };
+      try {
+        resolveFn(payload);
+      } catch (_) {}
+      this.emit('ready', payload);
     }
 
     _clearHelloTimeout() {
@@ -454,6 +453,7 @@
 
   if (typeof window !== 'undefined') window.Gateway = new LibertyGateway();
 })();
+
 
 
 
