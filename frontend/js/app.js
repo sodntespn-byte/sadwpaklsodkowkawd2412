@@ -3394,14 +3394,12 @@ class LibertyApp {
       const cached = MessageCache.get(dm.id);
       if (cached.length > 0) {
         if (this._loadingMessagesChannelId !== dm.id) return;
-        container.innerHTML = '';
-        this.messages.clear();
         const cacheById = new Map();
         cached.forEach(m => {
           const id = m.id ?? m.message_id;
           if (id != null && id !== '') cacheById.set(String(id), { ...m, id: String(id), message_id: String(id) });
         });
-        [...cacheById.values()].forEach(m => this.addMessage(m, false));
+        this.setMessagesFromList([...cacheById.values()]);
       }
       try {
         const messages = await API.DM.getMessages(dm.id, { limit: 50 });
@@ -3425,11 +3423,10 @@ class LibertyApp {
           unique.push({ ...m, id, message_id: id });
         }
         MessageCache.set(dm.id, unique);
-        container.innerHTML = '';
-        this.messages.clear();
         if (unique.length > 0) {
-          unique.forEach(m => this.addMessage(m, false));
+          this.setMessagesFromList(unique);
         } else {
+          container.replaceChildren();
           container.innerHTML = `
                         <div class="welcome-message">
                             <div class="welcome-icon"><span style="font-size:30px;font-weight:700;color:var(--primary-black)">${displayName.charAt(0).toUpperCase()}</span></div>
@@ -3439,9 +3436,7 @@ class LibertyApp {
                     `;
         }
       } catch {
-        if (this.currentChannel?.id === dm.id && cached.length === 0) {
-          /* mantém welcome */
-        }
+        if (this.currentChannel?.id === dm.id && cached.length === 0) {}
       }
       this._loadingMessagesChannelId = null;
     }
@@ -4918,14 +4913,12 @@ class LibertyApp {
     const cached = MessageCache.get(channelId);
     if (cached.length > 0) {
       if (this._loadingMessagesChannelId !== channelId) return;
-      container.innerHTML = '';
-      this.messages.clear();
       const cacheById = new Map();
       cached.forEach(m => {
         const id = m.id ?? m.message_id;
         if (id != null && id !== '') cacheById.set(String(id), { ...m, id: String(id), message_id: String(id) });
       });
-      [...cacheById.values()].forEach(msg => this.addMessage(msg, false));
+      this.setMessagesFromList([...cacheById.values()]);
       this.scrollToBottom();
     }
     try {
@@ -4943,7 +4936,6 @@ class LibertyApp {
         const tB = (b.created_at && new Date(b.created_at).getTime()) || 0;
         return tA - tB;
       });
-      // Uma única mensagem por id (evita duplicados ao dar F5)
       const seenIds = new Set();
       const unique = [];
       for (const m of merged) {
@@ -4955,9 +4947,8 @@ class LibertyApp {
       MessageCache.set(channelId, unique);
       if (this._loadingMessagesChannelId !== channelId) return;
       this._loadingMessagesChannelId = null;
-      container.innerHTML = '';
-      this.messages.clear();
       if (unique.length === 0) {
+        container.replaceChildren();
         container.innerHTML = `
                     <div class="welcome-message">
                         <div class="welcome-icon"><i class="fas fa-message"></i></div>
@@ -4967,7 +4958,7 @@ class LibertyApp {
                 `;
         return;
       }
-      unique.forEach(msg => this.addMessage(msg, false));
+      this.setMessagesFromList(unique);
       this.scrollToBottom();
     } catch {
       this._loadingMessagesChannelId = null;
@@ -5031,6 +5022,110 @@ class LibertyApp {
     return d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
+  _createDateDivider(messageDate) {
+    const d = new Date(messageDate);
+    const div = document.createElement('div');
+    div.className = 'message-date-divider';
+    div.dataset.date = d.toDateString();
+    div.innerHTML = `<span class="message-date-divider-label">${this.escapeHtml(this._messageDateLabel(d))}</span>`;
+    return div;
+  }
+
+  _getLastMessageInContainer(container) {
+    const last = container.querySelector('.message-group:last-of-type');
+    if (!last) return null;
+    return { authorId: last.dataset.authorId || '', author: last.dataset.author || '' };
+  }
+
+  _createMessageNode(message, lastMessageInfo) {
+    const msgId = String(message.id || message.message_id || '');
+    const time = new Date(message.created_at || Date.now());
+    const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = this._formatDate(time);
+    const isToday = time.toDateString() === new Date().toDateString();
+    const headerTimeStr = isToday ? timeStr : `${dateStr} ${timeStr}`;
+    const authorName =
+      message.author?.username || message.author_username || message.username || this.currentUser?.username || 'User';
+    const authorForAvatar = { username: authorName, avatar_url: message.avatar_url || message.author?.avatar || message.author?.avatar_url || message.avatar };
+    const authorAvatarUrl = this._getAvatarUrlForUser(authorForAvatar);
+    const authorAvatarFallback = this._getPlaceholderAvatarUrl(authorName);
+    const avatarLetter = authorName.charAt(0).toUpperCase();
+    const isSelf =
+      this.currentUser && (message.author?.id === this.currentUser.id || message.author_id === this.currentUser.id);
+    const authorId = message.author?.id || message.author_id || '';
+    const sameAuthorById = lastMessageInfo && authorId && lastMessageInfo.authorId === String(authorId);
+    const sameAuthorByName = lastMessageInfo && lastMessageInfo.author === authorName;
+    const isContinuation = !!(sameAuthorById || sameAuthorByName);
+    const isMentioned =
+      this.currentUser &&
+      ((message.content && message.content.includes('@[' + this.currentUser.id + ']')) ||
+        (message.mentions && Array.isArray(message.mentions) && message.mentions.includes(this.currentUser.id)));
+    const authorColor = this._authorColor(authorName);
+    const messageEl = document.createElement('div');
+    messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
+    messageEl.dataset.message = msgId;
+    messageEl.dataset.author = authorName;
+    messageEl.dataset.date = time.toDateString();
+    if (authorId) messageEl.dataset.authorId = String(authorId);
+    messageEl.innerHTML = `
+      <div class="message-avatar">
+        <img src="${this.escapeHtml(authorAvatarUrl)}" alt="${this.escapeHtml(authorName)}" data-fallback-avatar="${authorAvatarFallback ? this.escapeHtml(authorAvatarFallback) : ''}">
+        <span class="message-avatar-fallback">${this.escapeHtml(avatarLetter)}</span>
+      </div>
+      <div class="message-content${isMentioned ? ' message-mentioned' : ''}">
+        ${message.replyTo ? `<div class="message-reply-ref"><i class="fas fa-arrow-turn-up"></i> A responder a <strong>${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
+        ${!isContinuation ? `<div class="message-header"><span class="message-author ${isSelf ? 'message-author--self' : ''}" style="color:${isSelf ? '#fff' : this.escapeHtml(authorColor)}">${this.escapeHtml(authorName)}</span><span class="message-timestamp" title="${time.toLocaleString()}">${headerTimeStr}</span></div>` : ''}
+        ${message.content != null ? `<div class="message-text">${this._parseMessageContent(message.content || '')}</div>` : ''}
+        ${this._renderMessageAttachmentsHtml(message.attachments)}
+        <div class="reactions-container"></div>
+      </div>
+      <div class="message-actions">
+        <button class="btn-icon" data-action="react" title="Reação"><i class="fas fa-face-smile"></i></button>
+        <button class="btn-icon" data-action="reply" title="Responder"><i class="fas fa-arrow-turn-up"></i></button>
+        ${isSelf ? '<button class="btn-icon" data-action="edit" title="Editar"><i class="fas fa-pen"></i></button>' : ''}
+        <button class="btn-icon" data-action="more" title="Mais"><i class="fas fa-ellipsis"></i></button>
+      </div>
+    `;
+    const authorPayload = {
+      user_id: message.author?.id || message.author_id,
+      username: authorName,
+      nickname: message.author?.nickname,
+      status: message.author?.status || 'online',
+    };
+    messageEl.querySelectorAll('.message-actions .btn-icon').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const action = btn.dataset.action;
+        const mid = messageEl.dataset.message;
+        const stored = this.messages.get(mid);
+        if (action === 'react') this.showEmojiPicker(btn, emoji => this.addReaction(mid, emoji));
+        else if (action === 'reply') this.startReply(mid, (stored && stored.authorName) || authorName, (stored && stored.content) || message.content);
+        else if (action === 'edit') this.startEditMessage(mid, (stored && stored.content) || message.content);
+        else if (action === 'more') this.showMessageContextMenu(messageEl, e);
+      });
+    });
+    const avatarEl = messageEl.querySelector('.message-avatar');
+    const authorEl = messageEl.querySelector('.message-author');
+    if (avatarEl) {
+      avatarEl.style.cursor = 'pointer';
+      avatarEl.addEventListener('click', e => { e.stopPropagation(); this.showProfileCard(authorPayload, e); });
+    }
+    if (authorEl) {
+      authorEl.style.cursor = 'pointer';
+      authorEl.addEventListener('click', e => { e.stopPropagation(); this.showProfileCard(authorPayload, e); });
+    }
+    if (!this.reactions.has(msgId)) this.reactions.set(msgId, []);
+    this.renderReactions(messageEl, msgId);
+    const avatarImg = messageEl.querySelector('.message-avatar img');
+    if (avatarImg) {
+      avatarImg.addEventListener('error', function () {
+        const fallback = this.dataset.fallbackAvatar;
+        if (fallback) { this.onerror = null; this.src = fallback; } else { this.style.display = 'none'; const s = this.nextElementSibling; if (s) s.style.display = 'flex'; }
+      });
+    }
+    return messageEl;
+  }
+
   _ensureDateDividerBefore(container, messageDate) {
     const last = container.lastElementChild;
     let prevDate = null;
@@ -5068,129 +5163,15 @@ class LibertyApp {
     if (container.querySelector(`[data-message="${msgId}"]`)) return;
     const welcomeEl = container.querySelector('.welcome-message');
     if (welcomeEl && !container.querySelector('.message-group')) welcomeEl.style.display = 'none';
-
     const time = new Date(message.created_at || Date.now());
     this._ensureDateDividerBefore(container, time);
-    const timeStr = time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const dateStr = this._formatDate(time);
-    const isToday = time.toDateString() === new Date().toDateString();
-    const headerTimeStr = isToday ? timeStr : `${dateStr} ${timeStr}`;
-    const authorName =
-      message.author?.username || message.author_username || message.username || this.currentUser?.username || 'User';
-    const authorForAvatar = { username: authorName, avatar_url: message.avatar_url || message.author?.avatar || message.author?.avatar_url || message.avatar };
-    const authorAvatarUrl = this._getAvatarUrlForUser(authorForAvatar);
-    const authorAvatarFallback = this._getPlaceholderAvatarUrl(authorName);
-    const avatarLetter = authorName.charAt(0).toUpperCase();
-    const isSelf =
-      this.currentUser && (message.author?.id === this.currentUser.id || message.author_id === this.currentUser.id);
-
-    const authorId = message.author?.id || message.author_id || '';
-    const lastGroup = container.querySelector('.message-group:last-of-type');
-    const sameAuthorById = authorId && lastGroup?.dataset.authorId === String(authorId);
-    const sameAuthorByName = lastGroup && lastGroup.dataset.author === authorName;
-    const isContinuation = lastGroup && (sameAuthorById || sameAuthorByName);
-
-    const isMentioned =
-      this.currentUser &&
-      ((message.content && message.content.includes('@[' + this.currentUser.id + ']')) ||
-        (message.mentions && Array.isArray(message.mentions) && message.mentions.includes(this.currentUser.id)));
-
-    const authorColor = this._authorColor(authorName);
-    const messageEl = document.createElement('div');
-    messageEl.className = 'message-group' + (isContinuation ? ' message-group--continuation' : '');
-    messageEl.dataset.message = msgId;
-    messageEl.dataset.author = authorName;
-    messageEl.dataset.date = time.toDateString();
-    if (authorId) messageEl.dataset.authorId = String(authorId);
-
-    messageEl.innerHTML = `
-            <div class="message-avatar">
-                <img src="${this.escapeHtml(authorAvatarUrl)}" alt="${this.escapeHtml(authorName)}" data-fallback-avatar="${authorAvatarFallback ? this.escapeHtml(authorAvatarFallback) : ''}">
-                <span class="message-avatar-fallback">${this.escapeHtml(avatarLetter)}</span>
-            </div>
-            <div class="message-content${isMentioned ? ' message-mentioned' : ''}">
-                ${message.replyTo ? `<div class="message-reply-ref"><i class="fas fa-arrow-turn-up"></i> A responder a <strong>${this.escapeHtml(message.replyTo.author)}</strong></div>` : ''}
-                ${!isContinuation ? `<div class="message-header"><span class="message-author ${isSelf ? 'message-author--self' : ''}" style="color:${isSelf ? '#fff' : this.escapeHtml(authorColor)}">${this.escapeHtml(authorName)}</span><span class="message-timestamp" title="${time.toLocaleString()}">${headerTimeStr}</span></div>` : ''}
-                ${message.content != null ? `<div class="message-text">${this._parseMessageContent(message.content || '')}</div>` : ''}
-                ${this._renderMessageAttachmentsHtml(message.attachments)}
-                <div class="reactions-container"></div>
-            </div>
-            <div class="message-actions">
-                <button class="btn-icon" data-action="react" title="Reação"><i class="fas fa-face-smile"></i></button>
-                <button class="btn-icon" data-action="reply" title="Responder"><i class="fas fa-arrow-turn-up"></i></button>
-                ${isSelf ? '<button class="btn-icon" data-action="edit" title="Editar"><i class="fas fa-pen"></i></button>' : ''}
-                <button class="btn-icon" data-action="more" title="Mais"><i class="fas fa-ellipsis"></i></button>
-            </div>
-        `;
-
-    // Message action button handlers (read id from element so replacePendingWithMessage keeps actions correct)
-    messageEl.querySelectorAll('.message-actions .btn-icon').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const action = btn.dataset.action;
-        const mid = messageEl.dataset.message;
-        const stored = this.messages.get(mid);
-        if (action === 'react') {
-          this.showEmojiPicker(btn, emoji => this.addReaction(mid, emoji));
-        } else if (action === 'reply') {
-          this.startReply(mid, (stored && stored.authorName) || authorName, (stored && stored.content) || message.content);
-        } else if (action === 'edit') {
-          this.startEditMessage(mid, (stored && stored.content) || message.content);
-        } else if (action === 'more') {
-          this.showMessageContextMenu(messageEl, e);
-        }
-      });
-    });
-
-    // Open profile card when clicking avatar or author name
-    const authorPayload = {
-      user_id: message.author?.id || message.author_id,
-      username: authorName,
-      nickname: message.author?.nickname,
-      status: message.author?.status || 'online',
-    };
-    const avatarEl = messageEl.querySelector('.message-avatar');
-    const authorEl = messageEl.querySelector('.message-author');
-    if (avatarEl) {
-      avatarEl.style.cursor = 'pointer';
-      avatarEl.addEventListener('click', e => {
-        e.stopPropagation();
-        this.showProfileCard(authorPayload, e);
-      });
-    }
-    if (authorEl) {
-      authorEl.style.cursor = 'pointer';
-      authorEl.addEventListener('click', e => {
-        e.stopPropagation();
-        this.showProfileCard(authorPayload, e);
-      });
-    }
-
-    // Store message data (usar msgId consistente para evitar duplicados)
+    const lastInfo = this._getLastMessageInContainer(container);
+    const messageEl = this._createMessageNode(message, lastInfo);
     const toStore = { ...message, id: msgId, message_id: msgId };
-    this.messages.set(msgId, { ...toStore, authorName, isSelf });
+    this.messages.set(msgId, { ...toStore, authorName: messageEl.dataset.author, isSelf: !!messageEl.querySelector('.message-author--self') });
     const cid = this.currentChannel?.id || this.currentChannel?.channelId;
     if (cid) MessageCache.add(cid, toStore);
-
-    // Init reactions
-    if (!this.reactions.has(msgId)) this.reactions.set(msgId, []);
-    this.renderReactions(messageEl, msgId);
-
     container.appendChild(messageEl);
-    const avatarImg = messageEl.querySelector('.message-avatar img');
-    if (avatarImg) {
-      avatarImg.addEventListener('error', function () {
-        const fallback = this.dataset.fallbackAvatar;
-        if (fallback) {
-          this.onerror = null;
-          this.src = fallback;
-        } else {
-          this.style.display = 'none';
-          const s = this.nextElementSibling;
-          if (s) s.style.display = 'flex';
-        }
-      });
-    }
     this._injectYouTubeEmbeds(messageEl, message.content);
     this._injectSpotifyEmbeds(messageEl, message.content);
     this._injectInviteEmbeds(messageEl);
@@ -8136,9 +8117,33 @@ this._injectYouTubeEmbeds(msgEl, newContent);
   setMessagesFromList(list) {
     const container = document.getElementById('messages-list');
     if (!container) return;
-    container.innerHTML = '';
+    const arr = Array.isArray(list) ? list : [];
     this.messages.clear();
-    (list || []).forEach(msg => this.addMessage(msg, false));
+    if (arr.length === 0) {
+      container.replaceChildren();
+      this._injectEmbedsInAllMessages();
+      this.scrollToBottom();
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    let prev = null;
+    for (let i = 0; i < arr.length; i++) {
+      const msg = arr[i];
+      const time = new Date(msg.created_at || Date.now());
+      const prevDateKey = prev ? new Date(prev.created_at || 0).toDateString() : null;
+      const thisDateKey = time.toDateString();
+      if (!prevDateKey || prevDateKey !== thisDateKey) frag.appendChild(this._createDateDivider(time));
+      const lastInfo = prev
+        ? { authorId: String(prev.author_id || prev.author?.id || ''), author: prev.author_username || prev.author?.username || prev.username || 'User' }
+        : null;
+      frag.appendChild(this._createMessageNode(msg, lastInfo));
+      prev = msg;
+    }
+    container.replaceChildren(frag);
+    arr.forEach(m => {
+      const id = String(m.id ?? m.message_id ?? '');
+      if (id) this.messages.set(id, { ...m, id, message_id: id });
+    });
     this._injectEmbedsInAllMessages();
     this.scrollToBottom();
   }
