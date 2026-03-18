@@ -22,6 +22,61 @@ npm start
 
 O servidor sobe com `node backend/server.js` e serve a API em `/api/v1` e os ficheiros estáticos da pasta `frontend/`. Variáveis de ambiente (`.env` ou painel do host): `DATABASE_URL`, `JWT_SECRET`.
 
+## 🧠 Cache de Mensagens (RAM)
+
+- As mensagens **não são persistidas** no PostgreSQL.
+- O backend mantém um cache em memória por `chatId` com limite fixo (**100 mensagens por canal**).
+- **Ao reiniciar o servidor, todas as mensagens somem.**
+
+## 🔐 Criptografia AES-256-GCM
+
+- O conteúdo das mensagens é guardado no cache **já criptografado** (AES-256-GCM).
+- Defina `ENCRYPTION_KEY` com **32 bytes** (recomendado: 64 hex ou 32 bytes raw/base64 conforme suportado).
+- O frontend recebe o conteúdo já descriptografado pelo backend (somente a API vê texto plano).
+
+## 🎨 Onde o dev de UI mexe (sem quebrar chamadas/estado)
+
+- Cores/tema: `frontend/css/main.css` (variáveis `:root`).
+- Componentes visuais: `frontend/css/components.css`.
+- Header call UI: `frontend/index.html` (`#header-call`) + `frontend/css/components.css` (classes `.header-call*`).
+- Lógica de estado (sockets/chamadas): `frontend/js/app.js` (seção `_setupVoiceCallHandlers` e call events).
+
+## ✅ Filtro “Unknown” nas DMs
+
+- A API filtra DMs com destinatário inválido na raiz em `GET /api/v1/users/@me/channels`.
+- O frontend também ignora itens sem `recipient.username` válido no carregamento da lista.
+
+## 🧠 Cache de Mensagens (RAM)
+
+- As mensagens **não são persistidas** no PostgreSQL.
+- O backend mantém um cache em memória por `chatId`.
+- **As mensagens somem ao reiniciar** o servidor (cold start/redeploy).
+- Limite: **últimas 100 mensagens por canal**.
+
+## 🔐 Criptografia AES-256-GCM
+
+- O conteúdo é guardado **criptografado mesmo em cache**.
+- Variável obrigatória: `ENCRYPTION_KEY` (32 bytes).
+  - Aceita `hex` (64 chars) ou `base64` (32 bytes) ou `utf8` de 32 chars.
+- Formato armazenado: prefixo `AESGCM:` + JSON com `iv`, `authTag`, `encryptedData` (base64).
+- Implementação: `backend/src/lib/message-crypto.js`.
+
+## 🎨 Onde o dev de UI deve mexer (sem quebrar estado)
+
+- Cores/tema: `frontend/css/main.css` (variáveis `:root`).
+- Componentes visuais: `frontend/css/components.css`.
+- UI principal: `frontend/index.html`.
+- Estado/lógica: `frontend/js/app.js` (evitar misturar com CSS/HTML).
+
+## 📦 Estrutura modular (handoff)
+
+- Backend:
+  - `backend/config/database.js`
+  - `backend/services/messageCacheService.js`
+  - `backend/routes/`
+  - `backend/controllers/`
+  - `backend/middlewares/`
+
 **Onde está cada coisa:** ver **[ESTRUTURA.md](ESTRUTURA.md)** (mapa do projeto).  
 **Deploy e documentação:** pasta **[docs/](docs/)** (SECURITY, SQUARECLOUD, DATABASE).
 

@@ -32,7 +32,6 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import bcrypt from 'bcrypt';
 import { Server as SocketIOServer } from 'socket.io';
-import { Pool } from 'pg';
 import jwt from 'jsonwebtoken';
 import WebSocket, { WebSocketServer } from 'ws';
 import crypto from 'node:crypto';
@@ -41,6 +40,8 @@ import multer from 'multer';
 import config from './src/config.js';
 import { logger } from './src/lib/logger.js';
 import { sanitizeAttachmentFilename, isAllowedFile } from './src/lib/upload-security.js';
+import { createDatabase } from './config/database.js';
+import { createMessageCache } from './services/messageCache.js';
 
 /** Em produção não expõe mensagens de erro internas ao cliente (evita vazamento de stack/paths). */
 function safeApiMessage(err, fallback) {
@@ -66,8 +67,8 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import { encrypt, decrypt } from './src/lib/message-crypto.js';
-const messageCache = new Map();
 const MAX_CACHE_PER_CHANNEL = 100;
+const messageCache = createMessageCache({ encrypt, decrypt, maxPerChannel: MAX_CACHE_PER_CHANNEL });
 
 /**
  * Garante que a mensagem existe no banco. Se não existir, insere.
@@ -125,134 +126,7 @@ function computeContentXpByUser(messagesByChannel) {
   return byUser;
 }
 
-// --- db (inline para deploy sem pasta db/)
-// URL do banco: variáveis de ambiente ou fallback para Square Cloud (quando o painel não injeta env)
-const _DB_ENV_KEYS = [
-  'DATABASE_URL',
-  'BANCO_DADOS',
-  'DB_URL',
-  'Database',
-  'DATABASE',
-  'database_url',
-  'Database_URL',
-  'DatabaseUrl',
-  'POSTGRES_URL',
-  'POSTGRESQL_URL',
-  'POSTGRES_CONNECTION',
-  'SQL_DATABASE_URL',
-  'NEON_DATABASE_URL',
-  'DB_CONNECTION_STRING',
-  'DATABASE_CONNECTION',
-  'CONNECTION_STRING',
-  'PG_URL',
-  'POSTGRESQL_URI',
-];
-// Fallback quando nenhuma variável existe (ex.: Square Cloud sem Environment). Troque a password no Neon depois.
-const _DB_FALLBACK_URL =
-  'postgresql://neondb_owner:npg_A8hiDJ0qGCMs@ep-icy-art-ameh1o7b-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
-function _dbGetUrl() {
-  for (const key of _DB_ENV_KEYS) {
-    const v = process.env[key];
-    if (v && typeof v === 'string' && v.trim().toLowerCase().startsWith('postgres')) {
-      return v.trim();
-    }
-  }
-  for (const [k, v] of Object.entries(process.env)) {
-    if (v && typeof v === 'string' && v.trim().toLowerCase().startsWith('postgresql://')) {
-      return v.trim();
-    }
-  }
-  return _DB_FALLBACK_URL.trim();
-}
-function _dbLoadMtlsOptions() {
-  try {
-    const CERT_PATH = path.join(__dirname, 'certificate.pem');
-    const raw = fs.readFileSync(CERT_PATH, 'utf8');
-    const keyMatch = raw.match(/-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]+?-----END (?:RSA )?PRIVATE KEY-----/);
-    const certMatch = raw.match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/);
-    if (!keyMatch || !certMatch) return null;
-    return { rejectUnauthorized: false, key: keyMatch[0], cert: certMatch[0] };
-  } catch {
-    return null;
-  }
-}
-let _dbPool = null;
-let _dbConnected = false;
-async function _dbConnect() {
-  let rawUrl = _dbGetUrl();
-  if (!rawUrl || !rawUrl.startsWith('postgres')) {
-    if (process.env.NODE_ENV === 'production') {
-      logger.error('LIBERTY', 'DATABASE_URL é obrigatória em produção. Defina no ambiente.');
-      process.exitCode = 1;
-    } else {
-      logger.warn('[LIBERTY] DATABASE_URL não definida — banco desativado');
-    }
-    return null;
-  }
-  // Neon: remover channel_binding=require (causa falha em muitos ambientes Node)
-  if (rawUrl.includes('channel_binding=require')) {
-    rawUrl = rawUrl
-      .replace(/&channel_binding=require/g, '')
-      .replace(/\?channel_binding=require&?/g, '?')
-      .replace(/\?&/, '?');
-  }
-  // Reduzir aviso do pg sobre sslmode (verify-full semantics)
-  if (rawUrl.includes('sslmode=require') && !rawUrl.includes('uselibpqcompat')) {
-    rawUrl = rawUrl.includes('?') ? rawUrl + '&uselibpqcompat=true' : rawUrl + '?uselibpqcompat=true';
-  }
-  if (!_dbPool) {
-    const isLocalhost = /@localhost[\s:]|@127\.0\.0\.1[\s:]/.test(rawUrl);
-    const isNeon = /\.neon\.tech\//.test(rawUrl);
-    const poolConfig = { connectionString: rawUrl, max: 10, idleTimeoutMillis: 30000, connectionTimeoutMillis: 15000 };
-    if (!isLocalhost) {
-      const mtls = _dbLoadMtlsOptions();
-      poolConfig.ssl = mtls || (isNeon ? { rejectUnauthorized: false } : { rejectUnauthorized: true });
-    }
-    _dbPool = new Pool(poolConfig);
-  }
-  const tryConnect = async () => {
-    const client = await _dbPool.connect();
-    await client.query('SELECT 1');
-    client.release();
-  };
-  try {
-    await tryConnect();
-    _dbConnected = true;
-    logger.info('[LIBERTY] PostgreSQL conectado');
-    return _dbPool;
-  } catch (err) {
-    logger.warn('[LIBERTY] PostgreSQL primeira tentativa:', err.message);
-    _dbConnected = false;
-    await new Promise(r => setTimeout(r, 2500));
-    try {
-      await tryConnect();
-      _dbConnected = true;
-      logger.info('[LIBERTY] PostgreSQL conectado (2ª tentativa)');
-      return _dbPool;
-    } catch (err2) {
-      logger.warn('[LIBERTY] PostgreSQL indisponível:', err2.message);
-      _dbConnected = false;
-      return null;
-    }
-  }
-}
-const db = {
-  query(text, params) {
-    if (!_dbPool) throw new Error('Banco não configurado. Defina DATABASE_URL.');
-    return _dbPool.query(text, params);
-  },
-  connect: _dbConnect,
-  isConfigured: () => Boolean(_dbGetUrl()),
-  isConnected: () => _dbConnected && _dbPool,
-  getPool: () => _dbPool,
-  /** Tenta conectar se configurado mas ainda não conectado (útil após cold start). */
-  async ensureConnected() {
-    if (!_dbGetUrl()) return false;
-    if (_dbConnected && _dbPool) return true;
-    await _dbConnect();
-    return _dbConnected && _dbPool;
-  },
-};
+const db = createDatabase({ logger, rootDir, isProduction: config.isProduction });
 
 // Schema PostgreSQL inlined para deploy (evita dependência de db/init.js e db/schema.sql no runtime)
 const LIBERTY_SCHEMA_SQL = `
@@ -970,17 +844,17 @@ async function start() {
     logger.error('unhandledRejection', reason instanceof Error ? reason : String(reason));
   });
 
-  let hasDbUrl = _dbGetUrl().startsWith('postgres');
+  let hasDbUrl = db.getUrl().startsWith('postgres');
   if (process.env.NODE_ENV === 'production' && !hasDbUrl) {
     // Square Cloud e outros hosts podem injetar env com pequeno atraso — esperar e tentar de novo
     logger.warn('[LIBERTY] À espera de DATABASE_URL (3s)…');
     await new Promise(r => setTimeout(r, 3000));
     const envPath = path.join(process.cwd(), '.env');
     if (fs.existsSync(envPath)) dotenv.config({ path: envPath, override: false });
-    hasDbUrl = _dbGetUrl().startsWith('postgres');
+    hasDbUrl = db.getUrl().startsWith('postgres');
   }
   if (process.env.NODE_ENV === 'production' && !hasDbUrl) {
-    const checked = _DB_ENV_KEYS.join(', ');
+    const checked = 'DATABASE_URL';
     logger.error(
       'LIBERTY',
       `Base de dados obrigatória em produção. Defina uma destas variáveis no painel (Environment / Variáveis): ${checked}. Square Cloud: na app → Configurações → Environment → Adicionar variável → Nome: DATABASE_URL → Valor: a sua connection string PostgreSQL. Depois Redeploy.`
@@ -1065,18 +939,7 @@ async function start() {
     const chatId = message.chat_id || message.channel_id;
     if (!chatId) return;
     const id = message.id || message.message_id;
-    const raw = messageCache.get(String(chatId)) || null;
-    let msg = null;
-    if (raw) {
-      const decoded = decrypt(raw);
-      try {
-        const list = JSON.parse(typeof decoded === 'string' ? decoded : '[]');
-        if (Array.isArray(list)) {
-          msg = id ? (list.find(m => String(m.id || m.message_id) === String(id)) || null) : (list[list.length - 1] || null);
-        }
-      } catch (_) {}
-    }
-    if (!msg) msg = message;
+    const msg = messageCache.last(String(chatId), id) || message;
     ws.emitMessage(msg);
     const payload = { type: 'message', data: msg };
     io.to(String(chatId)).emit('message', payload);
@@ -1314,20 +1177,7 @@ async function start() {
         timestamp: createdAt,
         created_at: createdAt,
       };
-      {
-        const key = String(chatId);
-        const raw = messageCache.get(key) || null;
-        let list = [];
-        if (raw) {
-          const decoded = decrypt(raw);
-          try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
-        }
-        if (!Array.isArray(list)) list = [];
-        list = list.filter(m => String(m.id || m.message_id) !== String(saved.id));
-        list.push(saved);
-        if (list.length > MAX_CACHE_PER_CHANNEL) list = list.slice(-MAX_CACHE_PER_CHANNEL);
-        messageCache.set(key, encrypt(JSON.stringify(list)));
-      }
+      messageCache.push(chatId, saved);
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
       return res.status(201).json({
@@ -1349,13 +1199,7 @@ async function start() {
       let chatId = null;
       if (db.isConfigured() && db.isConnected()) chatId = await getDefaultChatId();
       if (!chatId) chatId = 'default-chat';
-      const raw = messageCache.get(String(chatId)) || null;
-      let list = [];
-      if (raw) {
-        const decoded = decrypt(raw);
-        try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
-      }
-      if (!Array.isArray(list)) list = [];
+      const list = messageCache.list(chatId);
       const response = list.map(m => ({
         id: m.id,
         content: String(m.content || '').trim(),
@@ -1417,20 +1261,7 @@ async function start() {
           timestamp: createdAt,
           created_at: createdAt,
         };
-        {
-          const key = String(chatId);
-          const raw = messageCache.get(key) || null;
-          let list = [];
-          if (raw) {
-            const decoded = decrypt(raw);
-            try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
-          }
-          if (!Array.isArray(list)) list = [];
-          list = list.filter(m => String(m.id || m.message_id) !== String(saved.id));
-          list.push(saved);
-          if (list.length > MAX_CACHE_PER_CHANNEL) list = list.slice(-MAX_CACHE_PER_CHANNEL);
-          messageCache.set(key, encrypt(JSON.stringify(list)));
-        }
+        messageCache.push(chatId, saved);
         const emit = req.app.locals.emitMessage;
         if (emit && chatId) emit({ ...saved });
         return res.status(201).json({
@@ -1607,20 +1438,7 @@ async function start() {
           created_at: createdAt,
           attachments: savedAttachments.length ? savedAttachments : undefined,
         };
-        {
-          const key = String(chatId);
-          const raw = messageCache.get(key) || null;
-          let list = [];
-          if (raw) {
-            const decoded = decrypt(raw);
-            try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
-          }
-          if (!Array.isArray(list)) list = [];
-          list = list.filter(m => String(m.id || m.message_id) !== String(saved.id));
-          list.push(saved);
-          if (list.length > MAX_CACHE_PER_CHANNEL) list = list.slice(-MAX_CACHE_PER_CHANNEL);
-          messageCache.set(key, encrypt(JSON.stringify(list)));
-        }
+        messageCache.push(chatId, saved);
         const emit = req.app.locals.emitMessage;
         if (emit && chatId) emit({ ...saved });
         const response = { success: true, message: saved };
@@ -1642,13 +1460,7 @@ async function start() {
         chatId = (await resolveChannelToChatId(userId, channelId)) || (await getDefaultChatId());
       }
       if (!chatId) chatId = String(channelId);
-      const raw = messageCache.get(String(chatId)) || null;
-      let list = [];
-      if (raw) {
-        const decoded = decrypt(raw);
-        try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
-      }
-      if (!Array.isArray(list)) list = [];
+      const list = messageCache.list(chatId);
       let result = list.map(m => ({
         id: m.id,
         channel_id: channelId,

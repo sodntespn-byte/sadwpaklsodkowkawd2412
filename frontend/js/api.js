@@ -524,21 +524,7 @@ const PinAPI = {
   },
 };
 
-// Call API (WebRTC — registo em BD)
-const CallAPI = {
-  async start(calleeId, chatId) {
-    return apiRequest('/calls', {
-      method: 'POST',
-      body: { callee_id: calleeId, chat_id: chatId || undefined },
-    });
-  },
-  async end(callId) {
-    return apiRequest(`/calls/${callId}`, {
-      method: 'PATCH',
-      body: { status: 'ended' },
-    });
-  },
-};
+const CallAPI = null;
 
 // Ban API (apenas admins configurados no backend)
 const BanAPI = {

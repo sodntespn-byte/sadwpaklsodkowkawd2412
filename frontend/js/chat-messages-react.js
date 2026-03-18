@@ -19,7 +19,7 @@
     const byId = new Map();
     [...(cached || []), ...(Array.isArray(apiList) ? apiList : [])].forEach(function (m) {
       const id = m.id || m.message_id;
-      if (id) byId.set(id, m);
+      if (id) byId.set(String(id), m);
     });
     return Array.from(byId.values()).sort(function (a, b) {
       const tA = (a.created_at && new Date(a.created_at).getTime()) || 0;
@@ -52,17 +52,28 @@
         if (!channelId || !app) return;
         var cacheKey = channelId && String(channelId).indexOf('dm:') === 0 ? String(channelId).substring(3) : channelId;
         var cached = MessageCache.get(cacheKey);
-        setMessages(cached || []);
-        app.setMessagesFromList(cached || []);
+        var cachedList = Array.isArray(cached) ? cached : [];
+        var cachedUnique = cachedList.filter(function (msg, index, self) {
+          var id = msg && (msg.id || msg.message_id);
+          if (!id) return true;
+          return self.findIndex(function (m) { return String(m && (m.id || m.message_id)) === String(id); }) === index;
+        });
+        setMessages(cachedUnique);
+        app.setMessagesFromList(cachedUnique);
         API.Message.list(channelId, { limit: 50 })
           .then(function (apiList) {
-            var merged = mergeAndSort(cached, apiList);
+            var merged = mergeAndSort(cachedUnique, apiList);
+            merged = merged.filter(function (msg, index, self) {
+              var id = msg && (msg.id || msg.message_id);
+              if (!id) return true;
+              return self.findIndex(function (m) { return String(m && (m.id || m.message_id)) === String(id); }) === index;
+            });
             MessageCache.set(cacheKey, merged);
             setMessages(merged);
             app.setMessagesFromList(merged);
           })
           .catch(function () {
-            app.setMessagesFromList(cached || []);
+            app.setMessagesFromList(cachedUnique);
           });
       },
       [channelId, app]

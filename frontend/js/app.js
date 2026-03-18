@@ -3064,8 +3064,8 @@ class LibertyApp {
     this._setupCallResizeHandle();
     const closeVoiceCall = () => {
       this._roomCallStop();
-      if (this._voiceCallState.callId && typeof API !== 'undefined' && API.Call) {
-        API.Call.end(this._voiceCallState.callId).catch(() => {});
+      if (this._callSocket && this._voiceCallState.callId) {
+        try { this._callSocket.emit('call:end', { callId: this._voiceCallState.callId }); } catch (_) {}
       }
       if (this._voiceCallState.stream) {
         this._voiceCallState.stream.getTracks().forEach(t => t.stop());
@@ -8566,7 +8566,12 @@ this._injectYouTubeEmbeds(msgEl, newContent);
   setMessagesFromList(list) {
     const container = document.getElementById('messages-list');
     if (!container) return;
-    const arr = Array.isArray(list) ? list : [];
+    const arr0 = Array.isArray(list) ? list : [];
+    const arr = arr0.filter((msg, index, self) => {
+      const id = msg && (msg.id ?? msg.message_id);
+      if (!id) return true;
+      return self.findIndex(m => String(m && (m.id ?? m.message_id)) === String(id)) === index;
+    });
     if (container.querySelector('[data-message^="pending-"]')) {
       for (let i = 0; i < arr.length; i++) {
         const m = arr[i];
