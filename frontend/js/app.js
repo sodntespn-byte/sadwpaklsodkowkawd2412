@@ -1924,6 +1924,393 @@ class LibertyApp {
     pendingIceCandidates: [],
   };
 
+  _roomCallState = {
+    socket: null,
+    roomId: null,
+    peers: new Map(),
+    peerIceQueue: new Map(),
+    remoteStreams: new Map(),
+    participants: new Map(),
+    localStream: null,
+    startedAt: 0,
+    durationTimer: null,
+    localSpeaking: false,
+    localVadRaf: null,
+  };
+
+  _roomCallUrl() {
+    if (typeof window !== 'undefined' && window.VOICEROOM_URL) return String(window.VOICEROOM_URL);
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : 'localhost';
+    const proto = (typeof window !== 'undefined' && window.location && window.location.protocol === 'https:') ? 'https://' : 'http://';
+    if (host === 'localhost' || host === '127.0.0.1') return proto + host + ':4000';
+    return proto + host + ':4000';
+  }
+
+  _roomCallToken() {
+    try {
+      if (typeof API !== 'undefined' && API.Token && API.Token.getAccessToken) return API.Token.getAccessToken();
+    } catch (_) {}
+    try {
+      return localStorage.getItem('access_token') || localStorage.getItem('token') || '';
+    } catch (_) {}
+    return '';
+  }
+
+  _roomCallStopVad() {
+    if (this._roomCallState.localVadRaf) {
+      cancelAnimationFrame(this._roomCallState.localVadRaf);
+      this._roomCallState.localVadRaf = null;
+    }
+    this._roomCallState.localSpeaking = false;
+  }
+
+  _roomCallStartVad(stream) {
+    this._roomCallStopVad();
+    if (!stream) return;
+    let audioContext = null;
+    let analyser = null;
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const src = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.6;
+      src.connect(analyser);
+    } catch (_) {
+      return;
+    }
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const onTh = 28;
+    const offTh = 22;
+    const emitMinMs = 250;
+    let lastEmit = 0;
+    const loop = () => {
+      if (!analyser) return;
+      analyser.getByteFrequencyData(dataArray);
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+      const avg = sum / dataArray.length;
+      const now = Date.now();
+      const prev = this._roomCallState.localSpeaking;
+      const next = prev ? avg > offTh : avg > onTh;
+      if (next !== prev && now - lastEmit >= emitMinMs) {
+        this._roomCallState.localSpeaking = next;
+        lastEmit = now;
+        const s = this._roomCallState.socket;
+        if (s && s.emit) s.emit('speaking-state-changed', { roomId: this._roomCallState.roomId, isSpeaking: next });
+      }
+      const p = document.getElementById('call-avatar-me');
+      if (p) p.classList.toggle('call-neo__avatar--speaking', next);
+      this._roomCallState.localVadRaf = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  _roomCallRenderDuration() {
+    const titleEl = document.getElementById('voice-call-channel-name');
+    if (!titleEl || !this._roomCallState.startedAt) return;
+    const ms = Date.now() - this._roomCallState.startedAt;
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const mm = String(Math.floor(s / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    const base = titleEl.dataset.baseTitle || titleEl.textContent || 'Chamada';
+    titleEl.textContent = base + ' • ' + mm + ':' + ss;
+  }
+
+  _roomCallSetParticipants(participants) {
+    this._roomCallState.participants.clear();
+    (participants || []).forEach((p) => {
+      if (!p || !p.socketId) return;
+      this._roomCallState.participants.set(String(p.socketId), p);
+    });
+  }
+
+  _roomCallUpdateParticipant(socketId, patch) {
+    const id = String(socketId);
+    const prev = this._roomCallState.participants.get(id) || null;
+    if (!prev) return;
+    this._roomCallState.participants.set(id, { ...prev, ...(patch || {}) });
+  }
+
+  _roomCallEnsureGridSize() {
+    const grid = document.getElementById('call-neo-grid');
+    if (!grid) return;
+    const count = 1 + Array.from(this._roomCallState.participants.keys()).filter((id) => this._roomCallState.socket && id !== this._roomCallState.socket.id).length;
+    grid.classList.remove('call-neo__grid--1', 'call-neo__grid--2', 'call-neo__grid--3', 'call-neo__grid--4');
+    if (count <= 1) grid.classList.add('call-neo__grid--1');
+    else if (count === 2) grid.classList.add('call-neo__grid--2');
+    else if (count === 3) grid.classList.add('call-neo__grid--3');
+    else grid.classList.add('call-neo__grid--4');
+  }
+
+  _roomCallRenderGrid() {
+    const grid = document.getElementById('call-neo-grid');
+    if (!grid) return;
+    const socket = this._roomCallState.socket;
+    const localName = this.currentUser?.username || 'Você';
+    const localId = socket ? socket.id : 'local';
+    const localAvatar = this._getAvatarUrlForUser({ username: localName, avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar });
+    const makeTile = (id, name, avatarUrl, stream, isLocal) => {
+      const tile = document.createElement('div');
+      tile.className = 'call-neo__tile' + (isLocal ? ' call-neo__tile--local' : '');
+      tile.id = 'call-tile-' + id;
+      const v = document.createElement('video');
+      v.className = 'call-neo__tile-video webrtc-video hidden';
+      v.autoplay = true;
+      v.playsInline = true;
+      if (isLocal) v.muted = true;
+      const ph = document.createElement('div');
+      ph.className = 'call-neo__tile-placeholder';
+      const ring = document.createElement('div');
+      ring.className = 'call-neo__avatar-ring';
+      if (avatarUrl) {
+        const img = document.createElement('img');
+        img.className = 'webrtc-remote-avatar';
+        img.src = avatarUrl;
+        img.alt = '';
+        ring.appendChild(img);
+      } else {
+        const span = document.createElement('span');
+        span.className = 'call-neo__avatar-initial';
+        span.textContent = String(name || 'U').charAt(0).toUpperCase();
+        ring.appendChild(span);
+      }
+      const label = document.createElement('span');
+      label.className = 'call-neo__tile-name';
+      label.textContent = name || 'User';
+      ph.appendChild(ring);
+      ph.appendChild(label);
+      tile.appendChild(v);
+      tile.appendChild(ph);
+      if (stream) {
+        v.srcObject = stream;
+        v.classList.remove('hidden');
+      }
+      return tile;
+    };
+    const oldScroll = grid.scrollTop;
+    grid.replaceChildren();
+    const localTile = makeTile(localId, localName, localAvatar, this._roomCallState.localStream, true);
+    grid.appendChild(localTile);
+    const ids = Array.from(this._roomCallState.participants.keys());
+    for (let i = 0; i < ids.length; i++) {
+      const sid = ids[i];
+      if (socket && sid === socket.id) continue;
+      const p = this._roomCallState.participants.get(sid);
+      const name = p?.name || 'User';
+      const avatarUrl = '';
+      const stream = this._roomCallState.remoteStreams.get(sid) || null;
+      const t = makeTile(sid, name, avatarUrl, stream, false);
+      if (p && p.isSpeaking) t.classList.add('call-neo__tile--speaking');
+      grid.appendChild(t);
+    }
+    grid.scrollTop = oldScroll;
+    this._roomCallEnsureGridSize();
+  }
+
+  _roomCallCreatePeer(remoteSocketId, isInitiator) {
+    if (!remoteSocketId) return;
+    const socket = this._roomCallState.socket;
+    if (!socket || !socket.emit) return;
+    const rid = String(remoteSocketId);
+    if (this._roomCallState.peers.has(rid)) return;
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    this._roomCallState.peers.set(rid, pc);
+    this._roomCallState.peerIceQueue.set(rid, []);
+    const ls = this._roomCallState.localStream;
+    if (ls) ls.getTracks().forEach((t) => pc.addTrack(t, ls));
+    pc.ontrack = (event) => {
+      const stream = event.streams && event.streams[0];
+      if (!stream) return;
+      this._roomCallState.remoteStreams.set(rid, stream);
+      this._roomCallRenderGrid();
+      Promise.resolve().then(() => {
+        const el = document.getElementById('call-tile-' + rid);
+        const v = el ? el.querySelector('video') : null;
+        if (v) v.play().catch(() => {});
+      });
+    };
+    pc.onicecandidate = (e) => {
+      if (!e.candidate) return;
+      const pl = e.candidate.toJSON ? e.candidate.toJSON() : { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex };
+      socket.emit('rtc-ice-candidate', { roomId: this._roomCallState.roomId, targetSocketId: rid, candidate: pl });
+    };
+    if (isInitiator) {
+      pc.createOffer()
+        .then((offer) => pc.setLocalDescription(offer))
+        .then(() => {
+          if (!pc.localDescription) return;
+          socket.emit('rtc-offer', { roomId: this._roomCallState.roomId, targetSocketId: rid, sdp: pc.localDescription.toJSON() });
+        })
+        .catch(() => {});
+    }
+  }
+
+  _roomCallClosePeer(remoteSocketId) {
+    const rid = String(remoteSocketId);
+    const pc = this._roomCallState.peers.get(rid);
+    if (pc) {
+      try { pc.close(); } catch (_) {}
+      this._roomCallState.peers.delete(rid);
+    }
+    this._roomCallState.peerIceQueue.delete(rid);
+    this._roomCallState.remoteStreams.delete(rid);
+  }
+
+  _roomCallStop() {
+    const s = this._roomCallState.socket;
+    this._roomCallStopVad();
+    if (this._roomCallState.durationTimer) {
+      clearInterval(this._roomCallState.durationTimer);
+      this._roomCallState.durationTimer = null;
+    }
+    this._roomCallState.startedAt = 0;
+    if (this._roomCallState.localStream) {
+      this._roomCallState.localStream.getTracks().forEach((t) => t.stop());
+      this._roomCallState.localStream = null;
+    }
+    Array.from(this._roomCallState.peers.keys()).forEach((id) => this._roomCallClosePeer(id));
+    this._roomCallState.participants.clear();
+    if (s && s.disconnect) {
+      try { s.disconnect(); } catch (_) {}
+    }
+    this._roomCallState.socket = null;
+    this._roomCallState.roomId = null;
+    const grid = document.getElementById('call-neo-grid');
+    if (grid) grid.replaceChildren();
+  }
+
+  _roomCallStart(roomId, baseTitle) {
+    if (!roomId) return;
+    if (!window.io) {
+      this.showToast('Falha ao iniciar chamada.', 'error');
+      return;
+    }
+    const voiceView = document.getElementById('voice-call-view');
+    if (voiceView) {
+      voiceView.classList.remove('hidden');
+      voiceView.classList.add('call-neo--visible');
+      voiceView.classList.remove('call-neo--hidden');
+    }
+    const titleEl = document.getElementById('voice-call-channel-name');
+    if (titleEl) {
+      titleEl.dataset.baseTitle = baseTitle || titleEl.textContent || 'Chamada';
+      titleEl.textContent = titleEl.dataset.baseTitle;
+    }
+    this._updateVoiceCallParticipantsBar();
+    const token = this._roomCallToken();
+    const url = this._roomCallUrl();
+    this._roomCallStop();
+    this._roomCallState.roomId = String(roomId);
+    this._roomCallState.socket = window.io(url, { transports: ['websocket'], auth: { accessToken: token } });
+    const socket = this._roomCallState.socket;
+    this._roomCallState.startedAt = Date.now();
+    this._roomCallState.durationTimer = setInterval(() => this._roomCallRenderDuration(), 1000);
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
+      this._roomCallState.localStream = stream;
+      this._roomCallStartVad(stream);
+      this._roomCallRenderGrid();
+      socket.emit('join-room', { roomId: this._roomCallState.roomId });
+    }).catch(() => {
+      this.showToast('Permissão de microfone negada.', 'error');
+      this._roomCallStop();
+    });
+    socket.on('room-state', (payload) => {
+      if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
+      this._roomCallSetParticipants(payload.participants || []);
+      const list = payload.participants || [];
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i];
+        if (!p || !p.socketId) continue;
+        if (p.socketId !== socket.id) this._roomCallCreatePeer(p.socketId, true);
+      }
+      this._roomCallRenderGrid();
+      this._updateVoiceCallParticipantsBar();
+    });
+    socket.on('participant-joined', (payload) => {
+      if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
+      const p = payload.participant;
+      if (p && p.socketId) this._roomCallState.participants.set(String(p.socketId), p);
+      if (p && p.socketId && p.socketId !== socket.id) this._roomCallCreatePeer(p.socketId, true);
+      this._roomCallRenderGrid();
+      this._updateVoiceCallParticipantsBar();
+    });
+    socket.on('participant-left', (payload) => {
+      if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
+      const sid = payload.socketId;
+      if (!sid) return;
+      this._roomCallState.participants.delete(String(sid));
+      this._roomCallClosePeer(String(sid));
+      this._roomCallRenderGrid();
+      this._updateVoiceCallParticipantsBar();
+    });
+    socket.on('rtc-offer', (payload) => {
+      if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
+      if (payload.targetSocketId !== socket.id) return;
+      const from = String(payload.fromSocketId);
+      if (!this._roomCallState.peers.has(from)) this._roomCallCreatePeer(from, false);
+      const pc = this._roomCallState.peers.get(from);
+      if (!pc) return;
+      pc.setRemoteDescription(new RTCSessionDescription(payload.sdp))
+        .then(() => pc.createAnswer())
+        .then((ans) => pc.setLocalDescription(ans))
+        .then(() => {
+          const q = this._roomCallState.peerIceQueue.get(from) || [];
+          this._roomCallState.peerIceQueue.set(from, []);
+          q.forEach((c) => pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
+          if (!pc.localDescription) return;
+          socket.emit('rtc-answer', { roomId: this._roomCallState.roomId, targetSocketId: from, sdp: pc.localDescription.toJSON() });
+        })
+        .catch(() => {});
+    });
+    socket.on('rtc-answer', (payload) => {
+      if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
+      if (payload.targetSocketId !== socket.id) return;
+      const from = String(payload.fromSocketId);
+      const pc = this._roomCallState.peers.get(from);
+      if (!pc) return;
+      pc.setRemoteDescription(new RTCSessionDescription(payload.sdp)).then(() => {
+        const q = this._roomCallState.peerIceQueue.get(from) || [];
+        this._roomCallState.peerIceQueue.set(from, []);
+        q.forEach((c) => pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
+      }).catch(() => {});
+    });
+    socket.on('rtc-ice-candidate', (payload) => {
+      if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
+      if (payload.targetSocketId !== socket.id) return;
+      const from = String(payload.fromSocketId);
+      const pc = this._roomCallState.peers.get(from);
+      if (!pc || !payload.candidate) return;
+      if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        const q = this._roomCallState.peerIceQueue.get(from) || [];
+        q.push(payload.candidate);
+        this._roomCallState.peerIceQueue.set(from, q);
+        return;
+      }
+      pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(() => {});
+    });
+    socket.on('mute-state-changed', (payload) => {
+      if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
+      this._roomCallUpdateParticipant(payload.socketId, { isMuted: !!payload.isMuted });
+      this._roomCallRenderGrid();
+    });
+    socket.on('speaking-state-changed', (payload) => {
+      if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
+      this._roomCallUpdateParticipant(payload.socketId, { isSpeaking: !!payload.isSpeaking });
+      const tile = document.getElementById('call-tile-' + String(payload.socketId));
+      if (tile) tile.classList.toggle('call-neo__tile--speaking', !!payload.isSpeaking);
+    });
+    socket.on('disconnect', () => {
+      this._roomCallStop();
+      const voiceView2 = document.getElementById('voice-call-view');
+      if (voiceView2) {
+        voiceView2.classList.add('hidden');
+        voiceView2.classList.add('call-neo--hidden');
+        voiceView2.classList.remove('call-neo--visible');
+      }
+    });
+  }
+
   _callDrainPendingIceCandidates() {
     const pc = this._voiceCallState.pc;
     const queue = this._voiceCallState.pendingIceCandidates;
@@ -2488,95 +2875,12 @@ class LibertyApp {
       this.showToast('Abra uma DM com alguém para ligar.', 'error');
       return;
     }
-    const voiceView = document.getElementById('voice-call-view');
-    this._voiceCallState.stream = null;
-    try {
-      this._voiceCallState.stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    } catch (_) {
-      this._voiceCallState.stream = null;
-    }
-    if (!this._voiceCallState.stream) {
-      this.showToast('É necessário permitir o microfone para ligar.', 'error');
-      return;
-    }
-    this._voiceCallState.targetUserId = targetId;
-    this._voiceCallState.videoEnabled = false;
-    this._voiceCallState.pendingIceCandidates = [];
-    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    if (this._voiceCallState.stream)
-      this._voiceCallState.stream.getTracks().forEach(track => pc.addTrack(track, this._voiceCallState.stream));
-    pc.ontrack = e => this._attachRemoteTrack(e);
-    pc.onicecandidate = e => {
-      if (!e.candidate || !this.gateway) return;
-      const pl = e.candidate.toJSON ? e.candidate.toJSON() : { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex };
-      this.gateway.send('webrtc_ice', { target_user_id: this._voiceCallState.targetUserId, payload: pl });
-    };
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        this._webrtcStopLocalAudioLevel();
-        this._webrtcClearRemote();
-        const vv = document.getElementById('voice-call-view');
-        if (vv) {
-          vv.classList.add('hidden');
-          vv.classList.add('call-neo--hidden');
-          vv.classList.remove('call-neo--visible');
-        }
-        const localV = document.getElementById('webrtc-local-video');
-        if (localV) localV.srcObject = null;
-      }
-    };
-    this._voiceCallState.pc = pc;
-    pc.createOffer()
-      .then(offer => pc.setLocalDescription(offer))
-      .then(() => {
-        if (this.gateway && pc.localDescription)
-          this.gateway.send('webrtc_offer', {
-            target_user_id: this._voiceCallState.targetUserId,
-            payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-          });
-      })
-      .catch(() => {});
-    if (voiceView) {
-      voiceView.classList.remove('hidden');
-      voiceView.classList.add('call-neo--visible');
-      voiceView.classList.remove('call-neo--hidden');
-    }
-    this._webrtcClearRemote();
-    const placeholder = document.getElementById('webrtc-remote-placeholder');
-    const placeholderText = placeholder?.querySelector('.webrtc-placeholder-text');
-    if (placeholderText) placeholderText.textContent = 'A chamar...';
-    if (placeholder) placeholder.classList.add('webrtc-placeholder-connecting');
-    const localV = document.getElementById('webrtc-local-video');
-    const localFallback = document.getElementById('webrtc-local-fallback-icon');
-    if (localV) {
-      localV.srcObject = this._voiceCallState.stream;
-      localV.muted = true;
-      localV.playsInline = true;
-      localV.autoplay = true;
-      const str = this._voiceCallState.stream;
-      const vT = str && (str.getVideoTracks ? str.getVideoTracks() : str.getTracks().filter(t => t.kind === 'video'));
-      const hasVideo = vT && vT.length > 0;
-      localV.classList.toggle('hidden', !hasVideo);
-      if (localFallback) localFallback.classList.toggle('hidden', !!hasVideo);
-    } else if (localFallback) localFallback.classList.remove('hidden');
-    if (this._voiceCallState.stream) this._webrtcRunLocalAudioLevel(this._voiceCallState.stream);
-    const titleEl = document.getElementById('voice-call-channel-name');
     const other = (this.currentChannel?.recipients || []).find(r => r.id === targetId);
     const displayTitle = other
       ? (other.global_name ? `${other.username} • ${other.global_name}` : other.username)
       : 'Chamada';
-    if (titleEl) titleEl.textContent = displayTitle;
-    const remoteLabel = document.getElementById('webrtc-remote-label');
-    if (remoteLabel) remoteLabel.textContent = other?.username || 'Aguardando...';
-    this._updateVoiceCallParticipantsBar();
-    this._updateWebrtcControlButtons();
-    if (typeof API !== 'undefined' && API.Call) {
-      API.Call.start(targetId, ch?.id)
-        .then(r => {
-          if (r && r.id) this._voiceCallState.callId = r.id;
-        })
-        .catch(() => {});
-    }
+    this._voiceCallState.targetUserId = targetId;
+    this._roomCallStart('dm:' + String(ch.id || ch.channelId || ''), displayTitle);
   }
 
   _setupCallResizeHandle() {
@@ -2616,10 +2920,7 @@ class LibertyApp {
     if (!btn) return;
     this._setupCallResizeHandle();
     const closeVoiceCall = () => {
-      const targetId = this._voiceCallState.targetUserId;
-      if (targetId && this.gateway) {
-        this.gateway.send('webrtc_hangup', { target_user_id: targetId });
-      }
+      this._roomCallStop();
       if (this._voiceCallState.callId && typeof API !== 'undefined' && API.Call) {
         API.Call.end(this._voiceCallState.callId).catch(() => {});
       }
@@ -2686,55 +2987,29 @@ class LibertyApp {
     const videoBtn = document.getElementById('voice-call-video');
     if (videoBtn)
       videoBtn.addEventListener('click', async () => {
-        if (!this._voiceCallState.stream) {
-          await this._requestCallMedia();
+        const s = this._roomCallState.socket;
+        const ls = this._roomCallState.localStream;
+        if (!s || !ls) return;
+        const tracks = ls.getVideoTracks ? ls.getVideoTracks() : ls.getTracks().filter((t) => t.kind === 'video');
+        if (tracks.length === 0) {
+          navigator.mediaDevices.getUserMedia({ video: true }).then((vs) => {
+            const vt = vs.getVideoTracks ? vs.getVideoTracks()[0] : vs.getTracks().filter((t) => t.kind === 'video')[0];
+            if (!vt) return;
+            ls.addTrack(vt);
+            Array.from(this._roomCallState.peers.values()).forEach((pc) => {
+              try { pc.addTrack(vt, ls); } catch (_) {}
+              pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => {
+                if (!pc.localDescription) return;
+                const target = Array.from(this._roomCallState.peers.entries()).find(([, p]) => p === pc)?.[0];
+                if (target) s.emit('rtc-offer', { roomId: this._roomCallState.roomId, targetSocketId: target, sdp: pc.localDescription.toJSON() });
+              }).catch(() => {});
+            });
+            this._roomCallRenderGrid();
+          }).catch(() => {});
           return;
         }
-        if (!this._voiceCallState.pc) return;
-        const stream = this._voiceCallState.stream;
-        const videoTracks = stream.getVideoTracks ? stream.getVideoTracks() : stream.getTracks().filter(t => t.kind === 'video');
-        if (videoTracks.length === 0) {
-          try {
-            const videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-            const vTracks = videoStream.getVideoTracks ? videoStream.getVideoTracks() : videoStream.getTracks().filter(t => t.kind === 'video');
-            const videoTrack = vTracks[0];
-            if (!videoTrack) return;
-            this._voiceCallState.stream.addTrack(videoTrack);
-            this._voiceCallState.pc.addTrack(videoTrack, this._voiceCallState.stream);
-            this._voiceCallState.videoEnabled = true;
-            const offer = await this._voiceCallState.pc.createOffer();
-            await this._voiceCallState.pc.setLocalDescription(offer);
-            if (this.gateway && this._voiceCallState.pc.localDescription)
-              this.gateway.send('webrtc_offer', {
-                target_user_id: this._voiceCallState.targetUserId,
-                payload: { type: this._voiceCallState.pc.localDescription.type, sdp: this._voiceCallState.pc.localDescription.sdp },
-              });
-            const localV = document.getElementById('webrtc-local-video');
-            if (localV) {
-              localV.srcObject = this._voiceCallState.stream;
-              localV.classList.remove('hidden');
-            }
-            const localFallback = document.getElementById('webrtc-local-fallback-icon');
-            if (localFallback) localFallback.classList.add('hidden');
-            this._playCallSound('camera_on');
-            this._updateWebrtcControlButtons();
-          } catch (e) {
-            this.showToast('Não foi possível ativar a câmara.', 'error');
-          }
-          return;
-        }
-        this._voiceCallState.videoEnabled = !this._voiceCallState.videoEnabled;
-        const track = videoTracks[0];
-        track.enabled = this._voiceCallState.videoEnabled;
-        const localV = document.getElementById('webrtc-local-video');
-        if (localV) {
-          localV.style.opacity = this._voiceCallState.videoEnabled ? '1' : '0.3';
-          localV.classList.toggle('hidden', !this._voiceCallState.videoEnabled);
-        }
-        const localFallback = document.getElementById('webrtc-local-fallback-icon');
-        if (localFallback) localFallback.classList.toggle('hidden', this._voiceCallState.videoEnabled);
-        this._playCallSound(this._voiceCallState.videoEnabled ? 'camera_on' : 'camera_off');
-        this._updateWebrtcControlButtons();
+        tracks[0].enabled = !tracks[0].enabled;
+        this._roomCallRenderGrid();
       });
     const muteRemoteBtn = document.getElementById('voice-call-mute-remote');
     if (muteRemoteBtn) {
@@ -2756,102 +3031,46 @@ class LibertyApp {
     const screenshareBtn = document.getElementById('voice-call-screenshare');
     if (screenshareBtn) {
       screenshareBtn.addEventListener('click', async () => {
-        const pc = this._voiceCallState.pc;
-        if (!pc) return;
-        if (this._voiceCallState.displayStream) {
-          this._voiceCallState.displayStream.getTracks().forEach(t => t.stop());
-          this._voiceCallState.displayStream = null;
-          const senders = pc.getSenders();
-          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) {
-            const s = this._voiceCallState.stream;
-            const vt = s && (s.getVideoTracks ? s.getVideoTracks()[0] : s.getTracks().filter(t => t.kind === 'video')[0]) || null;
-            const newTrack = this._voiceCallState.videoEnabled && s ? vt : null;
-            videoSender.replaceTrack(newTrack).then(async () => {
-              const offer = await pc.createOffer();
-              await pc.setLocalDescription(offer);
-              if (this.gateway && pc.localDescription)
-                this.gateway.send('webrtc_offer', {
-                  target_user_id: this._voiceCallState.targetUserId,
-                  payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-                });
-            }).catch(() => {});
-          }
-          if (this.gateway) this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
+        const s = this._roomCallState.socket;
+        const ls = this._roomCallState.localStream;
+        if (!s || !ls) return;
+        if (this._roomCallState.displayStream) {
+          this._roomCallState.displayStream.getTracks().forEach((t) => t.stop());
+          this._roomCallState.displayStream = null;
+          this._roomCallRenderGrid();
           screenshareBtn.classList.remove('active');
           screenshareBtn.classList.remove('call-neo__ctrl--active');
           screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
           screenshareBtn.querySelector('i').className = 'fas fa-display';
           return;
         }
-        try {
-          const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-          this._voiceCallState.displayStream = displayStream;
-          const vTracks = displayStream.getVideoTracks ? displayStream.getVideoTracks() : displayStream.getTracks().filter(t => t.kind === 'video');
-          const videoTrack = vTracks[0];
-          if (!videoTrack) return;
-          const senders = pc.getSenders();
-          const videoSender = senders.find(s => s.track && s.track.kind === 'video');
-          if (videoSender) {
-            await videoSender.replaceTrack(videoTrack);
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            if (this._voiceCallState.targetUserId && this.gateway && pc.localDescription)
-              this.gateway.send('webrtc_offer', {
-                target_user_id: this._voiceCallState.targetUserId,
-                payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-              });
-          } else {
-            pc.addTrack(videoTrack, displayStream);
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            if (this._voiceCallState.targetUserId && this.gateway && pc.localDescription)
-              this.gateway.send('webrtc_offer', {
-                target_user_id: this._voiceCallState.targetUserId,
-                payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-              });
-          }
-          if (this._voiceCallState.targetUserId && this.gateway)
-            this.gateway.send('stream_started', { target_user_id: this._voiceCallState.targetUserId });
+        navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }).then((ds) => {
+          this._roomCallState.displayStream = ds;
+          const vt = ds.getVideoTracks ? ds.getVideoTracks()[0] : ds.getTracks().filter((t) => t.kind === 'video')[0];
+          if (!vt) return;
+          Array.from(this._roomCallState.peers.entries()).forEach(([target, pc]) => {
+            const sender = pc.getSenders().find((x) => x.track && x.track.kind === 'video');
+            if (sender && sender.replaceTrack) sender.replaceTrack(vt).catch(() => {});
+            pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => {
+              if (!pc.localDescription) return;
+              s.emit('rtc-offer', { roomId: this._roomCallState.roomId, targetSocketId: target, sdp: pc.localDescription.toJSON() });
+            }).catch(() => {});
+          });
           screenshareBtn.classList.add('active');
           screenshareBtn.classList.add('call-neo__ctrl--active');
           screenshareBtn.querySelector('span').textContent = 'Parar partilha';
           screenshareBtn.querySelector('i').className = 'fas fa-display';
-          this._playCallSound('screen_share');
-          videoTrack.onended = () => {
-            if (this._voiceCallState.displayStream === displayStream) {
-              this._voiceCallState.displayStream = null;
-              const senders = pc.getSenders();
-              const vs = senders.find(s => s.track && s.track.kind === 'video');
-              if (vs) {
-                const str = this._voiceCallState.stream;
-                const nt = str ? (str.getVideoTracks ? str.getVideoTracks()[0] : str.getTracks().filter(t => t.kind === 'video')[0]) || null : null;
-                vs.replaceTrack(nt).then(async () => {
-                  const offer = await pc.createOffer();
-                  await pc.setLocalDescription(offer);
-                  if (this.gateway && pc.localDescription)
-                    this.gateway.send('webrtc_offer', {
-                      target_user_id: this._voiceCallState.targetUserId,
-                      payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp },
-                    });
-                }).catch(() => {});
-              }
-              if (this.gateway)
-                this.gateway.send('stream_stopped', { target_user_id: this._voiceCallState.targetUserId });
+          vt.onended = () => {
+            if (this._roomCallState.displayStream === ds) {
+              this._roomCallState.displayStream = null;
               screenshareBtn.classList.remove('active');
               screenshareBtn.classList.remove('call-neo__ctrl--active');
               screenshareBtn.querySelector('span').textContent = 'Compartilhar tela';
               screenshareBtn.querySelector('i').className = 'fas fa-display';
             }
           };
-        } catch (err) {
-          this.showToast(
-            err.name === 'NotAllowedError'
-              ? 'Compartilhamento de tela cancelado.'
-              : 'Não foi possível compartilhar a tela.',
-            'error'
-          );
-        }
+          this._roomCallRenderGrid();
+        }).catch(() => {});
       });
     }
   }

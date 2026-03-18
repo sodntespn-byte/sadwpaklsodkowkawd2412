@@ -91,9 +91,20 @@ export function initSocketServer(
       (socket as unknown as AuthenticatedSocket).userId = payload.sub;
       (socket as unknown as AuthenticatedSocket).userName = payload.name ?? "User";
       next();
-    } catch {
-      next(new Error("Invalid token"));
+      return;
+    } catch {}
+
+    if (env.LIBERTY_JWT_SECRET) {
+      try {
+        const payload = jwt.verify(token, env.LIBERTY_JWT_SECRET) as { sub: string };
+        (socket as unknown as AuthenticatedSocket).userId = payload.sub;
+        (socket as unknown as AuthenticatedSocket).userName = "User";
+        next();
+        return;
+      } catch {}
     }
+
+    next(new Error("Invalid token"));
   });
 
   io.on("connection", (socket) => {
