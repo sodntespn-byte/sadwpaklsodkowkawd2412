@@ -388,47 +388,6 @@
         }
         return;
       }
-            }).catch(function (err) {
-              if (typeof console !== 'undefined' && console.error) console.error('[Gateway] setRemoteDescription(answer) error:', err);
-            });
-          }
-          this.emit(type, { from_user_id: fromId, payload: payload });
-          return;
-        }
-        if (type === 'webrtc_ice' && fromId && payload) {
-          var peerEntryIce = this.peers.get(fromId);
-          if (peerEntryIce && peerEntryIce.pc) {
-            var cand = payload && typeof payload === 'object' ? payload : {};
-            if (!peerEntryIce.pc.remoteDescription || !peerEntryIce.pc.remoteDescription.type) {
-              if (!peerEntryIce.iceQueue) peerEntryIce.iceQueue = [];
-              peerEntryIce.iceQueue.push(cand);
-            } else {
-              peerEntryIce.pc.addIceCandidate(new RTCIceCandidate(cand)).catch(function () {});
-            }
-          }
-          this.emit(type, { from_user_id: fromId, payload: payload });
-          return;
-        }
-        if (type === 'webrtc_reject' && fromId) {
-          this.pendingOffers.delete(fromId);
-          this.emit(type, { from_user_id: fromId });
-          this.emit('webrtc_call_rejected', { from_user_id: fromId });
-          return;
-        }
-        if (type === 'webrtc_hangup' && fromId) {
-          var entry = this.peers.get(fromId);
-          if (entry) {
-            if (entry.localStream && typeof entry.localStream.getTracks === 'function') entry.localStream.getTracks().forEach(function (t) { t.stop(); });
-            if (entry.pc) try { entry.pc.close(); } catch (_) {}
-            this.peers.delete(fromId);
-          }
-          this.emit(type, { from_user_id: fromId });
-          this.emit('webrtc_call_ended', { from_user_id: fromId });
-          return;
-        }
-        this.emit(type, { from_user_id: message.from_user_id, payload: message.payload });
-        return;
-      }
 
       if (s !== undefined && typeof s === 'number') this.seq = s;
       var safeD = d != null && typeof d === 'object' ? d : {};
