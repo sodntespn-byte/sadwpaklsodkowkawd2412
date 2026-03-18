@@ -2286,35 +2286,33 @@ async function start() {
           });
         }
 
-        const dmChats = await db.query(
-          `SELECT c.id AS chat_id FROM chats c
-           INNER JOIN chat_members cm ON cm.chat_id = c.id
-           WHERE c.type = 'dm' AND cm.user_id = $1::uuid`,
+        const dmRows = await db.query(
+          `SELECT c.id AS chat_id, u.id AS recipient_id, u.username AS recipient_username, u.avatar_url AS recipient_avatar_url
+           FROM chats c
+           INNER JOIN chat_members me ON me.chat_id = c.id AND me.user_id = $1::uuid
+           LEFT JOIN chat_members other ON other.chat_id = c.id AND other.user_id != $1::uuid
+           LEFT JOIN users u ON u.id = other.user_id
+           WHERE c.type = 'dm'`,
           [userId]
         );
-        for (const row of dmChats.rows) {
-          const other = await db.query(
-            `SELECT u.id, u.username, u.avatar_url FROM chat_members cm
-             INNER JOIN users u ON u.id = cm.user_id
-             WHERE cm.chat_id = $1::uuid AND cm.user_id != $2::uuid`,
-            [row.chat_id, userId]
-          );
-          const u = other.rows[0];
-          if (u) {
-            channels.push({
-              id: String(row.chat_id),
-              type: 'dm',
-              name: null,
-              recipients: [
-                {
-                  id: String(u.id),
-                  username: u.username,
-                  avatar_url: u.avatar_url || null,
-                  avatar: u.avatar_url || null,
-                },
-              ],
-            });
+        for (const row of dmRows.rows) {
+          if (!row.recipient_id) {
+            console.log('Chat sem destinatário encontrado:', String(row.chat_id));
+            continue;
           }
+          channels.push({
+            id: String(row.chat_id),
+            type: 'dm',
+            name: null,
+            recipients: [
+              {
+                id: String(row.recipient_id),
+                username: row.recipient_username || 'Unknown',
+                avatar_url: row.recipient_avatar_url || null,
+                avatar: row.recipient_avatar_url || null,
+              },
+            ],
+          });
         }
       }
 
