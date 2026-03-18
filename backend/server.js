@@ -902,21 +902,37 @@ app.use(
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         "script-src": [
-          "'self'", 
-          "https://cdn.socket.io", 
-          "'unsafe-inline'", 
-          "https://unpkg.com"
+          "'self'",
+          "'unsafe-inline'",
+          "https://unpkg.com",
+          "https://cdn.socket.io"
         ],
         "connect-src": [
-          "'self'", 
-          "https://cdn.socket.io", 
-          "wss:", 
-          "ws:", 
-          "https://unpkg.com", 
+          "'self'",
+          "ws:",
+          "wss:",
+          "https://unpkg.com",
+          "https://cdn.socket.io",
           "https://www.youtube.com"
         ],
-        "img-src": ["'self'", "data:", "blob:", "https:"],
-        "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'",
+          "https://fonts.googleapis.com",
+          "https://cdnjs.cloudflare.com"
+        ],
+        "img-src": [
+          "'self'",
+          "data:",
+          "blob:",
+          "https:",
+          "http:"
+        ],
+        "font-src": [
+          "'self'",
+          "https://cdnjs.cloudflare.com",
+          "https://fonts.gstatic.com"
+        ],
       },
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -2422,6 +2438,7 @@ async function start() {
         created_at: row.created_at,
       });
     } catch (err) {
+      console.error(err);
       logger.error('POST /api/v1/calls', err);
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar chamada') });
     }
@@ -2449,6 +2466,7 @@ async function start() {
       }
       return res.status(200).json(r.rows[0]);
     } catch (err) {
+      console.error(err);
       logger.error('PATCH /api/v1/calls/:id', err);
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao atualizar chamada') });
     }

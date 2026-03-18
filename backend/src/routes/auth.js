@@ -173,4 +173,11 @@ export function registerAuthRoutes(router, deps) {
       return res.status(500).json({ message: err.message || 'Erro ao fazer login' });
     }
   });
+
+  router.post('/logout', (req, res) => {
+    try {
+      res.clearCookie('liberty_token', { path: '/' });
+    } catch (_) {}
+    return res.status(200).json({ success: true });
+  });
 }
