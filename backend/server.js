@@ -2426,14 +2426,31 @@ async function start() {
             recipients: [{ id: singleId, username, avatar_url: avatarUrl, avatar: avatarUrl }],
           });
         }
+        const roleCol = await db.query(
+          `SELECT 1
+           FROM information_schema.columns
+           WHERE table_schema = 'public' AND table_name = 'chat_members' AND column_name = 'role'
+           LIMIT 1`
+        );
         const ins = await db.query(`INSERT INTO chats (id, name, type, server_id) VALUES ($1::uuid, NULL, 'dm', NULL) RETURNING id`, [
           crypto.randomUUID(),
         ]);
         const chatId = ins.rows[0].id;
-        await db.query(
-          `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid), ($1::uuid, $3::uuid)`,
-          [chatId, userId, singleId]
-        );
+        if (roleCol.rows[0]) {
+          await db.query(
+            `INSERT INTO chat_members (chat_id, user_id, role)
+             VALUES ($1::uuid, $2::uuid, 'member'), ($1::uuid, $3::uuid, 'member')
+             ON CONFLICT (chat_id, user_id) DO NOTHING`,
+            [chatId, userId, singleId]
+          );
+        } else {
+          await db.query(
+            `INSERT INTO chat_members (chat_id, user_id)
+             VALUES ($1::uuid, $2::uuid), ($1::uuid, $3::uuid)
+             ON CONFLICT (chat_id, user_id) DO NOTHING`,
+            [chatId, userId, singleId]
+          );
+        }
         const u = await db.query('SELECT id, username, avatar_url FROM users WHERE id = $1::uuid', [singleId]);
         const username = u.rows[0]?.username || 'User';
         const avatarUrl = u.rows[0]?.avatar_url || null;
@@ -2444,6 +2461,31 @@ async function start() {
           recipients: [{ id: singleId, username, avatar_url: avatarUrl, avatar: avatarUrl }],
         });
       } catch (err) {
+        console.log(err);
+        if (err && err.code === '23505') {
+          try {
+            const existing = await db.query(
+              `SELECT c.id FROM chats c
+               WHERE c.type = 'dm' AND (SELECT COUNT(*) FROM chat_members WHERE chat_id = c.id) = 2
+               AND EXISTS (SELECT 1 FROM chat_members WHERE chat_id = c.id AND user_id = $1::uuid)
+               AND EXISTS (SELECT 1 FROM chat_members WHERE chat_id = c.id AND user_id = $2::uuid)
+               LIMIT 1`,
+              [userId, singleId]
+            );
+            if (existing.rows[0]?.id) {
+              const chatId = existing.rows[0].id;
+              const u = await db.query('SELECT id, username, avatar_url FROM users WHERE id = $1::uuid', [singleId]);
+              const username = u.rows[0]?.username || 'User';
+              const avatarUrl = u.rows[0]?.avatar_url || null;
+              return res.status(200).json({
+                id: String(chatId),
+                type: 'dm',
+                name: null,
+                recipients: [{ id: singleId, username, avatar_url: avatarUrl, avatar: avatarUrl }],
+              });
+            }
+          } catch (_) {}
+        }
         logger.error('POST @me/channels dm', err);
         return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar DM') });
       }
