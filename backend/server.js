@@ -2262,65 +2262,78 @@ async function start() {
     try {
       const channels = [];
 
-      const dmChats = await db.query(
-        `SELECT c.id AS chat_id FROM chats c
-         INNER JOIN chat_members cm ON cm.chat_id = c.id
-         WHERE c.type = 'dm' AND cm.user_id = $1::uuid`,
-        [userId]
+      const rels = await db.query(
+        `SELECT
+           to_regclass('public.chat_members') AS chat_members,
+           to_regclass('public.group_members') AS group_members`
       );
-      for (const row of dmChats.rows) {
-        const other = await db.query(
-          `SELECT u.id, u.username, u.avatar_url FROM chat_members cm
-           INNER JOIN users u ON u.id = cm.user_id
-           WHERE cm.chat_id = $1::uuid AND cm.user_id != $2::uuid`,
-          [row.chat_id, userId]
+      const hasChatMembers = !!rels.rows[0]?.chat_members;
+      const hasGroupMembers = !!rels.rows[0]?.group_members;
+
+      if (hasChatMembers) {
+        const dmChats = await db.query(
+          `SELECT c.id AS chat_id FROM chats c
+           INNER JOIN chat_members cm ON cm.chat_id = c.id
+           WHERE c.type = 'dm' AND cm.user_id = $1::uuid`,
+          [userId]
         );
-        const u = other.rows[0];
-        if (u) {
+        for (const row of dmChats.rows) {
+          const other = await db.query(
+            `SELECT u.id, u.username, u.avatar_url FROM chat_members cm
+             INNER JOIN users u ON u.id = cm.user_id
+             WHERE cm.chat_id = $1::uuid AND cm.user_id != $2::uuid`,
+            [row.chat_id, userId]
+          );
+          const u = other.rows[0];
+          if (u) {
+            channels.push({
+              id: String(row.chat_id),
+              type: 'dm',
+              name: null,
+              recipients: [
+                {
+                  id: String(u.id),
+                  username: u.username,
+                  avatar_url: u.avatar_url || null,
+                  avatar: u.avatar_url || null,
+                },
+              ],
+            });
+          }
+        }
+      }
+
+      if (hasGroupMembers) {
+        const groupChats = await db.query(
+          `SELECT c.id AS chat_id, c.name FROM chats c
+           INNER JOIN group_members gm ON gm.chat_id = c.id
+           WHERE c.type = 'group_dm' AND gm.user_id = $1::uuid`,
+          [userId]
+        );
+        for (const row of groupChats.rows) {
+          const members = await db.query(
+            `SELECT u.id, u.username, u.avatar_url FROM group_members gm
+             INNER JOIN users u ON u.id = gm.user_id
+             WHERE gm.chat_id = $1::uuid`,
+            [row.chat_id]
+          );
           channels.push({
             id: String(row.chat_id),
-            type: 'dm',
-            name: null,
-            recipients: [
-              {
-                id: String(u.id),
-                username: u.username,
-                avatar_url: u.avatar_url || null,
-                avatar: u.avatar_url || null,
-              },
-            ],
+            type: 'group_dm',
+            name: row.name || members.rows.map(m => m.username).join(', '),
+            recipients: members.rows.map(m => ({
+              id: String(m.id),
+              username: m.username,
+              avatar_url: m.avatar_url || null,
+              avatar: m.avatar_url || null,
+            })),
           });
         }
       }
 
-      const groupChats = await db.query(
-        `SELECT c.id AS chat_id, c.name FROM chats c
-         INNER JOIN group_members gm ON gm.chat_id = c.id
-         WHERE c.type = 'group_dm' AND gm.user_id = $1::uuid`,
-        [userId]
-      );
-      for (const row of groupChats.rows) {
-        const members = await db.query(
-          `SELECT u.id, u.username, u.avatar_url FROM group_members gm
-           INNER JOIN users u ON u.id = gm.user_id
-           WHERE gm.chat_id = $1::uuid`,
-          [row.chat_id]
-        );
-        channels.push({
-          id: String(row.chat_id),
-          type: 'group_dm',
-          name: row.name || members.rows.map(m => m.username).join(', '),
-          recipients: members.rows.map(m => ({
-            id: String(m.id),
-            username: m.username,
-            avatar_url: m.avatar_url || null,
-            avatar: m.avatar_url || null,
-          })),
-        });
-      }
-
       return res.status(200).json(channels);
     } catch (err) {
+      console.error(err);
       logger.error('GET @me/channels', err);
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar canais') });
     }
