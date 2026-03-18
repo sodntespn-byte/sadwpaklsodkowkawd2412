@@ -702,6 +702,7 @@ class LibertyApp {
     this.dmChannels = [];
     this.relationships = [];
     this.gateway = null;
+    this._callSocket = null;
     /** @type {Array<{ file: File; previewUrl?: string; name: string; size: number; mimeType: string }>} */
     this._pendingAttachments = [];
     /** @type {boolean} */
@@ -2202,6 +2203,9 @@ class LibertyApp {
       titleEl.textContent = titleEl.dataset.baseTitle;
     }
     this._updateVoiceCallParticipantsBar();
+    this._updateHeaderCallUI([
+      { id: this.currentUser?.id || 'me', username: this.currentUser?.username || 'Você', avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar, isSpeaking: false },
+    ]);
     const token = this._roomCallToken();
     const url = this._roomCallUrl();
     this._roomCallStop();
@@ -2230,6 +2234,11 @@ class LibertyApp {
       }
       this._roomCallRenderGrid();
       this._updateVoiceCallParticipantsBar();
+      {
+        const ps = [{ id: this.currentUser?.id || 'me', username: this.currentUser?.username || 'Você', avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar, isSpeaking: this._roomCallState.localSpeaking }];
+        (payload.participants || []).forEach((p) => { if (p && p.socketId && p.socketId !== socket.id) ps.push({ id: p.socketId, username: p.username || p.name || 'User', avatar_url: p.avatar_url || p.avatar, isSpeaking: !!p.isSpeaking }); });
+        this._updateHeaderCallUI(ps);
+      }
     });
     socket.on('participant-joined', (payload) => {
       if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
@@ -2238,6 +2247,11 @@ class LibertyApp {
       if (p && p.socketId && p.socketId !== socket.id) this._roomCallCreatePeer(p.socketId, true);
       this._roomCallRenderGrid();
       this._updateVoiceCallParticipantsBar();
+      {
+        const ps = [{ id: this.currentUser?.id || 'me', username: this.currentUser?.username || 'Você', avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar, isSpeaking: this._roomCallState.localSpeaking }];
+        this._roomCallState.participants.forEach((p) => { if (p && p.socketId && p.socketId !== socket.id) ps.push({ id: p.socketId, username: p.username || p.name || 'User', avatar_url: p.avatar_url || p.avatar, isSpeaking: !!p.isSpeaking }); });
+        this._updateHeaderCallUI(ps);
+      }
     });
     socket.on('participant-left', (payload) => {
       if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
@@ -2247,6 +2261,11 @@ class LibertyApp {
       this._roomCallClosePeer(String(sid));
       this._roomCallRenderGrid();
       this._updateVoiceCallParticipantsBar();
+      {
+        const ps = [{ id: this.currentUser?.id || 'me', username: this.currentUser?.username || 'Você', avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar, isSpeaking: this._roomCallState.localSpeaking }];
+        this._roomCallState.participants.forEach((p) => { if (p && p.socketId && p.socketId !== socket.id) ps.push({ id: p.socketId, username: p.username || p.name || 'User', avatar_url: p.avatar_url || p.avatar, isSpeaking: !!p.isSpeaking }); });
+        this._updateHeaderCallUI(ps);
+      }
     });
     socket.on('rtc-offer', (payload) => {
       if (!payload || String(payload.roomId) !== String(this._roomCallState.roomId)) return;
@@ -2303,6 +2322,8 @@ class LibertyApp {
       this._roomCallUpdateParticipant(payload.socketId, { isSpeaking: !!payload.isSpeaking });
       const tile = document.getElementById('call-tile-' + String(payload.socketId));
       if (tile) tile.classList.toggle('call-neo__tile--speaking', !!payload.isSpeaking);
+      const headerAv = document.getElementById('header-call-avatar-' + String(payload.socketId));
+      if (headerAv) headerAv.classList.toggle('header-call__avatar--speaking', !!payload.isSpeaking);
     });
     socket.on('disconnect', () => {
       this._roomCallStop();
@@ -2608,6 +2629,74 @@ class LibertyApp {
   }
 
   _setupVoiceCallHandlers() {
+    const token = this._getAccessToken ? this._getAccessToken() : (localStorage.getItem('access_token') || localStorage.getItem('token') || '');
+    if (window.io && token) {
+      try {
+        this._callSocket = window.io(window.location.origin, { path: '/socket.io', transports: ['websocket', 'polling'], auth: { token } });
+      } catch (_) {
+        this._callSocket = null;
+      }
+    }
+    const s = this._callSocket;
+    if (s) {
+      s.on('incoming-call', d => {
+        const from = d && d.from ? String(d.from) : null;
+        const offer = d && d.offer ? d.offer : null;
+        const callId = d && d.callId ? String(d.callId) : null;
+        if (!from || !offer || !callId) return;
+        if (this._voiceCallState.pc) return;
+        this._voiceCallState.pendingOffer = { from, payload: offer };
+        this._voiceCallState.incomingFromUserId = from;
+        this._voiceCallState.callId = callId;
+        this._showIncomingCallAlert(from);
+      });
+      s.on('call-answered', d => {
+        if (!this._voiceCallState.pc || !d || !d.answer) return;
+        const p = d.answer && typeof d.answer === 'object' ? d.answer : {};
+        const desc = new RTCSessionDescription({ type: p.type || 'answer', sdp: p.sdp || '' });
+        this._voiceCallState.pc
+          .setRemoteDescription(desc)
+          .then(() => this._callDrainPendingIceCandidates())
+          .catch(() => {});
+      });
+      s.on('ice-candidates', d => {
+        if (!this._voiceCallState.pc || !d || !d.candidate) return;
+        const pc = this._voiceCallState.pc;
+        const cand = d.candidate && typeof d.candidate === 'object' ? d.candidate : {};
+        if (!pc.remoteDescription || !pc.remoteDescription.type) {
+          this._voiceCallState.pendingIceCandidates.push(cand);
+          return;
+        }
+        pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+      });
+      s.on('call-ended', () => {
+        if (this._voiceCallState.pc) {
+          try { this._voiceCallState.pc.close(); } catch (_) {}
+          this._voiceCallState.pc = null;
+        }
+        if (this._voiceCallState.stream) {
+          this._voiceCallState.stream.getTracks().forEach(t => t.stop());
+          this._voiceCallState.stream = null;
+        }
+        if (this._voiceCallState.displayStream) {
+          this._voiceCallState.displayStream.getTracks().forEach(t => t.stop());
+          this._voiceCallState.displayStream = null;
+        }
+        this._voiceCallState.targetUserId = null;
+        this._voiceCallState.pendingOffer = null;
+        this._voiceCallState.pendingIceCandidates = [];
+        this._voiceCallState.callId = null;
+        this._webrtcStopLocalAudioLevel();
+        this._webrtcClearRemote();
+        const voiceView = document.getElementById('voice-call-view');
+        if (voiceView) {
+          voiceView.classList.add('hidden');
+          voiceView.classList.add('call-neo--hidden');
+          voiceView.classList.remove('call-neo--visible');
+        }
+      });
+    }
+
     if (!this.gateway) return;
     const g = this.gateway;
     g.on('webrtc_offer', d => {
@@ -2867,8 +2956,8 @@ class LibertyApp {
       this.showToast('Seu navegador não suporta chamadas de voz.', 'error');
       return;
     }
-    if (!this.gateway) {
-      this.showToast('Ligação ao servidor indisponível. Tente recarregar a página.', 'error');
+    if (!this._callSocket) {
+      this.showToast('Ligação de chamada indisponível. Tente recarregar a página.', 'error');
       return;
     }
     const ch = this.currentChannel;
@@ -2884,7 +2973,35 @@ class LibertyApp {
       ? (other.global_name ? `${other.username} • ${other.global_name}` : other.username)
       : 'Chamada';
     this._voiceCallState.targetUserId = targetId;
-    this._roomCallStart('dm:' + String(ch.id || ch.channelId || ''), displayTitle);
+    this._voiceCallState.callId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : (String(Math.random()).slice(2) + String(Date.now()));
+    const voiceView = document.getElementById('voice-call-view');
+    if (voiceView) {
+      voiceView.classList.remove('hidden');
+      voiceView.classList.add('call-neo--visible');
+      voiceView.classList.remove('call-neo--hidden');
+    }
+    const titleEl = document.getElementById('voice-call-channel-name');
+    if (titleEl) titleEl.textContent = displayTitle;
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
+      this._voiceCallState.stream = stream;
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      this._voiceCallState.pc = pc;
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+      pc.onicecandidate = (ev) => {
+        if (!ev.candidate) return;
+        const pl = ev.candidate && ev.candidate.toJSON ? ev.candidate.toJSON() : ev.candidate;
+        try { this._callSocket.emit('ice-candidates', { to: targetId, callId: this._voiceCallState.callId, candidate: pl }); } catch (_) {}
+      };
+      pc.ontrack = (ev) => {
+        this._attachRemoteTrack(ev);
+      };
+      pc.createOffer().then((offer) => pc.setLocalDescription(offer)).then(() => {
+        if (!pc.localDescription) return;
+        this._callSocket.emit('call-user', { to: targetId, callId: this._voiceCallState.callId, chatId: ch.id || null, offer: pc.localDescription.toJSON() });
+      }).catch(() => {});
+    }).catch(() => {
+      this.showToast('Permissão de microfone negada.', 'error');
+    });
   }
 
   _setupCallResizeHandle() {
@@ -2921,6 +3038,9 @@ class LibertyApp {
     const voiceView = document.getElementById('voice-call-view');
     const disconnectBtn = document.getElementById('voice-call-disconnect');
     const muteBtn = document.getElementById('voice-call-mute');
+    const headerMuteBtn = document.getElementById('header-call-mute');
+    const headerDeafenBtn = document.getElementById('header-call-deafen');
+    const headerDisconnectBtn = document.getElementById('header-call-disconnect');
     if (!btn) return;
     this._setupCallResizeHandle();
     const closeVoiceCall = () => {
@@ -2972,9 +3092,12 @@ class LibertyApp {
         videoBtn.querySelector('i').className = 'fas fa-video';
         videoBtn.querySelector('span').textContent = 'Vídeo';
       }
+      const headerCall = document.getElementById('header-call');
+      if (headerCall) headerCall.classList.add('hidden');
     };
     // O clique em "Chamada" é tratado por delegação em document (init) para funcionar sempre
     if (disconnectBtn) disconnectBtn.addEventListener('click', closeVoiceCall);
+    if (headerDisconnectBtn) headerDisconnectBtn.addEventListener('click', closeVoiceCall);
     if (muteBtn)
       muteBtn.addEventListener('click', async () => {
         if (!this._voiceCallState.stream) {
@@ -2987,6 +3110,22 @@ class LibertyApp {
         tracks.forEach(t => { t.enabled = !t.enabled; });
         this._playCallSound(enabled ? 'mute' : 'unmute');
         this._updateWebrtcControlButtons();
+      });
+    if (headerMuteBtn)
+      headerMuteBtn.addEventListener('click', () => {
+        const st = this._roomCallState.localStream || this._voiceCallState.stream;
+        if (!st) return;
+        const tracks = st.getAudioTracks ? st.getAudioTracks() : st.getTracks().filter(t => t.kind === 'audio');
+        const enabled = tracks.some(t => t.enabled);
+        tracks.forEach(t => { t.enabled = !t.enabled; });
+        this._playCallSound(enabled ? 'mute' : 'unmute');
+      });
+    if (headerDeafenBtn)
+      headerDeafenBtn.addEventListener('click', () => {
+        const wrap = document.getElementById('webrtc-remote-wrap');
+        if (!wrap) return;
+        this._voiceCallState.muteRemote = !this._voiceCallState.muteRemote;
+        wrap.querySelectorAll('audio.webrtc-remote-audio').forEach(a => { a.muted = this._voiceCallState.muteRemote; });
       });
     const videoBtn = document.getElementById('voice-call-video');
     if (videoBtn)
@@ -3466,6 +3605,7 @@ class LibertyApp {
       const displayName = isGroup
         ? dm.name || (dm.recipients || []).map(r => r.username).join(', ')
         : dm.recipients?.[0]?.username || 'Unknown';
+      if (!isGroup && (!dm.recipients?.[0]?.username || dm.recipients?.[0]?.username === 'Unknown')) return;
       const recipient = dm.recipients?.[0] || { username: displayName, status: 'offline', id: null };
       const item = document.createElement('div');
       item.className = 'dm-list-item';
@@ -3584,6 +3724,7 @@ class LibertyApp {
     const displayName = isGroup
       ? dm.name || (dm.recipients || []).map(r => r.username).join(', ')
       : dm.recipients?.[0]?.username || 'Unknown';
+    if (!isGroup && (!dm.recipients?.[0]?.username || dm.recipients?.[0]?.username === 'Unknown')) return;
     const recipient = dm.recipients?.[0] || { username: displayName };
     document.getElementById('friends-view')?.classList?.add('hidden');
     const msgCont = document.getElementById('messages-container');
@@ -4287,6 +4428,48 @@ class LibertyApp {
       `</div>` +
       `</div>` +
       `<div class="call-neo__call-status">Em ligação</div>`;
+  }
+
+  _updateHeaderCallUI(participants) {
+    const wrap = document.getElementById('header-call');
+    if (!wrap) return;
+    const avatars = document.getElementById('header-call-avatars');
+    const names = document.getElementById('header-call-names');
+    if (!avatars || !names) return;
+    const list = Array.isArray(participants) ? participants : [];
+    if (list.length === 0) {
+      wrap.classList.add('hidden');
+      avatars.replaceChildren();
+      names.textContent = '';
+      return;
+    }
+    wrap.classList.remove('hidden');
+    const frag = document.createDocumentFragment();
+    const labelNames = [];
+    for (let i = 0; i < list.length; i += 1) {
+      const p = list[i] || {};
+      const uname = String(p.username || p.name || 'User');
+      labelNames.push(uname);
+      const av = String(p.avatar_url || p.avatar || '');
+      const el = document.createElement('div');
+      el.className = 'header-call__avatar' + (p.isSpeaking ? ' header-call__avatar--speaking' : '');
+      el.id = 'header-call-avatar-' + String(p.id || p.socketId || i);
+      el.title = uname;
+      if (av) {
+        const img = document.createElement('img');
+        img.src = av;
+        img.alt = '';
+        el.appendChild(img);
+      } else {
+        const span = document.createElement('div');
+        span.className = 'header-call__avatar-initial';
+        span.textContent = uname.charAt(0).toUpperCase();
+        el.appendChild(span);
+      }
+      frag.appendChild(el);
+    }
+    avatars.replaceChildren(frag);
+    names.textContent = labelNames.join(', ');
   }
 
   _updateMembersSidebarVisibility() {

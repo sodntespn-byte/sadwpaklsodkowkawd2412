@@ -1119,12 +1119,26 @@ async function start() {
   };
 
   io.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.auth?.accessToken ||
+      socket.handshake.query?.token ||
+      socket.handshake.query?.accessToken;
     const payload = token ? auth.verify(token) : null;
     socket.userId = payload ? payload.sub : null;
     next();
   });
   io.on('connection', socket => {
+    if (!io._libertyUserSockets) io._libertyUserSockets = new Map();
+    if (socket.userId) {
+      const uid = String(socket.userId);
+      let set = io._libertyUserSockets.get(uid);
+      if (!set) {
+        set = new Set();
+        io._libertyUserSockets.set(uid, set);
+      }
+      set.add(socket.id);
+    }
     socket.on('subscribe', payload => {
       const chatId = payload && (payload.chat_id || payload.chatId);
       if (chatId) socket.join(chatId);
@@ -1132,6 +1146,113 @@ async function start() {
     socket.on('unsubscribe', payload => {
       const chatId = payload && (payload.chat_id || payload.chatId);
       if (chatId) socket.leave(chatId);
+    });
+
+    socket.on('call-user', async payload => {
+      const from = socket.userId ? String(socket.userId) : null;
+      const to = payload && payload.to ? String(payload.to) : null;
+      const offer = payload && payload.offer ? payload.offer : null;
+      const chatId = payload && payload.chatId ? String(payload.chatId) : null;
+      const callId = payload && payload.callId ? String(payload.callId) : crypto.randomUUID();
+      if (!from || !to || !offer || !isUuid(to)) return;
+      if (chatId && !isUuid(chatId)) return;
+      try {
+        if (db.isConfigured() && db.isConnected()) {
+          await db.query(
+            `INSERT INTO webrtc_calls (id, caller_id, callee_id, chat_id, status)
+             VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'ringing')
+             ON CONFLICT (id) DO NOTHING`,
+            [callId, from, to, chatId]
+          );
+        }
+      } catch (err) {
+        console.error('[CALL] webrtc_calls insert:', err);
+      }
+      try {
+        socket.emit('call-started', { callId, to });
+      } catch (_) {}
+      const set = io._libertyUserSockets.get(String(to));
+      if (!set || set.size === 0) return;
+      for (const sid of set) {
+        io.to(sid).emit('incoming-call', { callId, from, chatId: chatId || null, offer });
+      }
+    });
+
+    socket.on('make-answer', async payload => {
+      const from = socket.userId ? String(socket.userId) : null;
+      const to = payload && payload.to ? String(payload.to) : null;
+      const answer = payload && payload.answer ? payload.answer : null;
+      const callId = payload && payload.callId ? String(payload.callId) : null;
+      if (!from || !to || !answer || !callId) return;
+      try {
+        if (db.isConfigured() && db.isConnected()) {
+          await db.query(
+            `UPDATE webrtc_calls
+             SET status = 'active',
+                 started_at = COALESCE(started_at, now())
+             WHERE id = $1::uuid`,
+            [callId]
+          );
+        }
+      } catch (err) {
+        console.error('[CALL] webrtc_calls active:', err);
+      }
+      const set = io._libertyUserSockets.get(String(to));
+      if (!set || set.size === 0) return;
+      for (const sid of set) {
+        io.to(sid).emit('call-answered', { callId, from, answer });
+      }
+    });
+
+    socket.on('ice-candidates', payload => {
+      const from = socket.userId ? String(socket.userId) : null;
+      const to = payload && payload.to ? String(payload.to) : null;
+      const candidate = payload && payload.candidate ? payload.candidate : null;
+      const callId = payload && payload.callId ? String(payload.callId) : null;
+      if (!from || !to || !candidate || !callId) return;
+      const set = io._libertyUserSockets.get(String(to));
+      if (!set || set.size === 0) return;
+      for (const sid of set) {
+        io.to(sid).emit('ice-candidates', { callId, from, candidate });
+      }
+    });
+
+    socket.on('end-call', async payload => {
+      const from = socket.userId ? String(socket.userId) : null;
+      const to = payload && payload.to ? String(payload.to) : null;
+      const callId = payload && payload.callId ? String(payload.callId) : null;
+      if (!from || !callId) return;
+      try {
+        if (db.isConfigured() && db.isConnected()) {
+          await db.query(
+            `UPDATE webrtc_calls
+             SET status = 'ended',
+                 ended_at = COALESCE(ended_at, now())
+             WHERE id = $1::uuid`,
+            [callId]
+          );
+        }
+      } catch (err) {
+        console.error('[CALL] webrtc_calls ended:', err);
+      }
+      const targets = [];
+      if (to) targets.push(String(to));
+      const other = payload && payload.other ? String(payload.other) : null;
+      if (other) targets.push(other);
+      for (const uid of targets) {
+        const set = io._libertyUserSockets.get(uid);
+        if (!set || set.size === 0) continue;
+        for (const sid of set) io.to(sid).emit('call-ended', { callId, from });
+      }
+    });
+
+    socket.on('disconnect', () => {
+      if (!io._libertyUserSockets || !socket.userId) return;
+      const uid = String(socket.userId);
+      const set = io._libertyUserSockets.get(uid);
+      if (!set) return;
+      set.delete(socket.id);
+      if (set.size === 0) io._libertyUserSockets.delete(uid);
     });
   });
 
@@ -2290,16 +2411,12 @@ async function start() {
           `SELECT c.id AS chat_id, u.id AS recipient_id, u.username AS recipient_username, u.avatar_url AS recipient_avatar_url
            FROM chats c
            INNER JOIN chat_members me ON me.chat_id = c.id AND me.user_id = $1::uuid
-           LEFT JOIN chat_members other ON other.chat_id = c.id AND other.user_id != $1::uuid
-           LEFT JOIN users u ON u.id = other.user_id
+           INNER JOIN chat_members other ON other.chat_id = c.id AND other.user_id != $1::uuid
+           INNER JOIN users u ON u.id = other.user_id
            WHERE c.type = 'dm'`,
           [userId]
         );
         for (const row of dmRows.rows) {
-          if (!row.recipient_id) {
-            console.log('Chat sem destinatário encontrado:', String(row.chat_id));
-            continue;
-          }
           channels.push({
             id: String(row.chat_id),
             type: 'dm',
@@ -2307,7 +2424,7 @@ async function start() {
             recipients: [
               {
                 id: String(row.recipient_id),
-                username: row.recipient_username || 'Unknown',
+                username: row.recipient_username,
                 avatar_url: row.recipient_avatar_url || null,
                 avatar: row.recipient_avatar_url || null,
               },
@@ -2344,6 +2461,16 @@ async function start() {
         }
       }
 
+      for (let i = channels.length - 1; i >= 0; i -= 1) {
+        const c = channels[i];
+        if (c && c.type === 'dm') {
+          const u = c.recipients && c.recipients[0];
+          if (!u || !u.id || !u.username || u.username === 'Unknown') {
+            console.log('Chat sem destinatário encontrado:', String(c.id));
+            channels.splice(i, 1);
+          }
+        }
+      }
       return res.status(200).json(channels);
     } catch (err) {
       console.error(err);

@@ -37,6 +37,10 @@
   --warning: #ff9800;
   --info: #1e88e5;
 
+  --call-speak: #ffd54a;
+  --call-speak-soft: rgba(255, 213, 74, 0.35);
+  --call-speak-strong: rgba(255, 213, 74, 0.55);
+
   /* ── Glassmorphism / Web3 (usa acento atual) ── */
   --glass-bg: color-mix(in srgb, var(--primary-yellow) 4%, transparent);
   --glass-border: color-mix(in srgb, var(--primary-yellow) 12%, transparent);

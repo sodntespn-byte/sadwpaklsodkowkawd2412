@@ -293,6 +293,24 @@
               <span class="user-status" id="user-status">Online</span>
             </div>
           </div>
+          <div class="header-call hidden" id="header-call" aria-label="Ligação ativa">
+            <div class="header-call__avatars" id="header-call-avatars" aria-label="Participantes em ligação"></div>
+            <div class="header-call__meta">
+              <div class="header-call__names" id="header-call-names"></div>
+              <div class="header-call__status">Em ligação</div>
+            </div>
+            <div class="header-call__controls" aria-label="Controles rápidos da ligação">
+              <button type="button" class="header-call__btn" id="header-call-mute" aria-label="Mutar microfone">
+                <i class="fas fa-microphone" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="header-call__btn" id="header-call-deafen" aria-label="Desativar áudio">
+                <i class="fas fa-headphones" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="header-call__btn header-call__btn--hangup" id="header-call-disconnect" aria-label="Desconectar">
+                <i class="fas fa-phone-slash" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
           <div class="user-controls" role="group" aria-label="Controles do utilizador">
             <div
               class="user-controls-voice hidden"
