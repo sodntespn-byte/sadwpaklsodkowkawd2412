@@ -2483,7 +2483,7 @@ async function start() {
         [req.userId]
       );
       const row = r.rows[0];
-      if (!row) return res.status(404).json({ message: 'Usuário não encontrado' });
+      if (!row) return res.status(401).json({ message: 'Sessão inválida. Faça login novamente.' });
       const admin = await isAdmin(req);
       return res.status(200).json({
         id: String(row.id),
@@ -2501,8 +2501,8 @@ async function start() {
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao buscar perfil') });
     }
   };
-  app.get('/api/v1/users/me', auth.requireAuth, getMe);
-  app.get('/api/v1/users/@me', auth.requireAuth, getMe);
+  app.get('/api/v1/users/me', auth.requireAuth, auth.requireUserExists, getMe);
+  app.get('/api/v1/users/@me', auth.requireAuth, auth.requireUserExists, getMe);
 
   // GET /api/v1/users/@me/export — exportar dados do utilizador (privacidade / RGPD)
   app.get('/api/v1/users/@me/export', auth.requireAuth, async (req, res) => {
