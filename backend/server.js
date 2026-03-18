@@ -2271,6 +2271,21 @@ async function start() {
       const hasGroupMembers = !!rels.rows[0]?.group_members;
 
       if (hasChatMembers) {
+        const memberChannels = await db.query(
+          `SELECT c.id, c.name, c.type, c.server_id FROM chats c
+           INNER JOIN chat_members cm ON cm.chat_id = c.id
+           WHERE cm.user_id = $1::uuid AND c.type = 'channel'`,
+          [userId]
+        );
+        for (const row of memberChannels.rows) {
+          channels.push({
+            id: String(row.id),
+            type: 'channel',
+            name: row.name || 'geral',
+            server_id: row.server_id ? String(row.server_id) : null,
+          });
+        }
+
         const dmChats = await db.query(
           `SELECT c.id AS chat_id FROM chats c
            INNER JOIN chat_members cm ON cm.chat_id = c.id
@@ -2334,6 +2349,7 @@ async function start() {
       return res.status(200).json(channels);
     } catch (err) {
       console.error(err);
+      console.log(err);
       logger.error('GET @me/channels', err);
       return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar canais') });
     }

@@ -27,7 +27,7 @@ export function registerAuthRoutes(router, deps) {
     }
 
     try {
-      await ensureLibertyServer();
+      const libertyServerId = await ensureLibertyServer();
       const emailVal = email && String(email).trim() ? String(email).trim().toLowerCase() : null;
       const rawPassword = password && String(password).trim();
       if (rawPassword && rawPassword.length < 8) {
@@ -47,6 +47,27 @@ export function registerAuthRoutes(router, deps) {
         email: row.email,
         has_password: Boolean(password_hash),
       };
+      if (libertyServerId) {
+        await db.query(
+          `INSERT INTO server_members (server_id, user_id, role)
+           VALUES ($1::uuid, $2::uuid, 'member')
+           ON CONFLICT (server_id, user_id) DO NOTHING`,
+          [libertyServerId, row.id]
+        );
+        const ch = await db.query(
+          `SELECT id FROM chats WHERE server_id = $1::uuid AND type = 'channel' ORDER BY created_at ASC LIMIT 1`,
+          [libertyServerId]
+        );
+        const chatId = ch.rows[0]?.id;
+        if (chatId) {
+          await db.query(
+            `INSERT INTO chat_members (chat_id, user_id, role)
+             VALUES ($1::uuid, $2::uuid, 'member')
+             ON CONFLICT (chat_id, user_id) DO NOTHING`,
+            [chatId, row.id]
+          );
+        }
+      }
       await ensureUserInLibertyServer(row.id);
       const access_token = auth.sign(user);
       const isProduction = process.env.NODE_ENV === 'production';
@@ -68,6 +89,7 @@ export function registerAuthRoutes(router, deps) {
       if (err.code === '23505') {
         return res.status(409).json({ message: 'Nome de usuário (ou email) já em uso' });
       }
+      console.log(err);
       logger.error('register', err);
       return res.status(500).json({ message: err.message || 'Erro ao criar conta' });
     }
