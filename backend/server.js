@@ -3463,13 +3463,13 @@ async function start() {
     res.sendFile(path.join(STATIC_DIR, 'index.html'));
   });
 
-  // Handler de erros global: evita vazamento de stack/detalhes e garante resposta JSON em rotas API
+  // Handler de erros global: log detalhado e resposta JSON (debug)
   app.use((err, req, res, next) => {
+    console.error(err);
     logger.error('Express error handler', err);
     if (res.headersSent) return next(err);
-    const status = err.status ?? err.statusCode ?? 500;
-    const message = config.isProduction ? 'Erro interno. Tente novamente mais tarde.' : (err.message || 'Erro interno');
-    res.status(status).json({ message });
+    const status = err && (err.status ?? err.statusCode) ? (err.status ?? err.statusCode) : 500;
+    res.status(status).json(err);
   });
 
   server.listen(PORT, '0.0.0.0', () => {
