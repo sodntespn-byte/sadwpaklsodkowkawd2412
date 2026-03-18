@@ -66,38 +66,15 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import { encrypt, decrypt } from './src/lib/message-crypto.js';
-import messageCacheModule from './message-cache.js';
-const getCachedMessages = messageCacheModule.getCachedMessages;
-const setCachedMessages = messageCacheModule.setCachedMessages;
-const addCachedMessage = messageCacheModule.addCachedMessage;
-const getAllMessageLists = messageCacheModule.getAllMessageLists;
-const MAX_CACHE_PER_CHANNEL = messageCacheModule.MAX_CACHE_PER_CHANNEL;
+const messageCache = new Map();
+const MAX_CACHE_PER_CHANNEL = 100;
 
 /**
  * Garante que a mensagem existe no banco. Se não existir, insere.
  * Usa id da mensagem para evitar duplicados (ON CONFLICT DO NOTHING).
  */
 async function ensureMessageInDb(msg, chatId) {
-  if (!msg || !chatId || !db.isConfigured() || !db.isConnected()) return;
-  const id = msg.id || msg.message_id;
-  if (!id || !isUuid(id)) return;
-  const dbChatId = isUuid(chatId) ? chatId : null;
-  if (!dbChatId) return;
-  const userId = msg.author_id && isUuid(String(msg.author_id)) ? msg.author_id : null;
-  const content = String(msg.content || '').trim();
-  if (!content && (!msg.attachments || !msg.attachments.length)) return;
-  const contentToStore = encrypt(content);
-  const createdAt = msg.created_at instanceof Date ? msg.created_at : new Date(msg.created_at || Date.now());
-  try {
-    await db.query(
-      `INSERT INTO messages (id, chat_id, user_id, content, created_at, updated_at)
-       VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6)
-       ON CONFLICT (id) DO NOTHING`,
-      [id, dbChatId, userId, contentToStore, createdAt, createdAt]
-    );
-  } catch (err) {
-    logger.warn('[LIBERTY] ensureMessageInDb:', err.message);
-  }
+  return;
 }
 
 /**
@@ -105,33 +82,7 @@ async function ensureMessageInDb(msg, chatId) {
  * Usado quando o cache está vazio (ex.: após restart) para repopular.
  */
 async function loadMessagesFromDb(chatId, limit = 300) {
-  if (!chatId || !isUuid(chatId) || !db.isConfigured() || !db.isConnected()) return [];
-  try {
-    const r = await db.query(
-      `SELECT m.id, m.chat_id, m.user_id, m.content, m.created_at, u.username, u.avatar_url
-       FROM messages m
-       LEFT JOIN users u ON u.id = m.user_id
-       WHERE m.chat_id = $1::uuid
-       ORDER BY m.created_at ASC
-       LIMIT $2`,
-      [chatId, limit]
-    );
-    const rows = r.rows || [];
-    return rows.map(row => ({
-      id: String(row.id),
-      chat_id: String(row.chat_id),
-      content: decrypt(row.content) || '',
-      author_id: row.user_id ? String(row.user_id) : null,
-      author_username: row.username || 'User',
-      author: row.username || 'User',
-      username: row.username || 'User',
-      avatar_url: row.avatar_url || null,
-      created_at: row.created_at,
-    }));
-  } catch (err) {
-    logger.warn('[LIBERTY] loadMessagesFromDb:', err.message);
-    return [];
-  }
+  return [];
 }
 
 // Atividade em app (minutos) para ranking "By Activity" — só em memória
@@ -1014,6 +965,7 @@ async function getDefaultChatId() {
 }
 
 async function start() {
+  messageCache.clear();
   process.on('unhandledRejection', reason => {
     logger.error('unhandledRejection', reason instanceof Error ? reason : String(reason));
   });
@@ -1109,13 +1061,25 @@ async function start() {
   });
   app.locals.io = io;
   app.locals.emitMessage = function (message) {
-    ws.emitMessage(message);
-    if (message) {
-      const payload = { type: 'message', data: message };
-      if (message.chat_id) io.to(message.chat_id).emit('message', payload);
-      if (message.channel_id && message.channel_id !== message.chat_id)
-        io.to(message.channel_id).emit('message', payload);
+    if (!message) return;
+    const chatId = message.chat_id || message.channel_id;
+    if (!chatId) return;
+    const id = message.id || message.message_id;
+    const raw = messageCache.get(String(chatId)) || null;
+    let msg = null;
+    if (raw) {
+      const decoded = decrypt(raw);
+      try {
+        const list = JSON.parse(typeof decoded === 'string' ? decoded : '[]');
+        if (Array.isArray(list)) {
+          msg = id ? (list.find(m => String(m.id || m.message_id) === String(id)) || null) : (list[list.length - 1] || null);
+        }
+      } catch (_) {}
     }
+    if (!msg) msg = message;
+    ws.emitMessage(msg);
+    const payload = { type: 'message', data: msg };
+    io.to(String(chatId)).emit('message', payload);
   };
 
   io.use((socket, next) => {
@@ -1148,101 +1112,80 @@ async function start() {
       if (chatId) socket.leave(chatId);
     });
 
-    socket.on('call-user', async payload => {
-      const from = socket.userId ? String(socket.userId) : null;
-      const to = payload && payload.to ? String(payload.to) : null;
-      const offer = payload && payload.offer ? payload.offer : null;
-      const chatId = payload && payload.chatId ? String(payload.chatId) : null;
-      const callId = payload && payload.callId ? String(payload.callId) : crypto.randomUUID();
-      if (!from || !to || !offer || !isUuid(to)) return;
-      if (chatId && !isUuid(chatId)) return;
+    if (!io._activeCalls) io._activeCalls = new Map();
+
+    socket.on('call:init', payload => {
       try {
-        if (db.isConfigured() && db.isConnected()) {
-          await db.query(
-            `INSERT INTO webrtc_calls (id, caller_id, callee_id, chat_id, status)
-             VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'ringing')
-             ON CONFLICT (id) DO NOTHING`,
-            [callId, from, to, chatId]
-          );
+        const from = socket.userId ? String(socket.userId) : null;
+        const to = payload && payload.to ? String(payload.to) : null;
+        const offer = payload && payload.offer ? payload.offer : null;
+        const callId = payload && payload.callId ? String(payload.callId) : crypto.randomUUID();
+        if (!from || !to || !offer || !isUuid(to)) return;
+        io._activeCalls.set(callId, { callId, from, to, createdAt: Date.now() });
+        const set = io._libertyUserSockets.get(String(to));
+        if (!set || set.size === 0) {
+          socket.emit('call:error', { callId, message: 'Usuário offline.' });
+          io._activeCalls.delete(callId);
+          return;
         }
-      } catch (err) {
-        console.error('[CALL] webrtc_calls insert:', err);
-      }
-      try {
-        socket.emit('call-started', { callId, to });
-      } catch (_) {}
-      const set = io._libertyUserSockets.get(String(to));
-      if (!set || set.size === 0) return;
-      for (const sid of set) {
-        io.to(sid).emit('incoming-call', { callId, from, chatId: chatId || null, offer });
+        for (const sid of set) io.to(sid).emit('call:incoming', { callId, from, offer });
+        socket.emit('call:started', { callId, to });
+      } catch (error) {
+        console.error(error);
+        try { socket.emit('call:error', { message: 'Falha ao iniciar chamada.' }); } catch (_) {}
       }
     });
 
-    socket.on('make-answer', async payload => {
-      const from = socket.userId ? String(socket.userId) : null;
-      const to = payload && payload.to ? String(payload.to) : null;
-      const answer = payload && payload.answer ? payload.answer : null;
-      const callId = payload && payload.callId ? String(payload.callId) : null;
-      if (!from || !to || !answer || !callId) return;
+    socket.on('call:answer', payload => {
       try {
-        if (db.isConfigured() && db.isConnected()) {
-          await db.query(
-            `UPDATE webrtc_calls
-             SET status = 'active',
-                 started_at = COALESCE(started_at, now())
-             WHERE id = $1::uuid`,
-            [callId]
-          );
-        }
-      } catch (err) {
-        console.error('[CALL] webrtc_calls active:', err);
-      }
-      const set = io._libertyUserSockets.get(String(to));
-      if (!set || set.size === 0) return;
-      for (const sid of set) {
-        io.to(sid).emit('call-answered', { callId, from, answer });
+        const from = socket.userId ? String(socket.userId) : null;
+        const callId = payload && payload.callId ? String(payload.callId) : null;
+        const answer = payload && payload.answer ? payload.answer : null;
+        if (!from || !callId || !answer) return;
+        const c = io._activeCalls.get(callId);
+        if (!c) return;
+        const target = String(c.from);
+        const set = io._libertyUserSockets.get(target);
+        if (!set || set.size === 0) return;
+        for (const sid of set) io.to(sid).emit('call:answered', { callId, from, answer });
+      } catch (error) {
+        console.error(error);
       }
     });
 
-    socket.on('ice-candidates', payload => {
-      const from = socket.userId ? String(socket.userId) : null;
-      const to = payload && payload.to ? String(payload.to) : null;
-      const candidate = payload && payload.candidate ? payload.candidate : null;
-      const callId = payload && payload.callId ? String(payload.callId) : null;
-      if (!from || !to || !candidate || !callId) return;
-      const set = io._libertyUserSockets.get(String(to));
-      if (!set || set.size === 0) return;
-      for (const sid of set) {
-        io.to(sid).emit('ice-candidates', { callId, from, candidate });
+    socket.on('call:ice', payload => {
+      try {
+        const from = socket.userId ? String(socket.userId) : null;
+        const callId = payload && payload.callId ? String(payload.callId) : null;
+        const to = payload && payload.to ? String(payload.to) : null;
+        const candidate = payload && payload.candidate ? payload.candidate : null;
+        if (!from || !callId || !to || !candidate) return;
+        const set = io._libertyUserSockets.get(String(to));
+        if (!set || set.size === 0) return;
+        for (const sid of set) io.to(sid).emit('call:ice', { callId, from, candidate });
+      } catch (error) {
+        console.error(error);
       }
     });
 
-    socket.on('end-call', async payload => {
-      const from = socket.userId ? String(socket.userId) : null;
-      const to = payload && payload.to ? String(payload.to) : null;
-      const callId = payload && payload.callId ? String(payload.callId) : null;
-      if (!from || !callId) return;
+    socket.on('call:end', payload => {
       try {
-        if (db.isConfigured() && db.isConnected()) {
-          await db.query(
-            `UPDATE webrtc_calls
-             SET status = 'ended',
-                 ended_at = COALESCE(ended_at, now())
-             WHERE id = $1::uuid`,
-            [callId]
-          );
+        const from = socket.userId ? String(socket.userId) : null;
+        const callId = payload && payload.callId ? String(payload.callId) : null;
+        if (!from || !callId) return;
+        const c = io._activeCalls.get(callId);
+        if (!c) return;
+        io._activeCalls.delete(callId);
+        const a = String(c.from);
+        const b = String(c.to);
+        const targets = [a, b];
+        for (const uid of targets) {
+          const set = io._libertyUserSockets.get(uid);
+          if (!set || set.size === 0) continue;
+          for (const sid of set) io.to(sid).emit('call:ended', { callId, from });
         }
-      } catch (err) {
-        console.error('[CALL] webrtc_calls ended:', err);
-      }
-      const targets = [];
-      if (to) targets.push(String(to));
-      const other = payload && payload.other ? String(payload.other) : null;
-      if (other) targets.push(other);
-      for (const uid of targets) {
-        const set = io._libertyUserSockets.get(uid);
-        if (!set || set.size === 0) continue;
-        for (const sid of set) io.to(sid).emit('call-ended', { callId, from });
+      } catch (error) {
+        console.error(error);
       }
     });
 
@@ -1371,8 +1314,20 @@ async function start() {
         timestamp: createdAt,
         created_at: createdAt,
       };
-      await addCachedMessage(chatId, saved);
-      await ensureMessageInDb(saved, chatId);
+      {
+        const key = String(chatId);
+        const raw = messageCache.get(key) || null;
+        let list = [];
+        if (raw) {
+          const decoded = decrypt(raw);
+          try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
+        }
+        if (!Array.isArray(list)) list = [];
+        list = list.filter(m => String(m.id || m.message_id) !== String(saved.id));
+        list.push(saved);
+        if (list.length > MAX_CACHE_PER_CHANNEL) list = list.slice(-MAX_CACHE_PER_CHANNEL);
+        messageCache.set(key, encrypt(JSON.stringify(list)));
+      }
       const emit = req.app.locals.emitMessage;
       if (emit && chatId) emit({ ...saved });
       return res.status(201).json({
@@ -1394,14 +1349,13 @@ async function start() {
       let chatId = null;
       if (db.isConfigured() && db.isConnected()) chatId = await getDefaultChatId();
       if (!chatId) chatId = 'default-chat';
-      let list = await getCachedMessages(chatId);
-      if (list.length === 0 && db.isConfigured() && db.isConnected() && isUuid(chatId)) {
-        const fromDb = await loadMessagesFromDb(chatId, MAX_CACHE_PER_CHANNEL);
-        if (fromDb.length > 0) {
-          await setCachedMessages(chatId, fromDb);
-          list = await getCachedMessages(chatId);
-        }
+      const raw = messageCache.get(String(chatId)) || null;
+      let list = [];
+      if (raw) {
+        const decoded = decrypt(raw);
+        try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
       }
+      if (!Array.isArray(list)) list = [];
       const response = list.map(m => ({
         id: m.id,
         content: String(m.content || '').trim(),
@@ -1463,8 +1417,20 @@ async function start() {
           timestamp: createdAt,
           created_at: createdAt,
         };
-        await addCachedMessage(chatId, saved);
-        await ensureMessageInDb(saved, chatId);
+        {
+          const key = String(chatId);
+          const raw = messageCache.get(key) || null;
+          let list = [];
+          if (raw) {
+            const decoded = decrypt(raw);
+            try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
+          }
+          if (!Array.isArray(list)) list = [];
+          list = list.filter(m => String(m.id || m.message_id) !== String(saved.id));
+          list.push(saved);
+          if (list.length > MAX_CACHE_PER_CHANNEL) list = list.slice(-MAX_CACHE_PER_CHANNEL);
+          messageCache.set(key, encrypt(JSON.stringify(list)));
+        }
         const emit = req.app.locals.emitMessage;
         if (emit && chatId) emit({ ...saved });
         return res.status(201).json({
@@ -1641,8 +1607,20 @@ async function start() {
           created_at: createdAt,
           attachments: savedAttachments.length ? savedAttachments : undefined,
         };
-        await addCachedMessage(chatId, saved);
-        await ensureMessageInDb(saved, chatId);
+        {
+          const key = String(chatId);
+          const raw = messageCache.get(key) || null;
+          let list = [];
+          if (raw) {
+            const decoded = decrypt(raw);
+            try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
+          }
+          if (!Array.isArray(list)) list = [];
+          list = list.filter(m => String(m.id || m.message_id) !== String(saved.id));
+          list.push(saved);
+          if (list.length > MAX_CACHE_PER_CHANNEL) list = list.slice(-MAX_CACHE_PER_CHANNEL);
+          messageCache.set(key, encrypt(JSON.stringify(list)));
+        }
         const emit = req.app.locals.emitMessage;
         if (emit && chatId) emit({ ...saved });
         const response = { success: true, message: saved };
@@ -1664,14 +1642,13 @@ async function start() {
         chatId = (await resolveChannelToChatId(userId, channelId)) || (await getDefaultChatId());
       }
       if (!chatId) chatId = String(channelId);
-      let list = await getCachedMessages(chatId);
-      if (list.length === 0 && db.isConfigured() && db.isConnected() && isUuid(chatId)) {
-        const fromDb = await loadMessagesFromDb(chatId, MAX_CACHE_PER_CHANNEL);
-        if (fromDb.length > 0) {
-          await setCachedMessages(chatId, fromDb);
-          list = await getCachedMessages(chatId);
-        }
+      const raw = messageCache.get(String(chatId)) || null;
+      let list = [];
+      if (raw) {
+        const decoded = decrypt(raw);
+        try { list = JSON.parse(typeof decoded === 'string' ? decoded : '[]'); } catch (_) { list = []; }
       }
+      if (!Array.isArray(list)) list = [];
       let result = list.map(m => ({
         id: m.id,
         channel_id: channelId,
@@ -1682,22 +1659,6 @@ async function start() {
         created_at: (m.created_at instanceof Date ? m.created_at : new Date(m.created_at)).toISOString(),
         attachments: Array.isArray(m.attachments) && m.attachments.length > 0 ? m.attachments : undefined,
       }));
-      if (db.isConfigured() && db.isConnected() && result.length > 0) {
-        const authorIds = [...new Set(result.map(m => m.author_id).filter(id => id && isUuid(String(id))))];
-        if (authorIds.length > 0) {
-          try {
-            const placeholders = authorIds.map((_, i) => `$${i + 1}::uuid`).join(',');
-            const r = await db.query(`SELECT id, avatar_url FROM users WHERE id IN (${placeholders})`, authorIds);
-            const avatarByAuthor = Object.fromEntries(
-              (r.rows || []).map(row => [String(row.id), row.avatar_url || null])
-            );
-            result = result.map(m => ({
-              ...m,
-              avatar_url: (m.author_id && avatarByAuthor[m.author_id]) || m.avatar_url,
-            }));
-          } catch (_) {}
-        }
-      }
       return res.status(200).json(result);
     } catch (err) {
       logger.error('GET /api/v1/channels/:id/messages', err);
@@ -1707,30 +1668,7 @@ async function start() {
 
   // Pins — apenas admins (ADMIN_USERNAMES) podem fixar/desfixar; qualquer um pode listar
   app.get('/api/v1/channels/:channelId/pins', auth.requireAuth, requireUuidParams(['channelId']), async (req, res) => {
-    const chatId = req.params.channelId;
-    if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
-    if (!isUuid(chatId)) return res.status(400).json({ message: 'channelId inválido' });
-    try {
-      const r = await db.query(
-        `SELECT p.id, p.message_id, p.pinned_at, m.content, m.user_id AS author_id, u.username AS author_username
-         FROM message_pins p
-         INNER JOIN messages m ON m.id = p.message_id AND m.chat_id = p.chat_id
-         LEFT JOIN users u ON u.id = m.user_id
-         WHERE p.chat_id = $1::uuid ORDER BY p.pinned_at DESC`,
-        [chatId]
-      );
-      const list = (r.rows || []).map(row => ({
-        id: String(row.message_id),
-        content: decrypt(row.content) || '',
-        author_id: row.author_id ? String(row.author_id) : null,
-        author_username: row.author_username || 'User',
-        pinned_at: row.pinned_at,
-      }));
-      return res.status(200).json(list);
-    } catch (err) {
-      if (err.message && err.message.includes('does not exist')) return res.status(200).json([]);
-      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao listar pins') });
-    }
+    return res.status(200).json([]);
   });
 
   app.put('/api/v1/channels/:channelId/pins/:messageId', auth.requireAuth, requireUuidParams(['channelId', 'messageId']), async (req, res) => {
@@ -1777,18 +1715,17 @@ async function start() {
       return res.status(403).json({ message: 'Acesso negado. Apenas administradores podem ver o banco.' });
     if (!db.isConfigured() || !db.isConnected()) return res.status(503).json({ message: 'Banco indisponível' });
     try {
-      const [u, s, c, m, mp] = await Promise.all([
+      const [u, s, c, mp] = await Promise.all([
         db.query('SELECT COUNT(*) AS n FROM users'),
         db.query('SELECT COUNT(*) AS n FROM servers'),
         db.query('SELECT COUNT(*) AS n FROM chats'),
-        db.query('SELECT COUNT(*) AS n FROM messages'),
         db.query('SELECT COUNT(*) AS n FROM message_pins'),
       ]);
       return res.status(200).json({
         users: parseInt(u.rows[0]?.n || 0, 10),
         servers: parseInt(s.rows[0]?.n || 0, 10),
         channels: parseInt(c.rows[0]?.n || 0, 10),
-        messages: parseInt(m.rows[0]?.n || 0, 10),
+        messages: 0,
         pinned_messages: parseInt(mp.rows[0]?.n || 0, 10),
       });
     } catch (err) {
@@ -2417,18 +2354,19 @@ async function start() {
           [userId]
         );
         for (const row of dmRows.rows) {
+          const recipient = {
+            id: String(row.recipient_id),
+            username: row.recipient_username,
+            avatar_url: row.recipient_avatar_url || null,
+            avatar: row.recipient_avatar_url || null,
+          };
+          if (!recipient.username || recipient.username === 'Unknown') continue;
           channels.push({
             id: String(row.chat_id),
             type: 'dm',
             name: null,
-            recipients: [
-              {
-                id: String(row.recipient_id),
-                username: row.recipient_username,
-                avatar_url: row.recipient_avatar_url || null,
-                avatar: row.recipient_avatar_url || null,
-              },
-            ],
+            recipient,
+            recipients: [recipient],
           });
         }
       }
@@ -2464,7 +2402,7 @@ async function start() {
       for (let i = channels.length - 1; i >= 0; i -= 1) {
         const c = channels[i];
         if (c && c.type === 'dm') {
-          const u = c.recipients && c.recipients[0];
+          const u = c.recipient || (c.recipients && c.recipients[0]);
           if (!u || !u.id || !u.username || u.username === 'Unknown') {
             console.log('Chat sem destinatário encontrado:', String(c.id));
             channels.splice(i, 1);
@@ -2620,70 +2558,8 @@ async function start() {
     return res.status(400).json({ message: 'Envie recipient_id (DM) ou recipient_ids (array com 2+) para grupo' });
   });
 
-  // POST /api/v1/calls — registar início de chamada WebRTC (ringing)
-  app.post('/api/v1/calls', auth.requireAuth, validateBody(schemas.callStart), async (req, res) => {
-    if (!db.isConfigured() || !db.isConnected()) {
-      return res.status(503).json({ message: 'Banco indisponível' });
-    }
-    const callerId = req.userId;
-    const calleeId = req.body?.callee_id ? String(req.body.callee_id).trim() : null;
-    const chatId = req.body?.chat_id ? String(req.body.chat_id).trim() || null : null;
-    if (!calleeId || calleeId === callerId) {
-      return res.status(400).json({ message: 'callee_id inválido' });
-    }
-    if (chatId && !isUuid(chatId)) {
-      return res.status(400).json({ message: 'chat_id deve ser UUID' });
-    }
-    try {
-      const r = await db.query(
-        `INSERT INTO webrtc_calls (caller_id, callee_id, chat_id, status)
-         VALUES ($1::uuid, $2::uuid, $3::uuid, 'ringing')
-         RETURNING id, caller_id, callee_id, chat_id, status, created_at`,
-        [callerId, calleeId, chatId]
-      );
-      const row = r.rows[0];
-      return res.status(201).json({
-        id: String(row.id),
-        caller_id: String(row.caller_id),
-        callee_id: String(row.callee_id),
-        chat_id: row.chat_id ? String(row.chat_id) : null,
-        status: row.status,
-        created_at: row.created_at,
-      });
-    } catch (err) {
-      console.error(err);
-      logger.error('POST /api/v1/calls', err);
-      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao criar chamada') });
-    }
-  });
-
-  // PATCH /api/v1/calls/:id — atualizar estado da chamada (active, ended, rejected, missed)
-  app.patch('/api/v1/calls/:id', auth.requireAuth, requireUuidParams(['id']), validateBody(schemas.callStatus), async (req, res) => {
-    if (!db.isConfigured() || !db.isConnected()) {
-      return res.status(503).json({ message: 'Banco indisponível' });
-    }
-    const callId = req.params.id;
-    const status = sanitizeCallStatus(req.body?.status);
-    if (!status) {
-      return res.status(400).json({ message: 'status deve ser um de: ringing, active, ended, rejected, missed' });
-    }
-    try {
-      const r = await db.query(
-        `UPDATE webrtc_calls SET status = $1, started_at = CASE WHEN $1 = 'active' AND started_at IS NULL THEN now() ELSE started_at END, ended_at = CASE WHEN $1 IN ('ended','rejected','missed') THEN now() ELSE ended_at END
-         WHERE id = $2::uuid AND (caller_id = $3::uuid OR callee_id = $3::uuid)
-         RETURNING id, status, started_at, ended_at`,
-        [status, callId, req.userId]
-      );
-      if (r.rows.length === 0) {
-        return res.status(404).json({ message: 'Chamada não encontrada' });
-      }
-      return res.status(200).json(r.rows[0]);
-    } catch (err) {
-      console.error(err);
-      logger.error('PATCH /api/v1/calls/:id', err);
-      return res.status(500).json({ message: safeApiMessage(err, 'Erro ao atualizar chamada') });
-    }
-  });
+  app.all('/api/v1/calls', (_req, res) => res.status(410).json({ message: 'Rota removida. Use Socket.IO.' }));
+  app.all('/api/v1/calls/:id', (_req, res) => res.status(410).json({ message: 'Rota removida. Use Socket.IO.' }));
 
   // GET /api/v1/users/me e GET /api/v1/users/@me — perfil do usuário autenticado (frontend usa @me)
   const getMe = async (req, res) => {
@@ -2730,10 +2606,6 @@ async function start() {
       );
       const user = u.rows[0];
       if (!user) return res.status(404).json({ message: 'Usuário não encontrado' });
-      const messages = await db.query(
-        'SELECT m.id, m.content, m.created_at, m.chat_id FROM messages m WHERE m.user_id = $1::uuid ORDER BY m.created_at ASC LIMIT 10000',
-        [userId]
-      );
       const exportData = {
         exported_at: new Date().toISOString(),
         user: {
@@ -2743,12 +2615,7 @@ async function start() {
           description: user.description || null,
           created_at: user.created_at,
         },
-        messages: (messages.rows || []).map(m => ({
-          id: String(m.id),
-          content: decrypt(m.content),
-          created_at: m.created_at,
-          chat_id: String(m.chat_id),
-        })),
+        messages: [],
       };
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('Content-Disposition', 'attachment; filename="liberty-data-export.json"');
@@ -3048,7 +2915,7 @@ async function start() {
         avatar_url: null,
       }));
 
-      const messagesByChannel = await getAllMessageLists();
+      const messagesByChannel = [];
       const xpByUser = computeContentXpByUser(messagesByChannel);
       let byContentList = Array.from(xpByUser.entries()).map(([id, data]) => ({
         id,

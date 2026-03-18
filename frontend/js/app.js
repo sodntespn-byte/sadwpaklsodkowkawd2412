@@ -2002,6 +2002,8 @@ class LibertyApp {
       }
       const p = document.getElementById('call-avatar-me');
       if (p) p.classList.toggle('call-neo__avatar--speaking', next);
+      const h = document.getElementById('header-call-avatar-me');
+      if (h) h.classList.toggle('header-call__avatar--speaking', next);
       this._roomCallState.localVadRaf = requestAnimationFrame(loop);
     };
     loop();
@@ -2639,7 +2641,7 @@ class LibertyApp {
     }
     const s = this._callSocket;
     if (s) {
-      s.on('incoming-call', d => {
+      s.on('call:incoming', d => {
         const from = d && d.from ? String(d.from) : null;
         const offer = d && d.offer ? d.offer : null;
         const callId = d && d.callId ? String(d.callId) : null;
@@ -2648,9 +2650,20 @@ class LibertyApp {
         this._voiceCallState.pendingOffer = { from, payload: offer };
         this._voiceCallState.incomingFromUserId = from;
         this._voiceCallState.callId = callId;
+        const header = document.getElementById('header-call');
+        if (header) header.classList.remove('hidden');
+        try {
+          const other =
+            (this.currentChannel?.recipients || []).find(r => r.id === from) ||
+            this.dmChannels.find(c => c.recipients?.[0]?.id === from)?.recipients?.[0];
+          this._updateHeaderCallUI([
+            { id: 'me', username: this.currentUser?.username || 'Você', avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar, isSpeaking: false },
+            { id: from, username: other?.username || 'User', avatar_url: other?.avatar_url || other?.avatar, isSpeaking: false },
+          ]);
+        } catch (_) {}
         this._showIncomingCallAlert(from);
       });
-      s.on('call-answered', d => {
+      s.on('call:answered', d => {
         if (!this._voiceCallState.pc || !d || !d.answer) return;
         const p = d.answer && typeof d.answer === 'object' ? d.answer : {};
         const desc = new RTCSessionDescription({ type: p.type || 'answer', sdp: p.sdp || '' });
@@ -2659,7 +2672,7 @@ class LibertyApp {
           .then(() => this._callDrainPendingIceCandidates())
           .catch(() => {});
       });
-      s.on('ice-candidates', d => {
+      s.on('call:ice', d => {
         if (!this._voiceCallState.pc || !d || !d.candidate) return;
         const pc = this._voiceCallState.pc;
         const cand = d.candidate && typeof d.candidate === 'object' ? d.candidate : {};
@@ -2669,7 +2682,7 @@ class LibertyApp {
         }
         pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
       });
-      s.on('call-ended', () => {
+      s.on('call:ended', () => {
         if (this._voiceCallState.pc) {
           try { this._voiceCallState.pc.close(); } catch (_) {}
           this._voiceCallState.pc = null;
@@ -2688,12 +2701,11 @@ class LibertyApp {
         this._voiceCallState.callId = null;
         this._webrtcStopLocalAudioLevel();
         this._webrtcClearRemote();
-        const voiceView = document.getElementById('voice-call-view');
-        if (voiceView) {
-          voiceView.classList.add('hidden');
-          voiceView.classList.add('call-neo--hidden');
-          voiceView.classList.remove('call-neo--visible');
-        }
+        const header = document.getElementById('header-call');
+        if (header) header.classList.add('hidden');
+      });
+      s.on('call:error', d => {
+        this.showToast((d && d.message) || 'Falha na chamada.', 'error');
       });
     }
 
@@ -2852,7 +2864,9 @@ class LibertyApp {
     if (!pendingOffer) return;
     if (!window.RTCPeerConnection || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       this.showToast('Seu navegador não suporta chamadas de voz.', 'error');
-      if (this.gateway) this.gateway.send('webrtc_reject', { target_user_id: pendingOffer.from });
+      if (this._callSocket && this._voiceCallState.callId) {
+        try { this._callSocket.emit('call:end', { callId: this._voiceCallState.callId }); } catch (_) {}
+      }
       this._voiceCallState.pendingOffer = null;
       return;
     }
@@ -2874,9 +2888,9 @@ class LibertyApp {
       this._voiceCallState.stream.getTracks().forEach(track => pc.addTrack(track, this._voiceCallState.stream));
     pc.ontrack = e => this._attachRemoteTrack(e);
     pc.onicecandidate = e => {
-      if (!e.candidate || !this.gateway) return;
+      if (!e.candidate || !this._callSocket || !this._voiceCallState.callId) return;
       const pl = e.candidate.toJSON ? e.candidate.toJSON() : { candidate: e.candidate.candidate, sdpMid: e.candidate.sdpMid, sdpMLineIndex: e.candidate.sdpMLineIndex };
-      this.gateway.send('webrtc_ice', { target_user_id: from, payload: pl });
+      try { this._callSocket.emit('call:ice', { to: from, callId: this._voiceCallState.callId, candidate: pl }); } catch (_) {}
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
@@ -2899,7 +2913,9 @@ class LibertyApp {
       })
       .then(() => {
         this._callDrainPendingIceCandidates();
-        if (this.gateway && pc.localDescription) this.gateway.send('webrtc_answer', { target_user_id: from, payload: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+        if (this._callSocket && pc.localDescription && this._voiceCallState.callId) {
+          try { this._callSocket.emit('call:answer', { to: from, callId: this._voiceCallState.callId, answer: pc.localDescription.toJSON() }); } catch (_) {}
+        }
       })
       .catch(() => {});
     const voiceView = document.getElementById('voice-call-view');
@@ -2944,7 +2960,9 @@ class LibertyApp {
     this._voiceCallState.pendingOffer = null;
     this._voiceCallState.incomingFromUserId = null;
     this._hideIncomingCallAlert();
-    if (from && this.gateway) if (this.gateway) this.gateway.send('webrtc_reject', { target_user_id: from });
+    if (from && this._callSocket && this._voiceCallState.callId) {
+      try { this._callSocket.emit('call:end', { callId: this._voiceCallState.callId }); } catch (_) {}
+    }
   }
 
   async _startVoiceCallIfDM() {
@@ -2984,20 +3002,21 @@ class LibertyApp {
     if (titleEl) titleEl.textContent = displayTitle;
     navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then((stream) => {
       this._voiceCallState.stream = stream;
+      this._roomCallStartVad(stream);
       const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
       this._voiceCallState.pc = pc;
       stream.getTracks().forEach(t => pc.addTrack(t, stream));
       pc.onicecandidate = (ev) => {
         if (!ev.candidate) return;
         const pl = ev.candidate && ev.candidate.toJSON ? ev.candidate.toJSON() : ev.candidate;
-        try { this._callSocket.emit('ice-candidates', { to: targetId, callId: this._voiceCallState.callId, candidate: pl }); } catch (_) {}
+        try { this._callSocket.emit('call:ice', { to: targetId, callId: this._voiceCallState.callId, candidate: pl }); } catch (_) {}
       };
       pc.ontrack = (ev) => {
         this._attachRemoteTrack(ev);
       };
       pc.createOffer().then((offer) => pc.setLocalDescription(offer)).then(() => {
         if (!pc.localDescription) return;
-        this._callSocket.emit('call-user', { to: targetId, callId: this._voiceCallState.callId, chatId: ch.id || null, offer: pc.localDescription.toJSON() });
+        this._callSocket.emit('call:init', { to: targetId, callId: this._voiceCallState.callId, offer: pc.localDescription.toJSON() });
       }).catch(() => {});
     }).catch(() => {
       this.showToast('Permissão de microfone negada.', 'error');
@@ -3563,6 +3582,18 @@ class LibertyApp {
     try {
       const raw = await API.DM.list();
       list = Array.isArray(raw) ? raw : raw && Array.isArray(raw.channels) ? raw.channels : [];
+      list = list
+        .map(channel => {
+          if (!channel) return null;
+          const recipient = channel.recipient || (channel.recipients && channel.recipients[0]) || null;
+          if (channel.type === 'dm') {
+            if (!recipient || !recipient.username || recipient.username === 'Unknown') return null;
+            channel.recipient = recipient;
+            channel.recipients = channel.recipients && channel.recipients.length ? channel.recipients : [recipient];
+          }
+          return channel;
+        })
+        .filter(Boolean);
       if (options.mergeFriends) {
         try {
           const relationships = await API.Friend.list();
