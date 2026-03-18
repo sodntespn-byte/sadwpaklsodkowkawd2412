@@ -2019,6 +2019,8 @@ class LibertyApp {
       wrap.classList.toggle('webrtc-remote-speaking', speaking);
       wrap.classList.toggle('call-neo__tile--speaking', speaking);
       if (avatarWrap) avatarWrap.classList.toggle('speaking', speaking);
+      const p = document.getElementById('call-avatar-other');
+      if (p) p.classList.toggle('call-neo__avatar--speaking', speaking);
       this._voiceCallState.audioLevelRAF = requestAnimationFrame(loop);
     };
     loop();
@@ -2059,6 +2061,8 @@ class LibertyApp {
       const avg = sum / dataArray.length;
       const speaking = avg > threshold;
       localWrap.classList.toggle('call-neo__player-circle--speaking', speaking);
+      const p = document.getElementById('call-avatar-me');
+      if (p) p.classList.toggle('call-neo__avatar--speaking', speaking);
       this._voiceCallState.localAudioLevelRAF = requestAnimationFrame(loop);
     };
     loop();
@@ -4048,10 +4052,18 @@ class LibertyApp {
     }
     const otherName = other?.username || 'Outro';
     const otherInitial = otherName.charAt(0).toUpperCase();
-    bar.innerHTML = `
-            <span class="webrtc-participant-chip webrtc-participant-you" title="${this.escapeHtml(me)}"><span class="webrtc-participant-dot" aria-hidden="true"></span>${this.escapeHtml(me)}</span>
-            <span class="webrtc-participant-chip" title="${this.escapeHtml(otherName)}"><span class="webrtc-participant-dot" aria-hidden="true"></span>${this.escapeHtml(otherName)}</span>
-        `;
+    const meAvatar = this._getAvatarUrlForUser({ username: me, avatar_url: this.currentUser?.avatar_url || this.currentUser?.avatar });
+    const otherAvatar = this._getAvatarUrlForUser({ username: otherName, avatar_url: other?.avatar_url || other?.avatar });
+    bar.innerHTML =
+      `<div class="call-neo__avatars">` +
+      `<div class="call-neo__avatar" id="call-avatar-me" title="${this.escapeHtml(me)}">` +
+      (meAvatar ? `<img src="${this.escapeHtml(meAvatar)}" alt="">` : `<span class="call-neo__avatar-initial">${this.escapeHtml(meInitial)}</span>`) +
+      `</div>` +
+      `<div class="call-neo__avatar" id="call-avatar-other" title="${this.escapeHtml(otherName)}">` +
+      (otherAvatar ? `<img src="${this.escapeHtml(otherAvatar)}" alt="">` : `<span class="call-neo__avatar-initial">${this.escapeHtml(otherInitial)}</span>`) +
+      `</div>` +
+      `</div>` +
+      `<div class="call-neo__call-status">Em ligação</div>`;
   }
 
   _updateMembersSidebarVisibility() {
@@ -8118,6 +8130,20 @@ this._injectYouTubeEmbeds(msgEl, newContent);
     const container = document.getElementById('messages-list');
     if (!container) return;
     const arr = Array.isArray(list) ? list : [];
+    if (container.querySelector('[data-message^="pending-"]')) {
+      for (let i = 0; i < arr.length; i++) {
+        const m = arr[i];
+        const id = String(m.id ?? m.message_id ?? '');
+        if (!id) continue;
+        if (this.messages.has(id)) continue;
+        if (container.querySelector(`[data-message="${id}"]`)) continue;
+        const msg = { ...m, id, message_id: id };
+        this.messages.set(id, msg);
+        this.addMessage(msg, false);
+      }
+      this._injectEmbedsInAllMessages();
+      return;
+    }
     this.messages.clear();
     if (arr.length === 0) {
       container.replaceChildren();
