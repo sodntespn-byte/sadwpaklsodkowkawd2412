@@ -998,11 +998,12 @@ async function getDefaultChatId() {
     }
 
     // Cria o chat padrão
+    const newChatId = crypto.randomUUID();
     const insChat = await db.query(
-      `INSERT INTO chats (name, type, server_id)
-       VALUES ($1, 'channel', $2)
+      `INSERT INTO chats (id, name, type, server_id)
+       VALUES ($1::uuid, $2, 'channel', $3::uuid)
        RETURNING id`,
-      ['global-chat', serverId]
+      [newChatId, 'global-chat', serverId]
     );
     defaultChatId = String(insChat.rows[0].id);
     return defaultChatId;
@@ -1052,10 +1053,11 @@ async function start() {
               [newServerId, 'Liberty']
             );
             libertyServerId = ins.rows[0].id;
-            await db.query(
-              `INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid)`,
-              [libertyServerId]
-            );
+            const newChatId = crypto.randomUUID();
+            await db.query(`INSERT INTO chats (id, name, type, server_id) VALUES ($1::uuid, 'general', 'channel', $2::uuid)`, [
+              newChatId,
+              libertyServerId,
+            ]);
             logger.info('[LIBERTY] Servidor padrão Liberty criado.');
           }
           if (libertyServerId) {
@@ -1145,8 +1147,8 @@ async function start() {
       );
       if (!ch.rows[0]?.id) {
         await db.query(
-          `INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`,
-          [serverId]
+          `INSERT INTO chats (id, name, type, server_id) VALUES ($1::uuid, 'general', 'channel', $2::uuid) RETURNING id`,
+          [crypto.randomUUID(), serverId]
         );
         logger.info('[LIBERTY] Canal #general criado no servidor Liberty existente.');
       }
@@ -1158,7 +1160,8 @@ async function start() {
       'Liberty',
     ]);
     const createdServerId = ins.rows[0].id;
-    await db.query(`INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`, [
+    await db.query(`INSERT INTO chats (id, name, type, server_id) VALUES ($1::uuid, 'general', 'channel', $2::uuid) RETURNING id`, [
+      crypto.randomUUID(),
       createdServerId,
     ]);
     logger.info('[LIBERTY] Servidor Liberty e canal #general criados.');
@@ -1982,9 +1985,10 @@ async function start() {
         icon: iconUrl,
         icon_url: iconUrl,
       };
+      const newChatId = crypto.randomUUID();
       const ch = await db.query(
-        `INSERT INTO chats (name, type, server_id) VALUES ($1, 'channel', $2::uuid) RETURNING id`,
-        ['general', row.id]
+        `INSERT INTO chats (id, name, type, server_id) VALUES ($1::uuid, $2, 'channel', $3::uuid) RETURNING id`,
+        [newChatId, 'general', row.id]
       );
       const generalChatId = ch.rows[0].id;
       await db.query(
@@ -2006,9 +2010,10 @@ async function start() {
             [newServerId, serverName, userId]
           );
           const row = ins.rows[0];
+          const newChatId = crypto.randomUUID();
           const ch = await db.query(
-            `INSERT INTO chats (name, type, server_id) VALUES ($1, 'channel', $2::uuid) RETURNING id`,
-            ['general', row.id]
+            `INSERT INTO chats (id, name, type, server_id) VALUES ($1::uuid, $2, 'channel', $3::uuid) RETURNING id`,
+            [newChatId, 'general', row.id]
           );
           const generalChatId = ch.rows[0].id;
           await db.query(
@@ -2202,10 +2207,10 @@ async function start() {
       const parentId = parent_id && isUuid(parent_id) ? String(parent_id).trim() : null;
       const channelTypeVal = isCategory ? null : channelType;
       const ins = await db.query(
-        `INSERT INTO chats (name, type, server_id, parent_id, channel_type)
-         VALUES ($1, $2, $3::uuid, $4::uuid, $5)
+        `INSERT INTO chats (id, name, type, server_id, parent_id, channel_type)
+         VALUES ($1::uuid, $2, $3, $4::uuid, $5::uuid, $6)
          RETURNING id, name, type, server_id, parent_id, channel_type, created_at`,
-        [channelName, chatType, serverId, parentId, channelTypeVal]
+        [crypto.randomUUID(), channelName, chatType, serverId, parentId, channelTypeVal]
       );
       const row = ins.rows[0];
       if (!isCategory) {
@@ -2335,9 +2340,10 @@ async function start() {
     if (recipientIds.length > 1) {
       const name = (body.name && String(body.name).trim()) || null;
       try {
+        const newChatId = crypto.randomUUID();
         const ins = await db.query(
-          `INSERT INTO chats (name, type, server_id) VALUES ($1, 'group_dm', NULL) RETURNING id`,
-          [name]
+          `INSERT INTO chats (id, name, type, server_id) VALUES ($1::uuid, $2, 'group_dm', NULL) RETURNING id`,
+          [newChatId, name]
         );
         const chatId = ins.rows[0].id;
         const allIds = [userId, ...recipientIds];
@@ -2391,10 +2397,9 @@ async function start() {
             recipients: [{ id: singleId, username, avatar_url: avatarUrl, avatar: avatarUrl }],
           });
         }
-        const ins = await db.query(
-          `INSERT INTO chats (name, type, server_id) VALUES (NULL, 'dm', NULL) RETURNING id`,
-          []
-        );
+        const ins = await db.query(`INSERT INTO chats (id, name, type, server_id) VALUES ($1::uuid, NULL, 'dm', NULL) RETURNING id`, [
+          crypto.randomUUID(),
+        ]);
         const chatId = ins.rows[0].id;
         await db.query(
           `INSERT INTO chat_members (chat_id, user_id) VALUES ($1::uuid, $2::uuid), ($1::uuid, $3::uuid)`,
