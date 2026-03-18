@@ -900,35 +900,27 @@ app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: [
-          "'self'",
-          "'unsafe-hashes'",
-          "'sha256-iNdzJueCLgGX4W5su4mORbOameseXUZO+P+Hm0wFzX0='",
-          "'sha256-DAqailpa1WZfK8FBkO57bktgKaoLGRNFwJevNF71Hgc='",
-          'https://unpkg.com',
-          'https://cdn.socket.io',
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "script-src": [
+          "'self'", 
+          "https://cdn.socket.io", 
+          "'unsafe-inline'", 
+          "https://unpkg.com"
         ],
-        scriptSrcAttr: ["'unsafe-hashes'", "'sha256-2lIr6D7spJgjdMGsefDaQiP0fnVd/N90kvgFxHIwr4Q='"],
-        connectSrc: ["'self'", 'wss:', 'ws:', 'https://unpkg.com', 'https://cdn.socket.io', 'https://www.youtube.com', 'https://open.spotify.com'],
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://cdnjs.cloudflare.com'],
-        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdnjs.cloudflare.com'],
-        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-        frameSrc: ["'none'"],
-        objectSrc: ["'none'"],
-        baseUri: ["'self'"],
-        formAction: ["'self'"],
+        "connect-src": [
+          "'self'", 
+          "https://cdn.socket.io", 
+          "wss:", 
+          "ws:", 
+          "https://unpkg.com", 
+          "https://www.youtube.com"
+        ],
+        "img-src": ["'self'", "data:", "blob:", "https:"],
+        "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       },
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
-    crossOriginOpenerPolicy: { policy: 'same-origin' },
-    crossOriginEmbedderPolicy: false,
-    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
-    xssFilter: true,
-    noSniff: true,
-    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-    permittedCrossDomainPolicies: { permittedPolicies: 'none' },
-    hidePoweredBy: true,
+    crossOriginEmbedderPolicy: false, // Necessário para WebRTC funcionar em alguns navegadores
   })
 );
 app.use(express.json({ limit: '70mb' }));

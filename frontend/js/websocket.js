@@ -337,24 +337,57 @@
         this.emit('stream_stopped', { from_user_id: message.from_user_id });
         return;
       }
+   // --- BLOCO UNIFICADO E CORRIGIDO ---
       if (type && ['webrtc_offer', 'webrtc_answer', 'webrtc_ice', 'webrtc_reject', 'webrtc_hangup'].includes(type)) {
         var fromId = message.from_user_id != null ? String(message.from_user_id) : null;
         var payload = message.payload;
+
         if (type === 'webrtc_offer' && fromId) {
           this.pendingOffers.set(fromId, payload);
-          this.emit(type, { from_user_id: fromId, payload: payload });
           this.emit('webrtc_incoming_call', { from_user_id: fromId, payload: payload });
           return;
         }
+
         if (type === 'webrtc_answer' && fromId) {
           var peerEntry = this.peers.get(fromId);
-          if (peerEntry && peerEntry.pc) {
-            var p = payload && typeof payload === 'object' ? payload : {};
-            var desc = new RTCSessionDescription({ type: p.type || 'answer', sdp: p.sdp || '' });
-            peerEntry.pc.setRemoteDescription(desc).then(function () {
+          if (peerEntry && peerEntry.pc && peerEntry.pc.signalingState === "have-local-offer") {
+            var desc = new RTCSessionDescription(payload);
+            peerEntry.pc.setRemoteDescription(desc).then(function() {
               var q = peerEntry.iceQueue || [];
               peerEntry.iceQueue = [];
-              for (var j = 0; j < q.length; j++) peerEntry.pc.addIceCandidate(new RTCIceCandidate(q[j])).catch(function () {});
+              q.forEach(function(c) { peerEntry.pc.addIceCandidate(new RTCIceCandidate(c)).catch(function(){}); });
+            }).catch(function(err) { console.error("[WebRTC] Erro ao aceitar resposta:", err); });
+          }
+          this.emit(type, { from_user_id: fromId });
+          return;
+        }
+
+        if (type === 'webrtc_ice' && fromId && payload) {
+          var entryIce = this.peers.get(fromId);
+          if (entryIce && entryIce.pc) {
+            if (!entryIce.pc.remoteDescription) {
+              if (!entryIce.iceQueue) entryIce.iceQueue = [];
+              entryIce.iceQueue.push(payload);
+            } else {
+              entryIce.pc.addIceCandidate(new RTCIceCandidate(payload)).catch(function(){});
+            }
+          }
+          return;
+        }
+
+        if (type === 'webrtc_hangup' && fromId) {
+          this._cleanupPeer(fromId); // Chama a função que vamos adicionar abaixo
+          this.emit('webrtc_call_ended', { from_user_id: fromId });
+          return;
+        }
+
+        if (type === 'webrtc_reject' && fromId) {
+          this.pendingOffers.delete(fromId);
+          this.emit('webrtc_call_rejected', { from_user_id: fromId });
+          return;
+        }
+        return;
+      }
             }).catch(function (err) {
               if (typeof console !== 'undefined' && console.error) console.error('[Gateway] setRemoteDescription(answer) error:', err);
             });
@@ -631,10 +664,7 @@
       if (typeof this._clearReconnect === 'function') this._clearReconnect();
       if (typeof this._clearHelloTimeout === 'function') this._clearHelloTimeout();
       if (typeof this.stopHeartbeat === 'function') this.stopHeartbeat();
-      if (this.socket && typeof this.socket.disconnect === 'function') {
-        try { this.socket.disconnect(); } catch (_) {}
-        this.socket = null;
-      }
+      
       if (this.ws) {
         try { this.ws.close(1000, 'Client disconnect'); } catch (_) {}
         this.ws = null;
@@ -642,11 +672,26 @@
       this.connected = false;
       this.authenticated = false;
     }
-  }
+
+    _cleanupPeer(targetId) {
+      var entry = this.peers.get(String(targetId));
+      if (entry) {
+        if (entry.localStream && typeof entry.localStream.getTracks === 'function') {
+          entry.localStream.getTracks().forEach(function(t) { t.stop(); });
+        }
+        if (entry.pc) {
+          entry.pc.onicecandidate = null;
+          entry.pc.ontrack = null;
+          try { entry.pc.close(); } catch(e) {}
+        }
+        this.peers.delete(String(targetId));
+      }
+    }
+
+  } // Fim da classe LibertyGateway
 
   if (typeof window !== 'undefined') window.Gateway = new LibertyGateway();
-})();
-
+})(); // Fim do escopo do arquivo
 
 
 
