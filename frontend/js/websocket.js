@@ -651,8 +651,3 @@
 
   if (typeof window !== 'undefined') window.Gateway = new LibertyGateway();
 })(); // Fim do escopo do arquivo
-
-
-
-
-
