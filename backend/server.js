@@ -989,7 +989,11 @@ async function getDefaultChatId() {
     if (s.rows[0]?.id) {
       serverId = s.rows[0].id;
     } else {
-      const insServer = await db.query(`INSERT INTO servers (name) VALUES ($1) RETURNING id`, ['Global Server']);
+      const newServerId = crypto.randomUUID();
+      const insServer = await db.query(`INSERT INTO servers (id, name) VALUES ($1::uuid, $2) RETURNING id`, [
+        newServerId,
+        'Global Server',
+      ]);
       serverId = insServer.rows[0].id;
     }
 
@@ -1042,9 +1046,10 @@ async function start() {
           if (ex.rows[0]?.id) {
             libertyServerId = ex.rows[0].id;
           } else {
+            const newServerId = crypto.randomUUID();
             const ins = await db.query(
-              `INSERT INTO servers (name, owner_id) VALUES ($1, NULL) RETURNING id`,
-              ['Liberty']
+              `INSERT INTO servers (id, name, owner_id) VALUES ($1::uuid, $2, NULL) RETURNING id`,
+              [newServerId, 'Liberty']
             );
             libertyServerId = ins.rows[0].id;
             await db.query(
@@ -1147,13 +1152,17 @@ async function start() {
       }
       return String(serverId);
     }
-    const ins = await db.query(`INSERT INTO servers (name, owner_id) VALUES ($1, NULL) RETURNING id`, ['Liberty']);
-    const newServerId = ins.rows[0].id;
-    await db.query(`INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`, [
+    const newServerId = crypto.randomUUID();
+    const ins = await db.query(`INSERT INTO servers (id, name, owner_id) VALUES ($1::uuid, $2, NULL) RETURNING id`, [
       newServerId,
+      'Liberty',
+    ]);
+    const createdServerId = ins.rows[0].id;
+    await db.query(`INSERT INTO chats (name, type, server_id) VALUES ('general', 'channel', $1::uuid) RETURNING id`, [
+      createdServerId,
     ]);
     logger.info('[LIBERTY] Servidor Liberty e canal #general criados.');
-    return String(newServerId);
+    return String(createdServerId);
   }
 
   async function ensureUserInLibertyServer(userId) {
@@ -1941,9 +1950,10 @@ async function start() {
     const serverName = sanitizeName(name) || 'Novo servidor';
     const userId = req.userId;
     try {
+      const newServerId = crypto.randomUUID();
       const ins = await db.query(
-        `INSERT INTO servers (name, owner_id) VALUES ($1, $2::uuid) RETURNING id, name, owner_id, created_at`,
-        [serverName, userId]
+        `INSERT INTO servers (id, name, owner_id) VALUES ($1::uuid, $2, $3::uuid) RETURNING id, name, owner_id, created_at`,
+        [newServerId, serverName, userId]
       );
       const row = ins.rows[0];
       const serverId = row.id;
@@ -1990,9 +2000,10 @@ async function start() {
       if (err.message && err.message.includes('does not exist')) {
         try {
           await dbInit();
+          const newServerId = crypto.randomUUID();
           const ins = await db.query(
-            `INSERT INTO servers (name, owner_id) VALUES ($1, $2::uuid) RETURNING id, name, owner_id, created_at`,
-            [serverName, userId]
+            `INSERT INTO servers (id, name, owner_id) VALUES ($1::uuid, $2, $3::uuid) RETURNING id, name, owner_id, created_at`,
+            [newServerId, serverName, userId]
           );
           const row = ins.rows[0];
           const ch = await db.query(
