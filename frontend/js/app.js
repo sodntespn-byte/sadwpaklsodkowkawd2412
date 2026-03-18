@@ -2159,6 +2159,10 @@ class LibertyApp {
 
   _roomCallStop() {
     const s = this._roomCallState.socket;
+    const rid = this._roomCallState.roomId;
+    if (s && s.emit && rid) {
+      try { s.emit('leave-room', { roomId: rid }); } catch (_) {}
+    }
     this._roomCallStopVad();
     if (this._roomCallState.durationTimer) {
       clearInterval(this._roomCallState.durationTimer);
