@@ -1,0 +1,9 @@
+node_modules
+voiceroom
+crates
+dist
+*.min.js
+pnpm-lock.yaml
+package-lock.json
+.env.example
+.env*

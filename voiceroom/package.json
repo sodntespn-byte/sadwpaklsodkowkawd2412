@@ -1,0 +1,28 @@
+{
+  "name": "voiceroom",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full-stack real-time voice room — WebRTC + Socket.IO + Fastify + Next.js",
+  "scripts": {
+    "dev": "pnpm run build:shared && concurrently \"pnpm --filter @voiceroom/server dev\" \"pnpm --filter @voiceroom/web dev\"",
+    "build:shared": "pnpm --filter @voiceroom/shared build",
+    "build": "pnpm --filter @voiceroom/shared build && pnpm --filter @voiceroom/server build && pnpm --filter @voiceroom/web build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "db:migrate": "pnpm --filter @voiceroom/server db:migrate",
+    "db:migrate:deploy": "pnpm --filter @voiceroom/server db:migrate:deploy",
+    "db:seed": "pnpm --filter @voiceroom/server db:seed",
+    "db:studio": "pnpm --filter @voiceroom/server db:studio",
+    "db:reset": "pnpm --filter @voiceroom/server db:reset"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

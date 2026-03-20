@@ -1,0 +1,29 @@
+# Rust - Ignora a pasta de compilação (binários pesados)
+/target
+**/*.rs.bk
+
+# Node.js - Ignora as dependências (baixa-se com npm install)
+node_modules/
+npm-debug.log*
+
+# Segurança - NUNCA suba suas chaves e senhas
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+*.pem
+certificate.pem
+**/secrets*.json
+**/credentials*.json
+
+# Uploads de utilizadores (avatares, ícones) — pasta em backend/uploads/
+/uploads/
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Sistema e Editores
+.DS_Store
+.vscode/
+.idea/

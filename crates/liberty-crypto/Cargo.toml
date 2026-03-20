@@ -1,0 +1,18 @@
+[package]
+name = "liberty-crypto"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+argon2 = "0.5"
+rand = "0.8"
+jsonwebtoken = "9.2"
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+uuid = { version = "1.6", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+zeroize = "1.7"
+sha2 = "0.10"
+hkdf = "0.12"
+aes-gcm = "0.10"
+

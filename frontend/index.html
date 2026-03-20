@@ -1,0 +1,1248 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5, user-scalable=yes"
+    />
+    <meta name="description" content="LIBERTY — Freedom to Connect. Plataforma de comunicação segura e livre." />
+    <meta name="theme-color" content="#5865F2" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta name="format-detection" content="telephone=no, email=no" />
+    <meta property="og:title" content="LIBERTY — Freedom to Connect" />
+    <meta property="og:description" content="Plataforma de comunicação segura e livre. Conecte-se com amigos e comunidades." />
+    <meta property="og:image" content="/assets/logo.png" />
+    <meta property="og:url" content="/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="LIBERTY" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LIBERTY — Freedom to Connect" />
+    <meta name="twitter:description" content="Plataforma de comunicação segura e livre. Conecte-se com amigos e comunidades." />
+    <meta name="twitter:image" content="/assets/logo.png" />
+    <title>LIBERTY — Freedom to Connect</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+    <link rel="preconnect" href="https://unpkg.com" crossorigin />
+    <link rel="preload" href="/css/main.css" as="style" />
+    <link rel="preload" href="/css/responsive.css" as="style" />
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+    <link rel="stylesheet" href="/css/responsive.css" />
+    <link rel="stylesheet" href="/css/main.css" />
+    <link rel="stylesheet" href="/css/themes.css" />
+    <link rel="stylesheet" href="/css/components.css" />
+    <link rel="stylesheet" href="/css/voice-activity.css" />
+    <link rel="stylesheet" href="/css/mobile.css?v=2" />
+  </head>
+  <body>
+    <!-- Fallback: torna body visível após 3s se JS não executar -->
+    <script>
+      (function() {
+        var fallbackTimer = setTimeout(function() {
+          document.body.style.visibility = 'visible';
+          document.body.style.opacity = '1';
+        }, 3000);
+        window._clearFallbackTimer = function() { clearTimeout(fallbackTimer); };
+      })();
+    </script>
+    <!-- ══════════════════════════════
+         LOADING SCREEN
+         ══════════════════════════════ -->
+    <style>
+      /* Garantir que o app não apareça deformado */
+      #app { width: 100%; height: 100vh; display: flex; }
+      #app.hidden { display: none !important; }
+      body { margin: 0; padding: 0; overflow: hidden; }
+    </style>
+    <div id="loading-screen" class="loading-screen" role="status" aria-live="polite" aria-label="Carregando LIBERTY">
+      <div class="loading-content">
+        <div class="logo-container">
+          <div class="logo-icon" aria-hidden="true">
+            <img src="/assets/logo.png" alt="" width="88" height="88" fetchpriority="high" data-logo-fallback />
+          </div>
+          <h1 class="logo-text">LIBERTY</h1>
+        </div>
+        <div class="loading-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+          <div class="loading-progress"></div>
+        </div>
+        <p class="loading-message">Connecting to freedom...</p>
+        <p class="loading-subtitle" aria-hidden="true">This shouldn't take long</p>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════
+         AUTH SCREEN (SIMPLIFIED USERNAME-ONLY LOGIN)
+         ══════════════════════════════ -->
+    <div id="auth-screen" class="auth-screen hidden" role="main">
+      <div class="auth-grid" aria-hidden="true"></div>
+
+      <div class="auth-container" role="dialog" aria-label="Autenticação">
+        <div class="auth-brand">
+          <div class="brand-logo" aria-hidden="true">
+            <img src="/assets/logo.png" alt="LIBERTY" width="68" height="68" data-logo-fallback />
+          </div>
+          <h1>LIBERTY</h1>
+          <p class="tagline">Secure communication</p>
+        </div>
+
+        <div class="auth-choice-buttons" role="tablist" aria-label="Modo de autenticação">
+          <button
+            type="button"
+            class="auth-choice-btn auth-choice-login active"
+            role="tab"
+            aria-selected="true"
+            aria-controls="login-form"
+            data-tab="login"
+          >
+            Log in
+          </button>
+          <button
+            type="button"
+            class="auth-choice-btn auth-choice-register"
+            role="tab"
+            aria-selected="false"
+            aria-controls="register-form"
+            data-tab="register"
+          >
+            Create account
+          </button>
+        </div>
+
+        <!-- Login: apenas Nome de Usuário -->
+        <form id="login-form" class="auth-form active" role="tabpanel" aria-labelledby="tab-login" novalidate>
+          <div class="form-group">
+            <label for="login-username">Nome de Usuário</label>
+            <div class="input-wrapper">
+              <i class="fas fa-user" aria-hidden="true"></i>
+              <input
+                type="text"
+                id="login-username"
+                placeholder="seu nome de usuário"
+                autocomplete="username"
+                required
+                minlength="2"
+                maxlength="32"
+              />
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">
+            <span>Entrar</span>
+            <i class="fas fa-arrow-right" aria-hidden="true"></i>
+          </button>
+          <p class="form-footer">
+            <small>Pode ativar uma senha depois em Configurações → Autenticação e Segurança.</small>
+          </p>
+        </form>
+
+        <!-- Registro: apenas Nome de Usuário -->
+        <form id="register-form" class="auth-form" role="tabpanel" aria-labelledby="tab-register" novalidate>
+          <div class="form-group">
+            <label for="register-username">Nome de Usuário</label>
+            <div class="input-wrapper">
+              <i class="fas fa-user" aria-hidden="true"></i>
+              <input
+                type="text"
+                id="register-username"
+                placeholder="escolha um nome"
+                autocomplete="username"
+                required
+                minlength="2"
+                maxlength="32"
+              />
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full">
+            <span>Registrar e Entrar</span>
+            <i class="fas fa-arrow-right" aria-hidden="true"></i>
+          </button>
+          <p class="form-footer">
+            <small>Pode ativar uma senha depois em Configurações → Autenticação e Segurança.</small>
+          </p>
+        </form>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════
+         SECURITY WARNING MODAL
+         ══════════════════════════════ -->
+    <div id="security-warning-modal" class="modal hidden" role="dialog" aria-labelledby="security-warning-title">
+      <div class="modal-overlay" id="security-modal-overlay"></div>
+      <div class="modal-content security-warning-content">
+        <div class="security-warning-icon">
+          <i class="fas fa-shield-halved"></i>
+        </div>
+        <h2 id="security-warning-title">Proteja a sua conta</h2>
+        <p class="security-warning-text">
+          A segurança da sua conta é importante! Recomendamos que adicione uma senha e ative a autenticação de dois fatores para proteger o seu acesso.
+        </p>
+        <div class="security-warning-tips">
+          <div class="security-tip">
+            <i class="fas fa-key"></i>
+            <span>Defina uma senha forte</span>
+          </div>
+          <div class="security-tip">
+            <i class="fas fa-mobile-screen"></i>
+            <span>Ative a autenticação de dois fatores</span>
+          </div>
+          <div class="security-tip">
+            <i class="fas fa-user-shield"></i>
+            <span>Controle quem pode contactá-lo</span>
+          </div>
+        </div>
+        <div class="security-warning-buttons">
+          <button type="button" class="btn btn-secondary" id="security-warning-ignore">
+            <i class="fas fa-xmark"></i>
+            <span>Ignorar por agora</span>
+          </button>
+          <button type="button" class="btn btn-primary" id="security-warning-privacy">
+            <i class="fas fa-shield"></i>
+            <span>Configurar privacidade</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════
+         APP PRINCIPAL
+         ══════════════════════════════ -->
+    <div id="app" class="app hidden" role="application" aria-label="LIBERTY App">
+      <!-- ─── Invite landing (liberty.app/invite/CODE) ─── -->
+      <div id="invite-landing" class="invite-landing hidden" role="region" aria-label="Convite de servidor">
+        <div class="invite-landing-inner">
+          <a href="/" class="invite-landing-link" id="invite-landing-back">← Voltar ao LIBERTY</a>
+          <div id="invite-landing-card" class="invite-landing-card"></div>
+          <p id="invite-landing-error" class="invite-landing-error hidden"></p>
+          <p id="invite-landing-login-hint" class="invite-landing-login-hint hidden">Inicia sessão para entrares neste servidor.</p>
+          <button type="button" class="btn btn-primary invite-landing-btn hidden" id="invite-landing-join-btn">Entrar no servidor</button>
+        </div>
+      </div>
+      <!-- ─── Server Sidebar (72px) ─── -->
+      <nav class="server-sidebar" aria-label="Servidores">
+        <ul class="server-list" role="list">
+          <li class="server-item home active" data-server="home" role="button" tabindex="0" aria-label="Home">
+            <div class="server-icon" aria-hidden="true">
+              <img src="/assets/logo.png" alt="Home" data-logo-fallback />
+            </div>
+            <span class="server-name">Home</span>
+            <div class="server-indicator" aria-hidden="true"></div>
+          </li>
+
+          <li class="server-divider" role="separator" aria-hidden="true"></li>
+
+          <li id="server-list-container" role="list" style="display: contents">
+            <!-- Servidores injetados via JS -->
+          </li>
+
+          <li
+            class="server-item add-server"
+            id="add-server-btn"
+            role="button"
+            tabindex="0"
+            aria-label="Criar ou adicionar servidor"
+          >
+            <div class="server-icon" aria-hidden="true">
+              <i class="fas fa-plus"></i>
+            </div>
+            <span class="server-name">Add Server</span>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- ─── Channel Sidebar (240px) ─── -->
+      <aside id="channel-sidebar" class="channel-sidebar" aria-label="Canais">
+        <header class="server-header" role="banner">
+          <h2 id="server-name">Home</h2>
+          <button
+            class="btn-icon"
+            id="server-dropdown-btn"
+            aria-label="Menu do servidor"
+            aria-haspopup="true"
+            aria-expanded="false"
+          >
+            <i class="fas fa-angle-down" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <!-- Home/DMs View (shown when Home is selected) -->
+        <div id="home-sidebar-content" class="home-sidebar-content">
+          <p class="home-sidebar-label">Direct Messages</p>
+          <div class="dm-search-wrapper">
+            <input type="text" id="dm-search-input" class="dm-search" placeholder="Q Search" aria-label="Buscar" />
+          </div>
+          <nav class="home-nav" aria-label="Navegação principal">
+            <button class="home-nav-item" data-view="rankings" aria-label="LIBERTY Rankings">
+              <i class="fas fa-medal" aria-hidden="true"></i>
+              <span>LIBERTY Rankings</span>
+            </button>
+            <button class="home-nav-item active" data-view="friends" aria-label="Amigos">
+              <i class="fas fa-people-group" aria-hidden="true"></i>
+              <span>Friends</span>
+            </button>
+            <button class="home-nav-item" data-view="missions" aria-label="Missions">
+              <i class="fas fa-bullseye" aria-hidden="true"></i>
+              <span>Missions</span>
+            </button>
+            <button class="home-nav-item" data-view="shop" aria-label="Shop">
+              <i class="fas fa-shopping-bag" aria-hidden="true"></i>
+              <span>Shop</span>
+              <span class="home-nav-badge coming-soon">Em breve</span>
+            </button>
+          </nav>
+          <div class="dm-list-header">
+            <span>DIRECT MESSAGES</span>
+            <span
+              id="dm-unread-total-badge"
+              class="dm-unread-total-badge hidden"
+              aria-label="Total de mensagens não lidas"
+            ></span>
+            <button class="btn-icon" id="dm-add-btn" aria-label="Nova conversa">
+              <i class="fas fa-plus" aria-hidden="true"></i>
+            </button>
+          </div>
+          <div id="dm-list" class="dm-list" role="list" aria-label="Mensagens diretas">
+            <div class="dm-list-empty" id="dm-list-empty">No conversations</div>
+          </div>
+        </div>
+
+        <!-- Server Channels View (shown when a server is selected) -->
+        <nav class="channel-list" id="channel-list" aria-label="Lista de canais">
+          <!-- Canais injetados via JS -->
+        </nav>
+
+        <!-- User Panel -->
+        <div class="user-panel" role="complementary" aria-label="Informações do usuário">
+          <div class="user-info" id="user-panel-info" tabindex="0" role="button" aria-label="Perfil do usuário">
+            <div class="user-avatar" id="user-avatar" aria-hidden="true">
+              <i class="fas fa-user"></i>
+              <span class="user-avatar-status" id="user-avatar-status" data-status="online"></span>
+            </div>
+            <div class="user-details">
+              <span class="user-name" id="user-name">User</span>
+              <span class="user-status" id="user-status">Online</span>
+            </div>
+          </div>
+          <div class="voice-activity hidden" id="voice-activity" aria-label="Membros em Ligação">
+            <div class="voice-activity__title">Membros em Ligação</div>
+            <div class="voice-activity__avatars" id="voice-activity-avatars" aria-label="Participantes em ligação"></div>
+            <div class="voice-activity__status" id="voice-activity-status">Em ligação</div>
+          </div>
+          <div class="user-controls" role="group" aria-label="Controles do utilizador">
+            <button
+              class="btn-icon tooltip"
+              id="user-settings-btn"
+              data-tooltip="Settings"
+              aria-label="Configurações do usuário"
+            >
+              <img
+                src="/assets/settings-player.png"
+                alt=""
+                class="user-settings-icon"
+                width="20"
+                height="20"
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        </div>
+      </aside>
+      <!-- Backdrop mobile: tap outside to close channel drawer -->
+      <div id="channel-sidebar-backdrop" class="channel-sidebar-backdrop" aria-hidden="true"></div>
+
+      <!-- ─── Main Content ─── -->
+      <main class="main-content" role="main">
+        <!-- Channel Header -->
+        <header class="channel-header">
+          <button
+            class="btn-icon channel-sidebar-toggle mobile-only"
+            type="button"
+            aria-label="Toggle channels"
+            style="display: none"
+          >
+            <i class="fas fa-bars" aria-hidden="true"></i>
+          </button>
+          <div class="channel-info">
+            <i class="fas fa-message channel-header-icon" id="channel-header-icon" aria-hidden="true"></i>
+            <h3 id="channel-name">general</h3>
+            <div class="channel-header-divider" aria-hidden="true"></div>
+            <span class="channel-topic" id="channel-topic" aria-label="Tópico do canal">Welcome to LIBERTY!</span>
+            <div id="header-call" class="header-call hidden" role="status" aria-live="polite">
+              <div id="header-call-avatars" class="header-call__avatars"></div>
+              <div class="header-call__meta">
+                <div id="header-call-names" class="header-call__names"></div>
+                <div id="header-call-status" class="header-call__status"></div>
+              </div>
+              <div id="header-call-controls" class="header-call__controls"></div>
+            </div>
+          </div>
+          <div class="channel-actions" role="group" aria-label="Ações do canal">
+            <button class="btn-icon tooltip channel-header-dm-only" id="threads-btn" data-tooltip="Threads" aria-label="Threads">
+              <i class="fas fa-message" aria-hidden="true"></i>
+            </button>
+            <button class="btn-icon tooltip channel-header-dm-only" id="voice-call-btn" data-tooltip="Chamada de voz" aria-label="Chamada de voz">
+              <i class="fas fa-phone" aria-hidden="true"></i>
+            </button>
+            <button class="btn-icon tooltip" data-tooltip="Notifications" aria-label="Configurações de notificação">
+              <i class="fas fa-bell" aria-hidden="true"></i>
+            </button>
+            <button
+              class="btn-icon tooltip channel-header-dm-only"
+              id="pinned-btn"
+              data-tooltip="Pinned Messages"
+              aria-label="Mensagens fixadas"
+            >
+              <i class="fas fa-bookmark" aria-hidden="true"></i>
+            </button>
+            <button
+              class="btn-icon tooltip channel-header-dm-only"
+              id="toggle-members-btn"
+              data-tooltip="Member List"
+              aria-label="Mostrar/ocultar membros"
+            >
+              <i class="fas fa-users" aria-hidden="true"></i>
+            </button>
+            <div class="channel-search-wrapper">
+              <input
+                type="text"
+                id="channel-search-input"
+                class="channel-search"
+                placeholder="Search"
+                aria-label="Buscar mensagens"
+              />
+              <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+            </div>
+            <button class="btn-icon tooltip" data-tooltip="Inbox" aria-label="Caixa de entrada">
+              <i class="fas fa-inbox" aria-hidden="true"></i>
+            </button>
+            <button class="btn-icon tooltip" id="help-btn" data-tooltip="Help" aria-label="Ajuda">
+              <i class="fas fa-question-circle" aria-hidden="true"></i>
+            </button>
+          </div>
+        </header>
+
+        <!-- Friends View (shown when Home is selected, tabs are in channel-header) -->
+        <section id="friends-view" class="friends-view hidden">
+          <div id="friends-add-section" class="friends-add-section hidden">
+            <h2>Add Friend</h2>
+            <p>You can add friends with their LIBERTY username.</p>
+            <div class="friends-add-input-wrapper">
+              <input
+                type="text"
+                id="add-friend-input"
+                placeholder="Enter a Username#0000"
+                aria-label="Nome de usuário do amigo"
+              />
+              <button class="btn btn-primary" id="send-friend-request-btn">Send Friend Request</button>
+            </div>
+          </div>
+          <div class="friends-search-wrapper">
+            <input type="text" id="friends-search-input" placeholder="Pesquisar amigos" aria-label="Buscar amigos" />
+            <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+          </div>
+          <div id="friends-list" class="friends-list" role="list" aria-label="Lista de amigos">
+            <!-- Amigos injetados via JS -->
+          </div>
+        </section>
+
+        <!-- Messages Container -->
+        <div class="messages-container" id="messages-container" role="log" aria-live="polite" aria-label="Mensagens">
+          <div class="messages-list" id="messages-list">
+            <!-- Mensagens injetadas via JS -->
+          </div>
+        </div>
+
+        <!-- Typing Indicator + Message Input -->
+        <div class="message-input-container">
+          <div id="typing-indicator" class="typing-indicator hidden" aria-live="polite" aria-atomic="true">
+            <div class="typing-dots" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span class="typing-text"></span>
+          </div>
+
+          <!-- Reply Bar -->
+          <div id="reply-bar" class="reply-bar hidden" aria-label="Respondendo mensagem">
+            <div class="reply-bar-content">
+              <i class="fas fa-arrow-turn-up" aria-hidden="true"></i>
+              <span>Replying to <strong id="reply-bar-username">User</strong></span>
+              <span class="reply-bar-preview" id="reply-bar-preview"></span>
+            </div>
+            <button class="btn-icon reply-bar-close" id="reply-bar-close" aria-label="Cancelar resposta">
+              <i class="fas fa-xmark" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div id="input-attachments-preview" class="input-attachments-preview" aria-live="polite"></div>
+          <div class="message-input-wrapper" role="group" aria-label="Enviar mensagem">
+            <button class="btn-icon tooltip" id="attach-btn" data-tooltip="Anexar ficheiros, fotos ou GIFs" aria-label="Anexar arquivo">
+              <i class="fas fa-paperclip" aria-hidden="true"></i>
+            </button>
+            <input type="file" id="message-file-input" class="message-file-input-hidden" accept="image/*,video/*,audio/*,.gif,.webp,.pdf,application/pdf,.txt,text/plain,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.zip,.rar,application/zip,application/x-rar-compressed,*/*" multiple tabindex="-1" aria-hidden="true">
+            <textarea
+              id="message-input"
+              placeholder="Escrever mensagem..."
+              rows="1"
+              maxlength="5000"
+              aria-label="Escrever mensagem"
+              aria-multiline="true"
+            ></textarea>
+            <div class="input-actions" role="group" aria-label="Opções de mensagem">
+              <span class="message-char-count" id="message-char-count" aria-live="polite">0 / 5.000</span>
+              <button class="btn-icon tooltip" data-tooltip="Imagem" aria-label="Imagem">
+                <i class="fas fa-image" aria-hidden="true"></i>
+              </button>
+              <button class="btn-icon tooltip" id="emoji-btn" data-tooltip="Emoji" aria-label="Emojis">
+                <i class="fas fa-face-smile" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="btn-send-message" id="send-message-btn" aria-label="Enviar mensagem">
+                <i class="fas fa-paper-plane" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <!-- ─── Members Sidebar (240px) ─── -->
+      <aside class="members-sidebar" id="members-sidebar" aria-label="Membros do servidor">
+        <div class="members-sidebar-header" id="members-sidebar-header">
+          <span>MEMBROS — 0</span>
+          <button type="button" class="members-close-btn mobile-only" aria-label="Fechar lista de membros" id="members-sidebar-close-btn" style="display: none"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </div>
+        <div class="members-list-wrapper">
+          <div class="members-section-title" id="members-online-title">ONLINE — 0</div>
+          <div class="members-list" id="members-list" role="list">
+            <!-- Membros injetados via JS -->
+          </div>
+        </div>
+      </aside>
+      <div id="members-sidebar-backdrop" class="members-sidebar-backdrop" aria-hidden="true"></div>
+    </div>
+
+    <!-- ══════════════════════════════
+         MODAIS (dentro de modal-overlay)
+         ══════════════════════════════ -->
+    <div id="modal-overlay" class="modal-overlay hidden" role="presentation">
+      <!-- Modal: Aviso de segurança da conta (após login/registo) -->
+      <div
+        id="security-warning-modal"
+        class="modal security-warning-modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="security-warning-title"
+      >
+        <div class="modal-overlay" id="security-modal-overlay"></div>
+        <div class="security-warning-card">
+          <div class="security-warning-icon" aria-hidden="true"><i class="fas fa-shield-halved"></i></div>
+          <h2 id="security-warning-title" class="security-warning-title">Segurança da conta</h2>
+          <p class="security-warning-text">
+            Recomendamos que ative uma senha e reveja as opções de privacidade para proteger a sua conta LIBERTY.
+          </p>
+          <div class="security-warning-actions">
+            <button type="button" class="btn btn-primary" id="security-warning-privacy">
+              <i class="fas fa-lock" aria-hidden="true"></i>
+              <span>Privacidade e Segurança</span>
+            </button>
+            <button type="button" class="btn btn-secondary" id="security-warning-ignore">
+              <span>Ignorar</span>
+            </button>
+          </div>
+          <p class="security-warning-hint">Se ignorar, irá entrar agora. Pode alterar isto depois em Configurações.</p>
+        </div>
+      </div>
+
+      <!-- Modal: Criar Servidor -->
+      <div
+        id="create-server-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-server-title"
+      >
+        <div class="modal-header">
+          <h2 id="create-server-title">Create a Server</h2>
+          <button class="btn-close modal-close-btn" aria-label="Fechar modal">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">
+            Your server is where you and your friends hang out. Make yours and start talking.
+          </p>
+          <form id="create-server-form" novalidate>
+            <div class="server-icon-upload" role="button" tabindex="0" aria-label="Fazer upload de ícone do servidor">
+              <div class="icon-upload-circle">
+                <i class="fas fa-camera" aria-hidden="true"></i>
+                <span>Upload</span>
+              </div>
+              <input
+                type="file"
+                id="server-icon-input"
+                accept="image/*"
+                hidden
+                aria-label="Selecionar imagem de ícone"
+              />
+            </div>
+            <div class="form-group">
+              <label for="server-name-input">Server Name</label>
+              <input type="text" id="server-name-input" placeholder="My Awesome Server" maxlength="100" required />
+            </div>
+            <div class="form-group">
+              <label for="server-region">Region</label>
+              <select id="server-region" aria-label="Região do servidor">
+                <option value="us-east">🇺🇸 US East</option>
+                <option value="us-west">🇺🇸 US West</option>
+                <option value="eu-west">🇪🇺 EU West</option>
+                <option value="eu-central">🇩🇪 EU Central</option>
+                <option value="sa-east">🇧🇷 South America</option>
+                <option value="asia">🌏 Asia</option>
+              </select>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-plus" aria-hidden="true"></i>
+                <span>Create</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Modal: Criar Grupo (Group DM) -->
+      <div
+        id="create-group-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-group-title"
+      >
+        <div class="modal-header">
+          <h2 id="create-group-title">Create Group</h2>
+          <button class="btn-close modal-close-btn" data-close="create-group-modal" aria-label="Fechar">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">Choose friends to add to the group. You need at least 2 to create a group.</p>
+          <div class="form-group">
+            <label for="group-name-input">Group name (optional)</label>
+            <input type="text" id="group-name-input" placeholder="e.g. Squad" maxlength="100" />
+          </div>
+          <div class="form-group">
+            <label>Select friends</label>
+            <div id="create-group-friends-list" class="create-group-friends-list" role="list"></div>
+            <p id="create-group-no-friends" class="create-group-no-friends hidden">
+              Add friends first to create a group.
+            </p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary modal-cancel-btn" data-close="create-group-modal">
+              Cancel
+            </button>
+            <button type="button" class="btn btn-primary" id="create-group-submit-btn">
+              <i class="fas fa-users" aria-hidden="true"></i>
+              <span>Create Group</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: Autenticação e Segurança -->
+      <div
+        id="auth-security-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-security-title"
+      >
+        <div class="modal-header">
+          <h2 id="auth-security-title">🔐 Autenticação e Segurança</h2>
+          <button class="btn-close modal-close-btn" data-close="auth-security-modal" aria-label="Fechar">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body auth-security-body">
+          <p class="auth-security-description">
+            Adicione métodos extras de verificação para proteger a sua conta. Quando ativos, serão solicitados no login.
+          </p>
+          
+          <div class="auth-methods-list">
+            <!-- Senha -->
+            <div class="auth-method-item" data-method="password">
+              <div class="auth-method-icon">
+                <i class="fas fa-key"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>Senha</h3>
+                <p>Uma senha tradicional para proteger a sua conta</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="password">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+            
+            <!-- Pin -->
+            <div class="auth-method-item" data-method="pin">
+              <div class="auth-method-icon">
+                <i class="fas fa-dial"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>PIN</h3>
+                <p>Um código numérico de 4-6 dígitos</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="pin">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+            
+            <!-- Verificação por Email -->
+            <div class="auth-method-item" data-method="email">
+              <div class="auth-method-icon">
+                <i class="fas fa-envelope"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>Verificação por Email</h3>
+                <p>Receba um código de verificação no seu email</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="email">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+            
+            <!-- Verificação por Telefone -->
+            <div class="auth-method-item" data-method="phone">
+              <div class="auth-method-icon">
+                <i class="fas fa-mobile-screen"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>Verificação por Telefone</h3>
+                <p>Receba um SMS com código de verificação</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="phone">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+            
+            <!-- YubiKey -->
+            <div class="auth-method-item" data-method="yubikey">
+              <div class="auth-method-icon">
+                <i class="fas fa-usb"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>YubiKey</h3>
+                <p>Autenticação com chave de segurança física U2F</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="yubikey">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+            
+            <!-- Windows Hello -->
+            <div class="auth-method-item" data-method="windows_hello">
+              <div class="auth-method-icon">
+                <i class="fab fa-windows"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>Windows Hello</h3>
+                <p>Use reconhecimento facial, impressão digital ou PIN do Windows</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="windows_hello">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+            
+            <!-- Hardware UUID -->
+            <div class="auth-method-item" data-method="hardware_uuid">
+              <div class="auth-method-icon">
+                <i class="fas fa-microchip"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>Hardware UUID</h3>
+                <p>Vincule o login ao identificador único do seu dispositivo</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="hardware_uuid">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+            
+            <!-- Endereço MAC -->
+            <div class="auth-method-item" data-method="mac_address">
+              <div class="auth-method-icon">
+                <i class="fas fa-network-wired"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>Endereço MAC</h3>
+                <p>Restrinja o acesso ao endereço MAC da sua rede</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="mac_address">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+            
+            <!-- Endereço IP -->
+            <div class="auth-method-item" data-method="ip_address">
+              <div class="auth-method-icon">
+                <i class="fas fa-globe"></i>
+              </div>
+              <div class="auth-method-info">
+                <h3>Endereço IP</h3>
+                <p>Permita login apenas de endereços IP autorizados</p>
+              </div>
+              <div class="auth-method-actions">
+                <button type="button" class="btn btn-secondary btn-sm auth-setup-btn" data-method="ip_address">
+                  Configurar
+                </button>
+                <span class="auth-status-badge disabled">Desativado</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="auth-security-note">
+            <i class="fas fa-info-circle"></i>
+            <span>Os métodos ativos serão solicitados após o login com nome de usuário. Você pode ativar múltiplos métodos para maior segurança.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: Configurar método de autenticação -->
+      <div
+        id="auth-method-setup-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-method-setup-title"
+      >
+        <div class="modal-header">
+          <h2 id="auth-method-setup-title">Configurar Método</h2>
+          <button class="btn-close modal-close-btn" data-close="auth-method-setup-modal" aria-label="Fechar">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body" id="auth-method-setup-content">
+          <!-- Conteúdo dinâmico -->
+        </div>
+      </div>
+
+      <!-- Modal: Configurações do usuário (avatar por URL) -->
+      <div
+        id="user-settings-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="user-settings-title"
+      >
+        <div class="modal-header">
+          <h2 id="user-settings-title">Configurações do perfil</h2>
+          <button class="btn-close modal-close-btn" data-close="user-settings-modal" aria-label="Fechar">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">
+            Defina uma URL de imagem para usar como avatar (deve começar com http ou https).
+          </p>
+          <div class="form-group">
+            <label for="avatar-url-input">URL do avatar</label>
+            <input type="url" id="avatar-url-input" placeholder="https://exemplo.com/sua-foto.jpg" autocomplete="url" />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary modal-cancel-btn" data-close="user-settings-modal">
+              Cancelar
+            </button>
+            <button type="button" class="btn btn-primary" id="user-settings-save-avatar-btn">Salvar avatar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: Adicionar (Canal ou Categoria) -->
+      <div
+        id="create-channel-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-channel-title"
+      >
+        <div class="modal-header add-modal-header">
+          <div class="add-modal-icon"><i class="fas fa-plus" aria-hidden="true"></i></div>
+          <h2 id="create-channel-title">Adicionar</h2>
+          <p class="add-modal-subtitle">Crie um canal de texto/voz ou uma categoria para organizar.</p>
+          <button class="btn-close modal-close-btn" aria-label="Fechar modal">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="add-modal-tabs" role="tablist">
+            <button type="button" class="add-tab active" data-add-tab="channel" role="tab" aria-selected="true">
+              <i class="fas fa-message" aria-hidden="true"></i> Canal
+            </button>
+            <button type="button" class="add-tab" data-add-tab="category" role="tab" aria-selected="false">
+              <i class="fas fa-folder" aria-hidden="true"></i> Categoria
+            </button>
+          </div>
+          <form id="create-channel-form" novalidate>
+            <div id="add-channel-fields" class="add-fields">
+              <div class="form-group">
+                <label class="form-label-upper">TIPO DE CANAL</label>
+                <div class="add-channel-type-options" role="radiogroup" aria-label="Tipo de canal">
+                  <label class="add-type-option active">
+                    <input type="radio" name="add-channel-type" value="text" checked />
+                    <span class="add-type-icon"><i class="fas fa-message"></i></span>
+                    <span class="add-type-text">TEXTO<br /><small>Conversas por mensagens</small></span>
+                  </label>
+                  <label class="add-type-option">
+                    <input type="radio" name="add-channel-type" value="voice" />
+                    <span class="add-type-icon"><i class="fas fa-tower-broadcast"></i></span>
+                    <span class="add-type-text">VOZ<br /><small>Chamadas e áudio</small></span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="add-channel-name" class="form-label-upper">NOME DO CANAL</label>
+                <div class="input-wrapper add-channel-name-wrap">
+                  <i class="fas fa-message" aria-hidden="true"></i>
+                  <input
+                    type="text"
+                    id="add-channel-name"
+                    placeholder="ex: geral, regras, off-topic"
+                    maxlength="100"
+                    required
+                  />
+                </div>
+                <p class="add-channel-preview">
+                  Será exibido como <strong id="add-channel-preview-slug">#nome-do-canal</strong>
+                </p>
+              </div>
+              <div class="form-group">
+                <label for="add-channel-category" class="form-label-upper">CATEGORIA</label>
+                <select id="add-channel-category">
+                  <option value="">Sem categoria</option>
+                </select>
+              </div>
+            </div>
+            <div id="add-category-fields" class="add-fields hidden">
+              <div class="form-group">
+                <label for="add-category-name" class="form-label-upper">NOME DA CATEGORIA</label>
+                <input type="text" id="add-category-name" placeholder="ex: jogos, staff" maxlength="100" />
+              </div>
+            </div>
+            <div class="modal-actions add-modal-actions">
+              <button type="button" class="btn btn-secondary modal-cancel-btn" data-close="create-channel-modal">
+                Cancelar
+              </button>
+              <button type="button" id="add-create-btn" class="btn btn-primary btn-add-create">
+                <i class="fas fa-plus" aria-hidden="true"></i> Criar canal
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Modal: Editar Canal -->
+      <div
+        id="edit-channel-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-channel-title"
+      >
+        <div class="modal-header">
+          <h2 id="edit-channel-title">Edit Channel</h2>
+          <button class="btn-close modal-close-btn" aria-label="Fechar modal">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <form id="edit-channel-form" novalidate>
+            <div class="form-group">
+              <label for="edit-channel-name">Channel Name</label>
+              <input type="text" id="edit-channel-name" placeholder="channel-name" maxlength="100" required />
+            </div>
+            <div class="form-group">
+              <label for="edit-channel-topic">Channel Topic</label>
+              <textarea id="edit-channel-topic" placeholder="Set a channel topic" maxlength="1024" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="edit-channel-slowmode">Slowmode</label>
+              <div class="slowmode-slider-wrapper">
+                <input
+                  type="range"
+                  id="edit-channel-slowmode"
+                  min="0"
+                  max="21600"
+                  value="0"
+                  step="1"
+                  aria-label="Cooldown do slowmode"
+                />
+                <span class="slowmode-value" id="slowmode-value">Off</span>
+              </div>
+            </div>
+            <div class="form-group form-group-toggle">
+              <div class="toggle-info">
+                <label for="edit-channel-nsfw">NSFW Channel</label>
+                <span class="toggle-description">Users must confirm they are of age to view this channel</span>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="edit-channel-nsfw" />
+                <span class="toggle-slider" aria-hidden="true"></span>
+              </label>
+            </div>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
+              <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Modal: Convidar Pessoas -->
+      <div id="invite-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+        <div class="modal-header">
+          <h2 id="invite-title">Invite Friends</h2>
+          <button class="btn-close modal-close-btn" aria-label="Fechar modal">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">Share this link with others to grant access to your server!</p>
+          <div class="invite-search-wrapper">
+            <input
+              type="text"
+              id="invite-friend-search"
+              placeholder="Search for friends"
+              aria-label="Buscar amigos para convidar"
+            />
+          </div>
+          <div id="invite-friend-list" class="invite-friend-list" role="list">
+            <!-- Amigos para convidar injetados via JS -->
+          </div>
+          <div class="invite-link-section">
+            <label class="form-label-upper">Or, send a server invite link to a friend</label>
+            <div class="invite-link-wrapper">
+              <input
+                type="text"
+                id="invite-link-input"
+                class="invite-link-input"
+                readonly
+                aria-label="Link de convite"
+              />
+              <button class="btn btn-primary" id="copy-invite-btn" aria-label="Copiar link">Copy</button>
+            </div>
+            <div class="invite-expiry-settings">
+              <label for="invite-expiry">Expire after</label>
+              <select id="invite-expiry" aria-label="Expiração do convite">
+                <option value="1800">30 minutes</option>
+                <option value="3600">1 hour</option>
+                <option value="21600">6 hours</option>
+                <option value="43200">12 hours</option>
+                <option value="86400" selected>1 day</option>
+                <option value="604800">7 days</option>
+                <option value="0">Never</option>
+              </select>
+              <label for="invite-max-uses">Max uses</label>
+              <select id="invite-max-uses" aria-label="Usos máximos">
+                <option value="0" selected>No limit</option>
+                <option value="1">1 use</option>
+                <option value="5">5 uses</option>
+                <option value="10">10 uses</option>
+                <option value="25">25 uses</option>
+                <option value="50">50 uses</option>
+                <option value="100">100 uses</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: Deletar Mensagem -->
+      <div
+        id="delete-message-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-message-title"
+      >
+        <div class="modal-header">
+          <h2 id="delete-message-title">Delete Message</h2>
+          <button class="btn-close modal-close-btn" aria-label="Fechar modal">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">Are you sure you want to delete this message? This action cannot be undone.</p>
+          <div class="delete-message-preview" id="delete-message-preview" aria-label="Prévia da mensagem">
+            <div class="message-preview-avatar"><i class="fas fa-user" aria-hidden="true"></i></div>
+            <div class="message-preview-content">
+              <span class="message-preview-author" id="delete-msg-author">User</span>
+              <span class="message-preview-date" id="delete-msg-date">Today</span>
+              <p class="message-preview-text" id="delete-msg-text">Message content here</p>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
+            <button type="button" class="btn btn-danger" id="confirm-delete-msg-btn">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: Kick Membro -->
+      <div
+        id="kick-member-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kick-member-title"
+      >
+        <div class="modal-header">
+          <h2 id="kick-member-title">Kick Member</h2>
+          <button class="btn-close modal-close-btn" aria-label="Fechar modal">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">
+            Are you sure you want to kick <strong id="kick-member-name">User</strong> from the server? They will be able
+            to rejoin with a new invite.
+          </p>
+          <div class="form-group">
+            <label for="kick-reason">Reason <span class="optional-label">(optional)</span></label>
+            <textarea id="kick-reason" placeholder="Enter a reason for the kick" rows="2" maxlength="512"></textarea>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
+            <button type="button" class="btn btn-danger" id="confirm-kick-btn">
+              <i class="fas fa-user-minus" aria-hidden="true"></i>
+              <span>Kick</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal: Ban Membro -->
+      <div
+        id="ban-member-modal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ban-member-title"
+      >
+        <div class="modal-header">
+          <h2 id="ban-member-title">Ban Member</h2>
+          <button class="btn-close modal-close-btn" aria-label="Fechar modal">
+            <i class="fas fa-xmark" aria-hidden="true"></i>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-description">
+            Are you sure you want to ban <strong id="ban-member-name">User</strong>? They will not be able to rejoin
+            unless unbanned.
+          </p>
+          <div class="form-group">
+            <label for="ban-reason">Reason <span class="optional-label">(optional)</span></label>
+            <textarea id="ban-reason" placeholder="Enter a reason for the ban" rows="2" maxlength="512"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="ban-delete-days">Delete Message History</label>
+            <select id="ban-delete-days" aria-label="Deletar histórico de mensagens">
+              <option value="0" selected>Don't delete any</option>
+              <option value="1">Previous 24 hours</option>
+              <option value="7">Previous 7 days</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-secondary modal-cancel-btn">Cancel</button>
+            <button type="button" class="btn btn-danger" id="confirm-ban-btn">
+              <i class="fas fa-gavel" aria-hidden="true"></i>
+              <span>Ban</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Static panels removed: settings, profile card, emoji, status, search, pinned, dropdown are now JS-only -->
+
+    <div id="context-menu" class="context-menu hidden" role="menu" aria-label="Menu de contexto">
+      <!-- Itens populados dinamicamente via JS -->
+    </div>
+
+    <!-- ══════════════════════════════
+         TOAST NOTIFICATIONS
+         ══════════════════════════════ -->
+    <div id="toast-container" class="toast-container" aria-live="assertive" aria-atomic="true" role="status"></div>
+
+    <!-- Scripts: defer = não bloqueia parsing, execução na ordem após DOM pronto -->
+    <script defer crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script defer crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script defer crossorigin src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script defer src="/js/dm-unread-store.js"></script>
+    <script defer src="/js/api.js?v=2"></script>
+    <script defer src="/js/websocket.js?v=1.0.3"></script>
+    <script defer src="/js/logo-fallback.js"></script>
+    <script defer src="/src/components/Header/VoiceActivity.js"></script>
+    <script defer src="/src/hooks/useVoiceChat.js"></script>
+    <script defer src="/js/app.js?v=32"></script>
+    <script defer src="/js/call-system.js?v=40"></script>
+    <script defer src="/js/mentions-popover.js"></script>
+    <script defer src="/js/dm-unread-react.js"></script>
+    <script defer src="/js/chat-messages-react.js?v=5"></script>
+    <script>
+      // Fallback: se o app não esconder o loading em 500ms, forçar tela de login
+      (function () {
+        setTimeout(function () {
+          var loading = document.getElementById('loading-screen');
+          var auth = document.getElementById('auth-screen');
+          var app = document.getElementById('app');
+          if (loading && !loading.classList.contains('hidden')) {
+            loading.classList.add('hidden');
+            loading.classList.remove('fade-out');
+            // Tornar body visível
+            document.body.style.visibility = 'visible';
+            document.body.style.opacity = '1';
+            // Se tem token, mostrar app, senão mostrar auth
+            var hasToken = false;
+            try { hasToken = localStorage.getItem('access_token') || localStorage.getItem('token'); } catch (e) {}
+            if (hasToken && app) {
+              app.classList.remove('hidden');
+            } else if (auth) {
+              auth.classList.remove('hidden');
+            }
+          }
+        }, 500);
+      })();
+    </script>
+  </body>
+</html>
